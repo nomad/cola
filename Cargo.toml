@@ -1,0 +1,8 @@
+[package]
+name = "cola"
+version = "0.1.0"
+edition = "2021"
+authors = ["Riccardo Mazzarini <me@noib3.dev>"]
+license = "MIT"
+
+[dependencies]
