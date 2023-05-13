@@ -5,4 +5,8 @@ edition = "2021"
 authors = ["Riccardo Mazzarini <me@noib3.dev>"]
 license = "MIT"
 
+[features]
+serde = ["dep:serde"]
+
 [dependencies]
+serde = { version = "1.0.163", optional = true }

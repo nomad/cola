@@ -114,3 +114,16 @@
 //! RopeSlices, b-tree rebalancing, iterators, RopeBuilders, etc.
 //!
 //! I'd guess this'll turn out to be 5-7k loc.
+
+extern crate alloc;
+
+mod crdt_edit;
+mod replica;
+mod text_edit;
+
+#[cfg(feature = "serde")]
+mod serde;
+
+pub use crdt_edit::CrdtEdit;
+pub use replica::Replica;
+pub use text_edit::TextEdit;
