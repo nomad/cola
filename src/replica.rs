@@ -3,10 +3,15 @@ use core::ops::RangeBounds;
 use crate::{CrdtEdit, TextEdit};
 
 /// TODO: docs
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Replica {}
 
 impl Replica {
+    #[inline]
+    pub fn contents(&self) -> impl Iterator<Item = &str> {
+        core::iter::empty()
+    }
+
     /// TODO: docs
     #[inline]
     pub fn deleted<R>(&mut self, byte_range: R) -> CrdtEdit
@@ -18,7 +23,10 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    pub fn inserted(&mut self, byte_offset: usize, text: String) -> CrdtEdit {
+    pub fn inserted<T>(&mut self, byte_offset: usize, text: T) -> CrdtEdit
+    where
+        T: Into<String>,
+    {
         todo!();
     }
 
@@ -42,9 +50,10 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    pub fn replaced<R>(&mut self, byte_range: R, text: String) -> CrdtEdit
+    pub fn replaced<R, T>(&mut self, byte_range: R, text: T) -> CrdtEdit
     where
         R: RangeBounds<usize>,
+        T: Into<String>,
     {
         todo!();
     }
