@@ -120,6 +120,7 @@ extern crate alloc;
 mod crdt_edit;
 mod replica;
 mod text_edit;
+mod tree;
 
 #[cfg(feature = "serde")]
 mod serde;
