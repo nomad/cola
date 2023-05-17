@@ -117,14 +117,7 @@
 
 extern crate alloc;
 
-mod crdt_edit;
-mod replica;
-mod text_edit;
+mod crdt;
 mod tree;
 
-#[cfg(feature = "serde")]
-mod serde;
-
-pub use crdt_edit::CrdtEdit;
-pub use replica::Replica;
-pub use text_edit::TextEdit;
+pub use crdt::{CrdtEdit, Replica, TextEdit};

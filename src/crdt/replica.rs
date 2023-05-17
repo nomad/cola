@@ -1,10 +1,23 @@
 use core::ops::RangeBounds;
 
-use crate::{CrdtEdit, TextEdit};
+use uuid::Uuid;
+
+use super::{CrdtEdit, Fragment, LamportClock, LocalClock, TextEdit};
+use crate::tree::Tree;
+
+const ARITY: usize = 4;
 
 /// TODO: docs
 #[derive(Debug, Clone)]
-pub struct Replica {}
+pub struct Replica {
+    id: ReplicaId,
+    fragment_tree: Tree<ARITY, Fragment>,
+    local_clock: LocalClock,
+    lamport_clock: LamportClock,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReplicaId(Uuid);
 
 impl Replica {
     #[inline]
@@ -62,6 +75,20 @@ impl Replica {
     #[inline]
     pub fn undo(&self, crdt_edit: &CrdtEdit) -> CrdtEdit {
         todo!();
+    }
+}
+
+impl Default for ReplicaId {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReplicaId {
+    #[inline]
+    fn new() -> Self {
+        Self(Uuid::new_v4())
     }
 }
 

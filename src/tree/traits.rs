@@ -1,14 +1,12 @@
 use core::fmt::Debug;
-use core::ops::{Add, AddAssign, Sub, SubAssign};
+use core::ops::{Add, AddAssign};
 
 pub trait Summarize: Debug {
     type Summary: Debug
         + Default
-        + Clone
-        + for<'a> Add<&'a Self::Summary, Output = Self::Summary>
-        + for<'a> Sub<&'a Self::Summary, Output = Self::Summary>
-        + for<'a> AddAssign<&'a Self::Summary>
-        + for<'a> SubAssign<&'a Self::Summary>
+        + Copy
+        + Add<Self::Summary, Output = Self::Summary>
+        + AddAssign<Self::Summary>
         + PartialEq<Self::Summary>;
 
     fn summarize(&self) -> Self::Summary;
