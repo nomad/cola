@@ -1,28 +1,96 @@
 use core::ops::RangeBounds;
+use std::collections::VecDeque;
 
 use uuid::Uuid;
 
-use super::{CrdtEdit, Fragment, LamportClock, LocalClock, TextEdit};
+use super::*;
 use crate::tree::Tree;
 
 const ARITY: usize = 4;
 
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Replica {
+    /// TODO: docs
     id: ReplicaId,
+
+    /// TODO: docs
     fragment_tree: Tree<ARITY, Fragment>,
+
+    /// TODO: docs
     local_clock: LocalClock,
+
+    /// TODO: docs
     lamport_clock: LamportClock,
+
+    /// TODO: docs
+    pending: VecDeque<CrdtEdit>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+impl core::fmt::Debug for Replica {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        // Here we just report the ReplicaId to avoid leaking the internals.
+        //
+        // During development the `Replica::debug()` method (which is public
+        // but hidden from the API) can be used to obtain a more useful
+        // representation.
+        f.debug_tuple("Replica").field(&self.id.0).finish()
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReplicaId(Uuid);
+
+impl core::fmt::Debug for ReplicaId {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let id = self.0.as_fields().0;
+        write!(f, "ReplicaId({:x})", id)
+    }
+}
+
+/// TODO: docs
+#[derive(Clone, Copy)]
+pub(super) struct EditId {
+    /// TODO: docs
+    created_by: ReplicaId,
+
+    /// TODO: docs
+    local_timestamp_at_creation: LocalTimestamp,
+}
+
+impl core::fmt::Debug for EditId {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let id = self.created_by.0.as_fields().0;
+        write!(f, "{:x}.{}", id, self.local_timestamp_at_creation.as_u64())
+    }
+}
+
+impl EditId {
+    #[inline]
+    fn new(replica_id: ReplicaId, timestamp: LocalTimestamp) -> Self {
+        Self { created_by: replica_id, local_timestamp_at_creation: timestamp }
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn origin() -> Self {
+        Self::new(ReplicaId::zero(), LocalTimestamp::zero())
+    }
+}
 
 impl Replica {
     #[inline]
     pub fn contents(&self) -> impl Iterator<Item = &str> {
         core::iter::empty()
+    }
+
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub fn debug(&self) -> debug::Debug<'_> {
+        debug::Debug(self)
     }
 
     /// TODO: docs
@@ -49,7 +117,28 @@ impl Replica {
     where
         Chunks: Iterator<Item = &'a str>,
     {
-        todo!();
+        let id = ReplicaId::new();
+        let mut local_clock = LocalClock::default();
+        let mut lamport_clock = LamportClock::default();
+
+        let edit = EditId::new(id, local_clock.next());
+
+        let origin = EditId::origin();
+
+        let len = chunks.map(|s| s.len()).sum::<usize>();
+
+        let fragment =
+            Fragment::new(edit, origin, 0, lamport_clock.next(), len, true);
+
+        let fragment_tree = Tree::from(fragment);
+
+        Self {
+            id,
+            fragment_tree,
+            local_clock,
+            lamport_clock,
+            pending: VecDeque::new(),
+        }
     }
 
     /// TODO: docs
@@ -90,6 +179,11 @@ impl ReplicaId {
     fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
+    #[inline]
+    pub(super) const fn zero() -> Self {
+        Self(Uuid::nil())
+    }
 }
 
 impl From<&str> for Replica {
@@ -110,5 +204,24 @@ impl From<alloc::borrow::Cow<'_, str>> for Replica {
     #[inline]
     fn from(moo: alloc::borrow::Cow<'_, str>) -> Self {
         moo.as_ref().into()
+    }
+}
+
+#[cfg(debug_assertions)]
+mod debug {
+    use super::*;
+
+    pub struct Debug<'a>(pub &'a Replica);
+
+    impl<'a> core::fmt::Debug for Debug<'a> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            f.debug_struct("Replica")
+                .field("id", &self.0.id)
+                .field("fragments", &self.0.fragment_tree)
+                .field("local", &self.0.local_clock)
+                .field("lamport", &self.0.lamport_clock)
+                .field("pending", &self.0.pending)
+                .finish()
+        }
     }
 }

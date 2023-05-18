@@ -1,6 +1,12 @@
 /// TODO: docs
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Default)]
 pub(super) struct LocalClock(u64);
+
+impl core::fmt::Debug for LocalClock {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "LocalClock({})", self.0)
+    }
+}
 
 impl LocalClock {
     /// TODO: docs
@@ -16,9 +22,27 @@ impl LocalClock {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(super) struct LocalTimestamp(u64);
 
+impl LocalTimestamp {
+    #[inline]
+    pub(super) const fn as_u64(&self) -> u64 {
+        self.0
+    }
+
+    #[inline]
+    pub(super) const fn zero() -> Self {
+        Self(0)
+    }
+}
+
 /// TODO: docs
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Default)]
 pub(super) struct LamportClock(u64);
+
+impl core::fmt::Debug for LamportClock {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "LamportClock({})", self.0)
+    }
+}
 
 impl LamportClock {
     /// TODO: docs
@@ -39,3 +63,10 @@ impl LamportClock {
 /// TODO: docs
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct LamportTimestamp(u64);
+
+impl LamportTimestamp {
+    #[inline]
+    pub(super) const fn as_u64(&self) -> u64 {
+        self.0
+    }
+}

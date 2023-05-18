@@ -11,5 +11,5 @@ use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
 pub use crdt_edit::CrdtEdit;
 use fragment::Fragment;
 pub use replica::Replica;
-use replica::ReplicaId;
+use replica::{EditId, ReplicaId};
 pub use text_edit::TextEdit;

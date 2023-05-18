@@ -19,7 +19,7 @@ impl<B: Buffer + std::fmt::Debug> std::fmt::Debug for Replica<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Replica")
             .field("buffer", &self.buffer)
-            .field("crdt", &self.crdt)
+            .field("crdt", &self.crdt.debug())
             .finish()
     }
 }
