@@ -19,18 +19,13 @@ impl LocalClock {
 }
 
 /// TODO: docs
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct LocalTimestamp(u64);
 
 impl LocalTimestamp {
     #[inline]
     pub(super) const fn as_u64(&self) -> u64 {
         self.0
-    }
-
-    #[inline]
-    pub(super) const fn zero() -> Self {
-        Self(0)
     }
 }
 
@@ -61,7 +56,7 @@ impl LamportClock {
 }
 
 /// TODO: docs
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct LamportTimestamp(u64);
 
 impl LamportTimestamp {

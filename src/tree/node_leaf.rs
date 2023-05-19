@@ -1,4 +1,4 @@
-use super::Leaf;
+use super::{Leaf, Metric};
 
 #[derive(Clone)]
 pub(super) struct Lnode<L: Leaf> {
@@ -16,5 +16,22 @@ impl<L: Leaf> From<L> for Lnode<L> {
     #[inline]
     fn from(leaf: L) -> Self {
         Self { summary: leaf.summarize(), value: leaf }
+    }
+}
+
+impl<L: Leaf> Lnode<L> {
+    #[inline]
+    pub(super) fn as_pair_mut(&mut self) -> (&mut L, &mut L::Summary) {
+        (&mut self.value, &mut self.summary)
+    }
+
+    #[inline]
+    pub(super) fn measure<M: Metric<L>>(&self) -> M {
+        M::measure(self.summary())
+    }
+
+    #[inline]
+    pub(super) fn summary(&self) -> &L::Summary {
+        &self.summary
     }
 }

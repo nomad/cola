@@ -1,4 +1,4 @@
-use super::{Leaf, Node};
+use super::{Leaf, Metric, Node};
 
 #[derive(Clone)]
 pub(super) struct Inode<const N: usize, L: Leaf> {
@@ -20,8 +20,18 @@ impl<const N: usize, L: Leaf> Inode<N, L> {
     }
 
     #[inline]
+    pub(super) fn children_mut(&mut self) -> &mut [Node<N, L>] {
+        &mut self.children
+    }
+
+    #[inline]
     pub(super) fn len(&self) -> usize {
         self.children.len()
+    }
+
+    #[inline]
+    pub(super) fn measure<M: Metric<L>>(&self) -> M {
+        M::measure(self.summary())
     }
 
     #[inline]

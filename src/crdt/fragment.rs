@@ -4,7 +4,7 @@ use super::{EditId, LamportTimestamp};
 use crate::tree::Summarize;
 
 /// TODO: docs
-#[derive(Clone)]
+#[derive(Copy, Clone, Default)]
 pub(super) struct Fragment {
     /// TODO: docs
     id: EditId,
@@ -41,30 +41,27 @@ impl core::fmt::Debug for Fragment {
 
 impl Fragment {
     #[inline]
+    pub(super) fn id(&self) -> EditId {
+        self.id
+    }
+
+    #[inline]
     pub(super) fn new(
         id: EditId,
         parent: EditId,
         offset_in_parent: usize,
-        lamport_timestamp: LamportTimestamp,
+        timestamp: LamportTimestamp,
         len: usize,
-        is_visible: bool,
     ) -> Self {
-        Self {
-            id,
-            parent,
-            offset_in_parent,
-            timestamp: lamport_timestamp,
-            len,
-            is_visible,
-        }
+        Self { id, parent, offset_in_parent, timestamp, len, is_visible: true }
     }
 }
 
 /// TODO: docs
 #[derive(Clone, Copy, Default, PartialEq)]
 pub struct FragmentSummary {
-    len: usize,
-    is_visible: bool,
+    pub(super) len: usize,
+    pub(super) is_visible: bool,
 }
 
 impl core::fmt::Debug for FragmentSummary {
