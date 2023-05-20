@@ -33,6 +33,8 @@ impl<const ARITY: usize, L: Leaf> Tree<ARITY, L> {
             Node::Leaf(lnode) => {
                 let (leaf, extra) = insert_with(M::zero(), lnode.value_mut());
 
+                *lnode.summary_mut() = lnode.value().summarize();
+
                 self.replace_root(|old_root| {
                     let leaf = Node::from(leaf);
 
@@ -112,6 +114,8 @@ mod tree_insert {
                     Node::Leaf(lnode) => {
                         let (leaf, extra) =
                             insert_with(offset, lnode.value_mut());
+
+                        *lnode.summary_mut() = lnode.value().summarize();
 
                         let leaf = Node::from(leaf);
 

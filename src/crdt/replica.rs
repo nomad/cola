@@ -78,28 +78,27 @@ impl Replica {
         let insert_at = ByteMetric(byte_offset);
 
         self.fragment_tree.insert(insert_at, |ByteMetric(offset), parent| {
-            let (parent, offset_in_parent) = if byte_offset > 0 {
-                (parent.id(), byte_offset - offset)
-            } else {
+            let len = text.len();
+
+            if byte_offset == 0 {
                 // The parent is the edit that we're inserting *after*. When
                 // the user inserts at the beginning of the buffer there's no
                 // such edit.
                 // In this case we use a special `EditId` called "zero" whose
                 // replica id and timestamp are both 0.
-                (EditId::zero(), 0)
-            };
+                let edit = Fragment::new(id, EditId::zero(), 0, lamport, len);
+                fragment = edit;
+                return (core::mem::replace(parent, edit), None);
+            }
 
-            let f = Fragment::new(
-                id,
-                parent,
-                offset_in_parent,
-                lamport,
-                text.len(),
-            );
+            let parent_offset = byte_offset - offset;
 
-            fragment = f;
+            let edit =
+                Fragment::new(id, parent.id(), parent_offset, lamport, len);
 
-            (f, None)
+            fragment = edit;
+
+            (edit, parent.split(parent_offset))
         });
 
         CrdtEdit::insertion(fragment, text)

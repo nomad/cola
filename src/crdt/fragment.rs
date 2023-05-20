@@ -55,6 +55,19 @@ impl Fragment {
     ) -> Self {
         Self { id, parent, offset_in_parent, timestamp, len, is_visible: true }
     }
+
+    /// TODO: docs
+    #[inline]
+    pub(super) fn split(&mut self, byte_offset: usize) -> Option<Self> {
+        if byte_offset < self.len {
+            let mut rest = *self;
+            rest.len = self.len - byte_offset;
+            self.len = byte_offset;
+            Some(rest)
+        } else {
+            None
+        }
+    }
 }
 
 /// TODO: docs

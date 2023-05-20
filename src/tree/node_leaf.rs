@@ -31,6 +31,16 @@ impl<L: Leaf> Lnode<L> {
     }
 
     #[inline]
+    pub(super) fn summary_mut(&mut self) -> &mut L::Summary {
+        &mut self.summary
+    }
+
+    #[inline]
+    pub(super) fn value(&self) -> &L {
+        &self.value
+    }
+
+    #[inline]
     pub(super) fn value_mut(&mut self) -> &mut L {
         &mut self.value
     }
