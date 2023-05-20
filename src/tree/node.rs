@@ -15,7 +15,22 @@ impl<const ARITY: usize, L: Leaf> core::fmt::Debug for Node<ARITY, L> {
     }
 }
 
-impl<const N: usize, L: Leaf> Node<N, L> {
+impl<const ARITY: usize, L: Leaf> From<L> for Node<ARITY, L> {
+    #[inline]
+    fn from(leaf: L) -> Self {
+        Self::Leaf(leaf.into())
+    }
+}
+
+impl<const ARITY: usize, L: Leaf> Node<ARITY, L> {
+    #[inline]
+    pub(super) fn from_children<C>(children: C) -> Self
+    where
+        C: Into<Vec<Node<ARITY, L>>>,
+    {
+        Self::Internal(Inode::from_children(children))
+    }
+
     #[inline]
     pub(super) fn measure<M: Metric<L>>(&self) -> M {
         match self {
@@ -25,7 +40,7 @@ impl<const N: usize, L: Leaf> Node<N, L> {
     }
 
     #[inline]
-    pub(super) fn summary(&self) -> &L::Summary {
+    pub(super) fn summary(&self) -> L::Summary {
         match self {
             Node::Internal(inode) => inode.summary(),
             Node::Leaf(leaf) => leaf.summary(),

@@ -77,9 +77,9 @@ impl Replica {
 
         let insert_at = ByteMetric(byte_offset);
 
-        self.fragment_tree.insert(insert_at, |offset, parent, summary| {
+        self.fragment_tree.insert(insert_at, |ByteMetric(offset), parent| {
             let (parent, offset_in_parent) = if byte_offset > 0 {
-                (parent.id(), byte_offset - offset.0)
+                (parent.id(), byte_offset - offset)
             } else {
                 // The parent is the edit that we're inserting *after*. When
                 // the user inserts at the beginning of the buffer there's no

@@ -21,17 +21,17 @@ impl<L: Leaf> From<L> for Lnode<L> {
 
 impl<L: Leaf> Lnode<L> {
     #[inline]
-    pub(super) fn as_pair_mut(&mut self) -> (&mut L, &mut L::Summary) {
-        (&mut self.value, &mut self.summary)
-    }
-
-    #[inline]
     pub(super) fn measure<M: Metric<L>>(&self) -> M {
-        M::measure(self.summary())
+        M::measure(&self.summary())
     }
 
     #[inline]
-    pub(super) fn summary(&self) -> &L::Summary {
-        &self.summary
+    pub(super) fn summary(&self) -> L::Summary {
+        self.summary
+    }
+
+    #[inline]
+    pub(super) fn value_mut(&mut self) -> &mut L {
+        &mut self.value
     }
 }
