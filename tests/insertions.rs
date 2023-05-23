@@ -22,7 +22,7 @@ fn woot_figure_2() {
     assert_eq!(peer3, "a1b");
 
     // Next, Peer 3 inserts '3' between 'a' and '1'.
-    let op3 = peer3.insert(1, 'a');
+    let op3 = peer3.insert(1, '3');
 
     assert_eq!(peer3, "a31b");
 
