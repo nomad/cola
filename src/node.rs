@@ -233,12 +233,10 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     pub fn summary(&self) -> Leaf::Summary {
         self.summary
     }
-}
 
-impl<const ARITY: usize, Leaf: Summarize> From<Leaf> for Node<ARITY, Leaf> {
     #[inline]
-    fn from(leaf: Leaf) -> Self {
-        Self::Leaf(leaf)
+    pub fn summary_mut(&mut self) -> &mut Leaf::Summary {
+        &mut self.summary
     }
 }
 

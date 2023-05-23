@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign};
+use core::ops::{Add, AddAssign, Range};
 
 use super::{EditId, LamportTimestamp};
 use crate::node::Summarize;
@@ -41,6 +41,43 @@ impl core::fmt::Debug for Fragment {
 
 impl Fragment {
     #[inline]
+    pub fn delete(&mut self) {
+        self.is_visible = false;
+    }
+
+    #[inline]
+    pub fn delete_from(&mut self, offset: usize) -> Option<Self> {
+        self.split(offset).map(|mut del| {
+            del.is_visible = false;
+            del
+        })
+    }
+
+    #[inline]
+    pub fn delete_range(
+        &mut self,
+        Range { start, end }: Range<usize>,
+    ) -> (Option<Self>, Option<Self>) {
+        debug_assert!(start <= end);
+
+        let rest = self.split(end);
+
+        let deleted = self.split(start).map(|mut del| {
+            del.is_visible = false;
+            del
+        });
+
+        (deleted, rest)
+    }
+
+    #[inline]
+    pub fn delete_up_to(&mut self, offset: usize) -> Option<Self> {
+        let rest = self.split(offset);
+        self.is_visible = false;
+        rest
+    }
+
+    #[inline]
     pub(super) fn len(&self) -> usize {
         self.len
     }
@@ -51,7 +88,7 @@ impl Fragment {
     }
 
     #[inline]
-    pub(super) fn new(
+    pub(crate) fn new(
         id: EditId,
         parent: EditId,
         offset_in_parent: usize,
@@ -63,7 +100,7 @@ impl Fragment {
 
     /// TODO: docs
     #[inline]
-    pub(super) fn split(&mut self, byte_offset: usize) -> Option<Self> {
+    pub fn split(&mut self, byte_offset: usize) -> Option<Self> {
         if byte_offset < self.len {
             let mut rest = *self;
             rest.len = self.len - byte_offset;
