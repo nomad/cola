@@ -124,7 +124,23 @@
 
 extern crate alloc;
 
-mod crdt;
-mod tree;
+mod btree;
+mod clocks;
+mod crdt_edit;
+mod fragment;
+mod metrics;
+mod node;
+mod replica;
+mod text_edit;
 
-pub use crdt::{CrdtEdit, Replica, TextEdit};
+#[cfg(feature = "serde")]
+mod serde;
+
+use btree::Tree;
+use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
+pub use crdt_edit::CrdtEdit;
+use fragment::{Fragment, FragmentSummary};
+use metrics::ByteMetric;
+use replica::EditId;
+pub use replica::Replica;
+pub use text_edit::TextEdit;

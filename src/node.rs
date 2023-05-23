@@ -1,39 +1,91 @@
-use core::cmp::Ordering;
+use core::fmt::Debug;
+use core::ops::{Add, AddAssign, Sub, SubAssign};
 
-use super::{Leaf, Metric, Node};
+pub trait Summarize: Debug {
+    type Summary: Debug
+        + Default
+        + Copy
+        + Add<Self::Summary, Output = Self::Summary>
+        + AddAssign<Self::Summary>
+        + PartialEq<Self::Summary>;
 
-#[derive(Clone)]
-pub(super) struct Inode<const N: usize, L: Leaf> {
-    children: Vec<Node<N, L>>,
-    summary: L::Summary,
+    fn summarize(&self) -> Self::Summary;
 }
 
-impl<const N: usize, L: Leaf> core::fmt::Debug for Inode<N, L> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        pretty_print_inode(self, &mut String::new(), "", 0, f)
+pub trait Metric<Leaf: Summarize>:
+    Debug
+    + Copy
+    + Ord
+    + Add<Self, Output = Self>
+    + Sub<Self, Output = Self>
+    + AddAssign<Self>
+    + SubAssign<Self>
+{
+    fn zero() -> Self;
+
+    fn measure_leaf(leaf: &Leaf) -> Self;
+
+    fn measure_summary(summary: &Leaf::Summary) -> Self;
+}
+
+#[derive(Clone)]
+pub enum Node<const ARITY: usize, Leaf: Summarize> {
+    Internal(Inode<ARITY, Leaf>),
+    Leaf(Leaf),
+}
+
+impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
+    #[inline]
+    pub fn from_children<C>(children: C) -> Self
+    where
+        C: Into<Vec<Node<ARITY, Leaf>>>,
+    {
+        Self::Internal(Inode::from_children(children))
+    }
+
+    #[inline]
+    pub fn measure<M: Metric<Leaf>>(&self) -> M {
+        match self {
+            Node::Internal(inode) => inode.measure(),
+            Node::Leaf(leaf) => M::measure_leaf(leaf),
+        }
+    }
+
+    #[inline]
+    pub fn summary(&self) -> Leaf::Summary {
+        match self {
+            Node::Internal(inode) => inode.summary(),
+            Node::Leaf(leaf) => leaf.summarize(),
+        }
     }
 }
 
-impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
+#[derive(Clone)]
+pub struct Inode<const N: usize, Leaf: Summarize> {
+    children: Vec<Node<N, Leaf>>,
+    summary: Leaf::Summary,
+}
+
+impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     #[inline]
-    pub(super) fn children(&self) -> &[Node<ARITY, L>] {
+    pub fn children(&self) -> &[Node<ARITY, Leaf>] {
         &self.children
     }
 
     #[inline]
-    pub(super) fn children_mut(&mut self) -> &mut [Node<ARITY, L>] {
+    pub fn children_mut(&mut self) -> &mut [Node<ARITY, Leaf>] {
         &mut self.children
     }
 
     #[inline]
-    pub(super) fn empty() -> Self {
-        Self { children: Vec::new(), summary: L::Summary::default() }
+    pub fn empty() -> Self {
+        Self { children: Vec::new(), summary: Leaf::Summary::default() }
     }
 
     #[inline]
-    pub(super) fn from_children<C>(children: C) -> Self
+    pub fn from_children<C>(children: C) -> Self
     where
-        C: Into<Vec<Node<ARITY, L>>>,
+        C: Into<Vec<Node<ARITY, Leaf>>>,
     {
         let children = children.into();
 
@@ -51,10 +103,10 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     }
 
     #[inline]
-    pub(super) fn insert(
+    pub fn insert(
         &mut self,
         offset: usize,
-        child: Node<ARITY, L>,
+        child: Node<ARITY, Leaf>,
     ) -> Option<Self> {
         if self.is_full() {
             let split_offset = self.len() - Self::min_children();
@@ -82,12 +134,14 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     }
 
     #[inline]
-    pub(super) fn insert_two(
+    pub fn insert_two(
         &mut self,
         offset: usize,
-        a: Node<ARITY, L>,
-        b: Node<ARITY, L>,
+        a: Node<ARITY, Leaf>,
+        b: Node<ARITY, Leaf>,
     ) -> Option<Self> {
+        use core::cmp::Ordering;
+
         if ARITY - self.len() <= 1 {
             let split_offset = self.len() - Self::min_children();
 
@@ -126,27 +180,27 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     }
 
     #[inline]
-    pub(super) fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.len() == ARITY
     }
 
     #[inline]
-    pub(super) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.children.len()
     }
 
     #[inline]
-    pub(super) fn measure<M: Metric<L>>(&self) -> M {
-        M::measure(&self.summary())
+    pub fn measure<M: Metric<Leaf>>(&self) -> M {
+        M::measure_summary(&self.summary())
     }
 
     #[inline]
-    pub(super) const fn min_children() -> usize {
+    const fn min_children() -> usize {
         ARITY / 2
     }
 
     #[inline]
-    pub(super) fn push(&mut self, child: Node<ARITY, L>) {
+    pub fn push(&mut self, child: Node<ARITY, Leaf>) {
         debug_assert!(!self.is_full());
         self.summary += child.summary();
         self.children.push(child);
@@ -156,9 +210,9 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     fn split_at(&mut self, offset: usize) -> Self {
         debug_assert!(offset <= self.len());
 
-        let mut new_summary = L::Summary::default();
+        let mut new_summary = Leaf::Summary::default();
 
-        let mut other_summary = L::Summary::default();
+        let mut other_summary = Leaf::Summary::default();
 
         for summary in self.children()[..offset].iter().map(Node::summary) {
             new_summary += summary;
@@ -176,15 +230,37 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     }
 
     #[inline]
-    pub(super) fn summary(&self) -> L::Summary {
+    pub fn summary(&self) -> Leaf::Summary {
         self.summary
+    }
+}
+
+impl<const ARITY: usize, Leaf: Summarize> From<Leaf> for Node<ARITY, Leaf> {
+    #[inline]
+    fn from(leaf: Leaf) -> Self {
+        Self::Leaf(leaf)
+    }
+}
+
+impl<const N: usize, Leaf: Summarize> core::fmt::Debug for Node<N, Leaf> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match self {
+            Node::Internal(inode) => core::fmt::Debug::fmt(inode, f),
+            Node::Leaf(leaf) => core::fmt::Debug::fmt(leaf, f),
+        }
+    }
+}
+
+impl<const N: usize, Leaf: Summarize> core::fmt::Debug for Inode<N, Leaf> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        pretty_print_inode(self, &mut String::new(), "", 0, f)
     }
 }
 
 /// Recursively prints a tree-like representation of this node.
 #[inline]
-fn pretty_print_inode<const N: usize, L: Leaf>(
-    inode: &Inode<N, L>,
+fn pretty_print_inode<const N: usize, Leaf: Summarize>(
+    inode: &Inode<N, Leaf>,
     shifts: &mut String,
     ident: &str,
     last_shift_byte_len: usize,

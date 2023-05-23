@@ -1,11 +1,11 @@
 use core::ops::{Add, AddAssign};
 
 use super::{EditId, LamportTimestamp};
-use crate::tree::Summarize;
+use crate::node::Summarize;
 
 /// TODO: docs
 #[derive(Copy, Clone, Default)]
-pub(super) struct Fragment {
+pub struct Fragment {
     /// TODO: docs
     id: EditId,
 
@@ -40,6 +40,11 @@ impl core::fmt::Debug for Fragment {
 }
 
 impl Fragment {
+    #[inline]
+    pub(super) fn len(&self) -> usize {
+        self.len
+    }
+
     #[inline]
     pub(super) fn id(&self) -> EditId {
         self.id

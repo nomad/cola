@@ -3,8 +3,7 @@ use std::collections::VecDeque;
 
 use uuid::Uuid;
 
-use super::*;
-use crate::tree::Tree;
+use crate::*;
 
 const ARITY: usize = 4;
 
@@ -40,6 +39,10 @@ impl core::fmt::Debug for Replica {
 }
 
 impl Replica {
+    pub(crate) const fn arity() -> usize {
+        ARITY
+    }
+
     /// TODO: docs
     #[inline]
     pub fn contents(&self) -> impl Iterator<Item = &str> {

@@ -1,31 +1,61 @@
 use core::ops::Range;
 
-use super::{Inode, Leaf, Lnode, Metric, Node};
+use crate::node::{Inode, Metric, Node, Summarize};
+use crate::{Fragment, Replica};
 
 #[derive(Clone)]
-pub struct Tree<const ARITY: usize, L: Leaf> {
-    root: Node<ARITY, L>,
+pub struct Tree<const ARITY: usize, Leaf: Summarize> {
+    root: Node<ARITY, Leaf>,
 }
 
-impl<const ARITY: usize, L: Leaf> core::fmt::Debug for Tree<ARITY, L> {
+impl<const ARITY: usize, Leaf: Summarize> core::fmt::Debug
+    for Tree<ARITY, Leaf>
+{
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Debug::fmt(&self.root, f)
     }
 }
 
-impl<const ARITY: usize, L: Leaf> From<L> for Tree<ARITY, L> {
+impl<const ARITY: usize, Leaf: Summarize> From<Leaf> for Tree<ARITY, Leaf> {
     #[inline]
-    fn from(leaf: L) -> Self {
-        Self { root: Node::Leaf(Lnode::from(leaf)) }
+    fn from(leaf: Leaf) -> Self {
+        Self { root: Node::Leaf(leaf) }
     }
 }
 
-impl<const ARITY: usize, L: Leaf> Tree<ARITY, L> {
+impl<const ARITY: usize, Leaf: Summarize> Tree<ARITY, Leaf> {
+    #[inline]
+    fn measure<M: Metric<Leaf>>(&self) -> M {
+        M::measure_summary(&self.summary())
+    }
+
+    #[inline]
+    fn replace_root<F>(&mut self, replace_with: F)
+    where
+        F: FnOnce(Node<ARITY, Leaf>) -> Node<ARITY, Leaf>,
+    {
+        let dummy_node = Node::Internal(Inode::empty());
+        let old_root = core::mem::replace(&mut self.root, dummy_node);
+        self.root = replace_with(old_root);
+    }
+
+    #[inline]
+    fn root_mut(&mut self) -> &mut Node<ARITY, Leaf> {
+        &mut self.root
+    }
+
+    #[inline]
+    pub fn summary(&self) -> Leaf::Summary {
+        self.root.summary()
+    }
+}
+
+impl Tree<{ Replica::arity() }, Fragment> {
     #[inline]
     pub fn delete<M, F>(&mut self, delete_range: Range<M>, delete_with: F)
     where
-        M: Metric<L>,
-        F: Fn(M, &mut L) -> Option<L>,
+        M: Metric<Fragment>,
+        F: Fn(M, &mut Fragment) -> Option<Fragment>,
     {
         // Just like when inserting, here we can also have up to N + 2
         // fragments in the tree if we start with N.
@@ -53,18 +83,16 @@ impl<const ARITY: usize, L: Leaf> Tree<ARITY, L> {
     #[inline]
     pub fn insert<M, F>(&mut self, insert_at: M, insert_with: F)
     where
-        M: Metric<L>,
-        F: FnOnce(M, &mut L) -> (L, Option<L>),
+        M: Metric<Fragment>,
+        F: FnOnce(M, &mut Fragment) -> (Fragment, Option<Fragment>),
     {
         debug_assert!(insert_at <= self.measure::<M>());
 
         let root = match &mut self.root {
             Node::Internal(inode) => inode,
 
-            Node::Leaf(lnode) => {
-                let (leaf, extra) = insert_with(M::zero(), lnode.value_mut());
-
-                *lnode.summary_mut() = lnode.value().summarize();
+            Node::Leaf(fragment) => {
+                let (leaf, extra) = insert_with(M::zero(), fragment);
 
                 self.replace_root(|old_root| {
                     let leaf = Node::from(leaf);
@@ -90,47 +118,25 @@ impl<const ARITY: usize, L: Leaf> Tree<ARITY, L> {
             });
         }
     }
-
-    #[inline]
-    fn measure<M: Metric<L>>(&self) -> M {
-        M::measure(&self.summary())
-    }
-
-    #[inline]
-    fn replace_root<F>(&mut self, replace_with: F)
-    where
-        F: FnOnce(Node<ARITY, L>) -> Node<ARITY, L>,
-    {
-        let dummy_node = Node::Internal(Inode::empty());
-        let old_root = core::mem::replace(&mut self.root, dummy_node);
-        self.root = replace_with(old_root);
-    }
-
-    #[inline]
-    fn root_mut(&mut self) -> &mut Node<ARITY, L> {
-        &mut self.root
-    }
-
-    #[inline]
-    pub fn summary(&self) -> L::Summary {
-        self.root.summary()
-    }
 }
 
 mod tree_insert {
     use super::*;
+    use crate::Replica;
+
+    type Node = crate::node::Node<{ Replica::arity() }, Fragment>;
+    type Inode = crate::node::Inode<{ Replica::arity() }, Fragment>;
 
     #[inline]
-    pub(super) fn insert<const N: usize, L, M, F>(
-        inode: &mut Inode<N, L>,
+    pub(super) fn insert<M, F>(
+        inode: &mut Inode,
         mut offset: M,
         insert_at: M,
         insert_with: F,
-    ) -> Option<Inode<N, L>>
+    ) -> Option<Inode>
     where
-        L: Leaf,
-        M: Metric<L>,
-        F: FnOnce(M, &mut L) -> (L, Option<L>),
+        M: Metric<Fragment>,
+        F: FnOnce(M, &mut Fragment) -> (Fragment, Option<Fragment>),
     {
         let mut child_idx = 0;
 
@@ -147,11 +153,8 @@ mod tree_insert {
                         break;
                     },
 
-                    Node::Leaf(lnode) => {
-                        let (leaf, extra) =
-                            insert_with(offset, lnode.value_mut());
-
-                        *lnode.summary_mut() = lnode.value().summarize();
+                    Node::Leaf(fragment) => {
+                        let (leaf, extra) = insert_with(offset, fragment);
 
                         let leaf = Node::from(leaf);
 
@@ -177,24 +180,27 @@ mod tree_insert {
 
 mod tree_delete {
     use super::*;
+    use crate::Replica;
+
+    type Node = crate::node::Node<{ Replica::arity() }, Fragment>;
+    type Inode = crate::node::Inode<{ Replica::arity() }, Fragment>;
 
     #[inline]
-    pub(super) fn delete<const N: usize, L, M, F>(
-        node: &mut Node<N, L>,
+    pub(super) fn delete<M, F>(
+        node: &mut Node,
         mut offset: M,
         delete_range: Range<M>,
         delete_with: F,
-    ) -> Option<Node<N, L>>
+    ) -> Option<Node>
     where
-        L: Leaf,
-        M: Metric<L>,
-        F: Fn(M, &mut L) -> Option<L>,
+        M: Metric<Fragment>,
+        F: Fn(M, &mut Fragment) -> Option<Fragment>,
     {
         let inode = match node {
             Node::Internal(inode) => inode,
 
-            Node::Leaf(lnode) => {
-                return delete_with(offset, lnode.value_mut()).map(Node::from)
+            Node::Leaf(fragment) => {
+                return delete_with(offset, fragment).map(Node::from)
             },
         };
 
@@ -232,16 +238,15 @@ mod tree_delete {
     }
 
     #[inline]
-    pub(super) fn delete_range_in_deepest<const N: usize, L, M, F>(
-        inode: &mut Inode<N, L>,
+    pub(super) fn delete_range_in_deepest<M, F>(
+        inode: &mut Inode,
         mut offset: M,
         delete_range: Range<M>,
         delete_with: F,
-    ) -> Option<Node<N, L>>
+    ) -> Option<Node>
     where
-        L: Leaf,
-        M: Metric<L>,
-        F: Fn(M, &mut L) -> Option<L>,
+        M: Metric<Fragment>,
+        F: Fn(M, &mut Fragment) -> Option<Fragment>,
     {
         let mut start_idx = 0;
 
@@ -311,22 +316,21 @@ mod tree_delete {
     }
 
     #[inline]
-    fn something_start<const N: usize, L, M, F>(
-        node: &mut Node<N, L>,
+    fn something_start<M, F>(
+        node: &mut Node,
         mut offset: M,
         delete_from: M,
         delete_with: F,
-    ) -> Option<Node<N, L>>
+    ) -> Option<Node>
     where
-        L: Leaf,
-        M: Metric<L>,
-        F: Fn(M, &mut L) -> Option<L>,
+        M: Metric<Fragment>,
+        F: Fn(M, &mut Fragment) -> Option<Fragment>,
     {
         let inode = match node {
             Node::Internal(inode) => inode,
 
-            Node::Leaf(lnode) => {
-                return delete_with(offset, lnode.value_mut()).map(Node::from)
+            Node::Leaf(fragment) => {
+                return delete_with(offset, fragment).map(Node::from)
             },
         };
 
@@ -357,22 +361,21 @@ mod tree_delete {
     }
 
     #[inline]
-    fn something_end<const N: usize, L, M, F>(
-        node: &mut Node<N, L>,
+    fn something_end<M, F>(
+        node: &mut Node,
         mut offset: M,
         delete_up_to: M,
         delete_with: F,
-    ) -> Option<Node<N, L>>
+    ) -> Option<Node>
     where
-        L: Leaf,
-        M: Metric<L>,
-        F: Fn(M, &mut L) -> Option<L>,
+        M: Metric<Fragment>,
+        F: Fn(M, &mut Fragment) -> Option<Fragment>,
     {
         let inode = match node {
             Node::Internal(inode) => inode,
 
-            Node::Leaf(lnode) => {
-                return delete_with(offset, lnode.value_mut()).map(Node::from)
+            Node::Leaf(fragment) => {
+                return delete_with(offset, fragment).map(Node::from)
             },
         };
 
