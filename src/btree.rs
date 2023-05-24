@@ -130,7 +130,12 @@ mod tree_insert {
                         let leaf = Node::Leaf(leaf);
 
                         return if let Some(extra) = extra {
-                            inode.insert_two(idx + 1, leaf, Node::Leaf(extra))
+                            inode.insert_two(
+                                idx + 1,
+                                leaf,
+                                idx + 1,
+                                Node::Leaf(extra),
+                            )
                         } else {
                             inode.insert(idx + 1, leaf)
                         };
@@ -180,7 +185,7 @@ mod tree_delete {
                 },
             };
 
-            if let Some(extra) = tree_delete::delete(root, 0, delete_range) {
+            if let Some(extra) = tree_delete::delete(root, delete_range) {
                 self.replace_root(|old_root| {
                     Node::from_children(vec![old_root, Node::Internal(extra)])
                 });
@@ -203,12 +208,13 @@ mod tree_delete {
     #[inline]
     fn delete(
         inode: &mut Inode,
-        mut offset: usize,
-        delete_range: Range<usize>,
+        mut delete_range: Range<usize>,
     ) -> Option<Inode> {
         let mut child_idx = 0;
 
         let mut extra = None;
+
+        let mut offset = 0;
 
         for (idx, child) in inode.children_mut().iter_mut().enumerate() {
             let child_len = child.summary().len;
@@ -221,11 +227,11 @@ mod tree_delete {
                         Node::Internal(child) => {
                             child_idx = idx;
 
-                            extra = delete(
-                                child,
-                                offset - child_len,
-                                delete_range,
-                            );
+                            offset -= child_len;
+                            delete_range.start -= offset;
+                            delete_range.end -= offset;
+
+                            extra = delete(child, delete_range);
 
                             break;
                         },
@@ -241,6 +247,7 @@ mod tree_delete {
                                     inode.insert_two(
                                         idx + 1,
                                         del,
+                                        idx + 1,
                                         Node::Leaf(rest),
                                     )
                                 } else {
@@ -252,11 +259,7 @@ mod tree_delete {
                         },
                     }
                 } else {
-                    return delete_range_in_deepest(
-                        inode,
-                        offset - child_len,
-                        delete_range,
-                    );
+                    return delete_range_in_deepest(inode, delete_range);
                 }
             }
         }
@@ -267,90 +270,76 @@ mod tree_delete {
     #[inline]
     fn delete_range_in_deepest(
         inode: &mut Inode,
-        mut offset: usize,
         delete_range: Range<usize>,
     ) -> Option<Inode> {
         let mut start_idx = 0;
 
-        let mut extra = None;
+        let mut end_idx = 0;
 
-        for (idx, child) in inode.children_mut().iter_mut().enumerate() {
+        let mut extra_from_start = None;
+
+        let mut extra_from_end = None;
+
+        let mut children = inode.children_mut().iter_mut().enumerate();
+
+        let mut offset = 0;
+
+        for (idx, child) in children.by_ref() {
             let child_len = child.summary().len;
 
             offset += child_len;
 
             if offset >= delete_range.start {
                 start_idx = idx;
-                extra = something_start(
-                    child,
-                    offset - child_len,
-                    delete_range.start,
-                );
+                let delete_from = delete_range.start + child_len - offset;
+                extra_from_start = something_start(child, delete_from);
                 break;
             }
         }
 
-        let mut extra_from_start =
-            extra.and_then(|e| inode.insert(start_idx + 1, e));
-
-        let extra_children = extra_from_start
-            .as_mut()
-            .map(Inode::children_mut)
-            .unwrap_or(&mut []);
-
-        let children = inode.children_mut()[start_idx + 1..]
-            .iter_mut()
-            .chain(extra_children);
-
-        let mut end_idx = 0;
-
-        let mut extra = None;
-
-        for (idx, child) in children.enumerate() {
+        for (idx, child) in children {
             let child_len = child.summary().len;
 
             offset += child_len;
 
             if offset >= delete_range.end {
-                end_idx = start_idx + 1 + idx;
-                extra =
-                    something_end(child, offset - child_len, delete_range.end);
+                end_idx = idx;
+                let delete_up_to = delete_range.end + child_len - offset;
+                extra_from_end = something_end(child, delete_up_to);
                 break;
             } else {
                 child.delete()
             }
         }
 
-        let extra_from_end = extra.and_then(|e| inode.insert(end_idx + 1, e));
+        match (extra_from_start, extra_from_end) {
+            (Some(start), Some(end)) => {
+                inode.insert_two(start_idx + 1, start, end_idx + 1, end)
+            },
 
-        // TODO: document why `extra_from_start` and `extra_from_end` are
-        // guaranteed to never be both `Some`s.
-        debug_assert!(
-            !(extra_from_start.is_some() && extra_from_end.is_some())
-        );
+            (Some(start), None) => inode.insert(start_idx + 1, start),
 
-        extra_from_start.or(extra_from_end)
+            (None, Some(end)) => inode.insert(end_idx + 1, end),
+
+            (None, None) => None,
+        }
     }
 
     #[inline]
-    fn something_start(
-        node: &mut Node,
-        mut offset: usize,
-        delete_from: usize,
-    ) -> Option<Node> {
+    fn something_start(node: &mut Node, delete_from: usize) -> Option<Node> {
         let inode = match node {
             Node::Internal(inode) => inode,
 
             Node::Leaf(fragment) => {
-                return fragment
-                    .delete_from(delete_from - offset)
-                    .map(Node::Leaf)
+                return fragment.delete_from(delete_from).map(Node::Leaf);
             },
         };
 
         let mut start_idx = 0;
 
         let mut extra = None;
+
+        let mut offset = 0;
 
         let mut children = inode.children_mut().iter_mut();
 
@@ -359,7 +348,7 @@ mod tree_delete {
 
             if offset + child_len >= delete_from {
                 start_idx = idx;
-                extra = something_start(child, offset, delete_from);
+                extra = something_start(child, delete_from - offset);
                 break;
             } else {
                 offset += child_len;
@@ -374,18 +363,12 @@ mod tree_delete {
     }
 
     #[inline]
-    fn something_end(
-        node: &mut Node,
-        mut offset: usize,
-        delete_up_to: usize,
-    ) -> Option<Node> {
+    fn something_end(node: &mut Node, delete_up_to: usize) -> Option<Node> {
         let inode = match node {
             Node::Internal(inode) => inode,
 
             Node::Leaf(fragment) => {
-                return fragment
-                    .delete_up_to(delete_up_to - offset)
-                    .map(Node::Leaf);
+                return fragment.delete_up_to(delete_up_to).map(Node::Leaf);
             },
         };
 
@@ -393,12 +376,14 @@ mod tree_delete {
 
         let mut extra = None;
 
+        let mut offset = 0;
+
         for (idx, child) in inode.children_mut().iter_mut().enumerate() {
             let child_len = child.summary().len;
 
             if offset + child_len >= delete_up_to {
                 end_idx = idx;
-                extra = something_end(child, offset, delete_up_to);
+                extra = something_end(child, delete_up_to - offset);
                 break;
             } else {
                 child.delete();

@@ -36,6 +36,14 @@ pub enum Node<const ARITY: usize, Leaf: Summarize> {
 
 impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
     #[inline]
+    pub fn depth(&self) -> usize {
+        match self {
+            Node::Internal(inode) => inode.depth(),
+            Node::Leaf(_) => 0,
+        }
+    }
+
+    #[inline]
     pub fn from_children<C>(children: C) -> Self
     where
         C: Into<Vec<Node<ARITY, Leaf>>>,
@@ -78,6 +86,11 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     }
 
     #[inline]
+    pub fn depth(&self) -> usize {
+        todo!();
+    }
+
+    #[inline]
     pub fn empty() -> Self {
         Self { children: Vec::new(), summary: Leaf::Summary::default() }
     }
@@ -108,6 +121,8 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
         offset: usize,
         child: Node<ARITY, Leaf>,
     ) -> Option<Self> {
+        debug_assert!(offset <= self.len());
+
         if self.is_full() {
             let split_offset = self.len() - Self::min_children();
 
@@ -136,45 +151,66 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     #[inline]
     pub fn insert_two(
         &mut self,
-        offset: usize,
-        a: Node<ARITY, Leaf>,
-        b: Node<ARITY, Leaf>,
+        mut offset_a: usize,
+        mut a: Node<ARITY, Leaf>,
+        mut offset_b: usize,
+        mut b: Node<ARITY, Leaf>,
     ) -> Option<Self> {
         use core::cmp::Ordering;
 
-        if ARITY - self.len() <= 1 {
+        debug_assert!(Self::min_children() >= 2);
+
+        debug_assert_eq!(self.depth(), a.depth() + 1);
+
+        debug_assert_eq!(a.depth(), b.depth());
+
+        if offset_a > offset_b {
+            (a, b, offset_a, offset_b) = (b, a, offset_b, offset_a)
+        }
+
+        debug_assert!(offset_b <= self.len());
+
+        if Self::max_children() - self.len() < 2 {
             let split_offset = self.len() - Self::min_children();
+
+            let children_after_b = self.len() - offset_b;
 
             // Split so that the extra inode always has the minimum number of
             // children.
-            let rest =
-                match (self.len() - offset).cmp(&(Self::min_children() - 1)) {
-                    Ordering::Greater => {
-                        let rest = self.split_at(split_offset);
-                        self.insert_two(offset, a, b);
-                        rest
-                    },
+            //
+            // The logic to make this work is a bit annoying to reason about.
+            // We should probably add some unit tests to avoid possible
+            // regressions.
+            let rest = match children_after_b.cmp(&(Self::min_children() - 1))
+            {
+                Ordering::Greater => {
+                    let rest = self.split_at(split_offset);
+                    self.insert_two(offset_a, a, offset_b, b);
+                    rest
+                },
 
-                    Ordering::Equal => {
-                        let mut rest = self.split_at(split_offset + 1);
-                        self.push(a);
-                        rest.insert(0, b);
-                        rest
-                    },
+                Ordering::Less if offset_a >= split_offset + 2 => {
+                    let mut rest = self.split_at(split_offset + 2);
+                    offset_a -= self.len();
+                    offset_b -= self.len();
+                    rest.insert_two(offset_a, a, offset_b, b);
+                    rest
+                },
 
-                    Ordering::Less => {
-                        let mut rest = self.split_at(split_offset + 2);
-                        rest.insert_two(offset - self.len(), a, b);
-                        rest
-                    },
-                };
+                _ => {
+                    let mut rest = self.split_at(split_offset + 1);
+                    self.insert(offset_a, a);
+                    rest.insert(offset_b - self.len(), b);
+                    rest
+                },
+            };
 
             debug_assert_eq!(rest.len(), Self::min_children());
 
             Some(rest)
         } else {
-            self.summary += a.summary() + b.summary();
-            self.children.splice(offset..offset, [a, b]);
+            self.insert(offset_a, a);
+            self.insert(offset_b + 1, b);
             None
         }
     }
@@ -187,6 +223,11 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     #[inline]
     pub fn len(&self) -> usize {
         self.children.len()
+    }
+
+    #[inline]
+    const fn max_children() -> usize {
+        ARITY
     }
 
     #[inline]

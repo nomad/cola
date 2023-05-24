@@ -30,11 +30,12 @@ impl core::fmt::Debug for Fragment {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:?} L({}) |> {:?} @ {}",
+            "{:?} L({}) |> {:?} @ {}, {:?}",
             self.id,
             self.timestamp.as_u64(),
             self.parent,
-            self.offset_in_parent
+            self.offset_in_parent,
+            self.summarize(),
         )
     }
 }

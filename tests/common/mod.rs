@@ -37,6 +37,11 @@ impl<B: Buffer + for<'a> PartialEq<&'a str>> PartialEq<Replica<B>> for &str {
 }
 
 impl<B: Buffer> Replica<B> {
+    pub fn delete(&mut self, byte_range: Range<usize>) -> CrdtEdit {
+        self.buffer.delete(byte_range.clone());
+        self.crdt.deleted(byte_range)
+    }
+
     pub fn insert<T: Into<String>>(
         &mut self,
         byte_offset: usize,

@@ -61,7 +61,12 @@ impl Replica {
     where
         R: RangeBounds<usize>,
     {
-        todo!();
+        let (start, end) =
+            range_bounds_to_start_end(byte_range, 0, self.len());
+
+        self.fragment_tree.delete(start..end);
+
+        CrdtEdit::noop()
     }
 
     /// TODO: docs
@@ -105,6 +110,12 @@ impl Replica {
         });
 
         CrdtEdit::insertion(fragment, text)
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.fragment_tree.summary().len
     }
 
     /// TODO: docs
@@ -167,6 +178,32 @@ impl Replica {
     pub fn undo(&self, crdt_edit: &CrdtEdit) -> CrdtEdit {
         todo!();
     }
+}
+
+#[inline]
+fn range_bounds_to_start_end<R>(
+    range: R,
+    lo: usize,
+    hi: usize,
+) -> (usize, usize)
+where
+    R: core::ops::RangeBounds<usize>,
+{
+    use core::ops::Bound;
+
+    let start = match range.start_bound() {
+        Bound::Included(&n) => n,
+        Bound::Excluded(&n) => n + 1,
+        Bound::Unbounded => lo,
+    };
+
+    let end = match range.end_bound() {
+        Bound::Included(&n) => n + 1,
+        Bound::Excluded(&n) => n,
+        Bound::Unbounded => hi,
+    };
+
+    (start, end)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
