@@ -49,10 +49,15 @@ impl Fragment {
 
     #[inline]
     pub fn delete_from(&mut self, offset: usize) -> Option<Self> {
-        self.split(offset).map(|mut del| {
-            del.is_visible = false;
-            del
-        })
+        if offset == 0 {
+            self.is_visible = false;
+            None
+        } else {
+            self.split(offset).map(|mut del| {
+                del.is_visible = false;
+                del
+            })
+        }
     }
 
     #[inline]
@@ -62,21 +67,31 @@ impl Fragment {
     ) -> (Option<Self>, Option<Self>) {
         debug_assert!(start <= end);
 
-        let rest = self.split(end);
+        if start == 0 {
+            (self.delete_up_to(end), None)
+        } else if end >= self.len {
+            (self.delete_from(start), None)
+        } else {
+            let rest = self.split(end);
 
-        let deleted = self.split(start).map(|mut del| {
-            del.is_visible = false;
-            del
-        });
+            let deleted = self.split(start).map(|mut del| {
+                del.is_visible = false;
+                del
+            });
 
-        (deleted, rest)
+            (deleted, rest)
+        }
     }
 
     #[inline]
     pub fn delete_up_to(&mut self, offset: usize) -> Option<Self> {
-        let rest = self.split(offset);
-        self.is_visible = false;
-        rest
+        if offset == 0 {
+            None
+        } else {
+            let rest = self.split(offset);
+            self.is_visible = false;
+            rest
+        }
     }
 
     #[inline]
