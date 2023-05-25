@@ -89,10 +89,11 @@ mod tree_insert {
             };
 
             if let Some(extra) =
-                tree_insert::insert(root, M::zero(), insert_at, insert_with)
+                tree_insert::insert(root, insert_at, insert_with)
+                    .map(Node::Internal)
             {
                 self.replace_root(|old_root| {
-                    Node::from_children(vec![old_root, Node::Internal(extra)])
+                    Node::from_children(vec![old_root, extra])
                 });
             }
         }
@@ -101,52 +102,55 @@ mod tree_insert {
     #[inline]
     pub(super) fn insert<M, F>(
         inode: &mut Inode,
-        mut offset: M,
-        insert_at: M,
+        mut insert_at: M,
         insert_with: F,
     ) -> Option<Inode>
     where
         M: Metric<Fragment>,
         F: FnOnce(M, &mut Fragment) -> (Fragment, Option<Fragment>),
     {
-        let mut child_idx = 0;
-
-        let mut extra = None;
+        let mut offset = M::zero();
 
         for (idx, child) in inode.children_mut().iter_mut().enumerate() {
             let child_measure = child.measure::<M>();
 
-            if offset + child_measure >= insert_at {
-                match child {
-                    Node::Internal(child) => {
-                        child_idx = idx;
-                        extra = insert(child, offset, insert_at, insert_with);
-                        break;
-                    },
+            offset += child_measure;
 
-                    Node::Leaf(fragment) => {
-                        let (leaf, extra) = insert_with(offset, fragment);
+            let child_contains_insert = offset >= insert_at;
 
-                        let leaf = Node::Leaf(leaf);
+            if child_contains_insert {
+                offset -= child_measure;
+                insert_at -= offset;
 
-                        return if let Some(extra) = extra {
-                            inode.insert_two(
-                                idx + 1,
-                                leaf,
-                                idx + 1,
-                                Node::Leaf(extra),
-                            )
-                        } else {
-                            inode.insert(idx + 1, leaf)
-                        };
-                    },
+                if child.is_internal() {
+                    let extra = inode.with_child_mut(idx, |child| {
+                        let inode = child.as_internal_mut();
+                        insert(inode, insert_at, insert_with)
+                    });
+
+                    return extra.and_then(|e| {
+                        inode.insert(idx + 1, Node::Internal(e))
+                    });
+                } else {
+                    let (leaf, extra) = inode.with_child_mut(idx, |child| {
+                        let fragment = child.as_leaf_mut();
+                        insert_with(offset, fragment)
+                    });
+
+                    let leaf = Node::Leaf(leaf);
+
+                    let offset = idx + 1;
+
+                    return if let Some(extra) = extra.map(Node::Leaf) {
+                        inode.insert_two(offset, leaf, offset, extra)
+                    } else {
+                        inode.insert(offset, leaf)
+                    };
                 }
-            } else {
-                offset += child_measure;
             }
         }
 
-        extra.and_then(|e| inode.insert(child_idx + 1, Node::Internal(e)))
+        unreachable!();
     }
 }
 
