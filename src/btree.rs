@@ -223,16 +223,14 @@ mod tree_delete {
 
             if offset >= delete_range.start {
                 if offset >= delete_range.end {
+                    offset -= child_len;
+                    delete_range.start -= offset;
+                    delete_range.end -= offset;
+
                     match child {
                         Node::Internal(child) => {
                             child_idx = idx;
-
-                            offset -= child_len;
-                            delete_range.start -= offset;
-                            delete_range.end -= offset;
-
                             extra = delete(child, delete_range);
-
                             break;
                         },
 

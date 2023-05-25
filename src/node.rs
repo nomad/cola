@@ -87,7 +87,16 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
 
     #[inline]
     pub fn depth(&self) -> usize {
-        todo!();
+        let mut depth = 1;
+
+        let mut inode = self;
+
+        while let Some(Node::Internal(first_child)) = inode.children.get(0) {
+            inode = first_child;
+            depth += 1;
+        }
+
+        depth
     }
 
     #[inline]
@@ -199,8 +208,8 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
 
                 _ => {
                     let mut rest = self.split_at(split_offset + 1);
-                    self.insert(offset_a, a);
                     rest.insert(offset_b - self.len(), b);
+                    self.insert(offset_a, a);
                     rest
                 },
             };
