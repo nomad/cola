@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Range};
+use core::ops::{Add, AddAssign, Range, Sub, SubAssign};
 
 use super::{EditId, LamportTimestamp};
 use crate::node::Summarize;
@@ -30,12 +30,13 @@ impl core::fmt::Debug for Fragment {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:?} L({}) |> {:?} @ {}, {:?}",
+            "{:?} L({}) |> {:?} @ {}, {} {}",
             self.id,
             self.timestamp.as_u64(),
             self.parent,
             self.offset_in_parent,
-            self.summarize(),
+            self.len,
+            if self.is_visible { "✔️" } else { "🪦" },
         )
     }
 }
@@ -117,12 +118,11 @@ impl Fragment {
 #[derive(Clone, Copy, Default, PartialEq)]
 pub struct FragmentSummary {
     pub(super) len: usize,
-    pub(super) is_visible: bool,
 }
 
 impl core::fmt::Debug for FragmentSummary {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{{ len: {}, is_visible: {} }}", self.len, self.is_visible)
+        write!(f, "{{ len: {} }}", self.len)
     }
 }
 
@@ -138,11 +138,25 @@ impl Add<Self> for FragmentSummary {
 
 impl AddAssign<Self> for FragmentSummary {
     #[inline]
-    fn add_assign(&mut self, rhs: Self) {
-        self.len = (self.is_visible as usize) * self.len
-            + (rhs.is_visible as usize) * rhs.len;
+    fn add_assign(&mut self, other: Self) {
+        self.len += other.len;
+    }
+}
 
-        self.is_visible |= rhs.is_visible;
+impl Sub<Self> for FragmentSummary {
+    type Output = Self;
+
+    #[inline]
+    fn sub(mut self, rhs: Self) -> Self {
+        self -= rhs;
+        self
+    }
+}
+
+impl SubAssign<Self> for FragmentSummary {
+    #[inline]
+    fn sub_assign(&mut self, other: Self) {
+        self.len -= other.len;
     }
 }
 
@@ -151,6 +165,6 @@ impl Summarize for Fragment {
 
     #[inline]
     fn summarize(&self) -> Self::Summary {
-        FragmentSummary { len: self.len, is_visible: self.is_visible }
+        FragmentSummary { len: self.len * (self.is_visible as usize) }
     }
 }

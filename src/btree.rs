@@ -167,15 +167,14 @@ mod tree_delete {
                 Node::Leaf(fragment) => {
                     let (deleted, rest) = fragment.delete_range(delete_range);
 
-                    if let Some(del) = deleted {
+                    if let Some(deleted) = deleted.map(Node::Leaf) {
                         self.replace_root(|old_root| {
-                            let del = Node::Leaf(del);
-
-                            let children = if let Some(rest) = rest {
-                                vec![old_root, del, Node::Leaf(rest)]
-                            } else {
-                                vec![old_root, del]
-                            };
+                            let children =
+                                if let Some(rest) = rest.map(Node::Leaf) {
+                                    vec![old_root, deleted, rest]
+                                } else {
+                                    vec![old_root, deleted]
+                                };
 
                             Node::from_children(children)
                         })
@@ -185,9 +184,11 @@ mod tree_delete {
                 },
             };
 
-            if let Some(extra) = tree_delete::delete(root, delete_range) {
+            if let Some(extra) =
+                tree_delete::delete(root, delete_range).map(Node::Internal)
+            {
                 self.replace_root(|old_root| {
-                    Node::from_children(vec![old_root, Node::Internal(extra)])
+                    Node::from_children(vec![old_root, extra])
                 });
             }
         }
@@ -197,7 +198,7 @@ mod tree_delete {
         fn delete(&mut self) {
             match self {
                 Node::Internal(inode) => {
-                    inode.summary_mut().is_visible = false;
+                    inode.summary_mut().len = 0;
                 },
 
                 Node::Leaf(fragment) => fragment.delete(),
@@ -210,59 +211,57 @@ mod tree_delete {
         inode: &mut Inode,
         mut delete_range: Range<usize>,
     ) -> Option<Inode> {
-        let mut child_idx = 0;
-
-        let mut extra = None;
-
         let mut offset = 0;
 
-        for (idx, child) in inode.children_mut().iter_mut().enumerate() {
+        for (idx, child) in inode.children().iter().enumerate() {
             let child_len = child.summary().len;
 
             offset += child_len;
 
-            if offset >= delete_range.start {
-                if offset >= delete_range.end {
-                    offset -= child_len;
-                    delete_range.start -= offset;
-                    delete_range.end -= offset;
+            let child_contains_range_start = offset >= delete_range.start;
 
-                    match child {
-                        Node::Internal(child) => {
-                            child_idx = idx;
-                            extra = delete(child, delete_range);
-                            break;
-                        },
+            if !child_contains_range_start {
+                continue;
+            }
 
-                        Node::Leaf(fragment) => {
-                            let (deleted, rest) =
-                                fragment.delete_range(delete_range);
+            let child_contains_range_end = offset >= delete_range.end;
 
-                            return if let Some(del) = deleted {
-                                let del = Node::Leaf(del);
+            if child_contains_range_end {
+                offset -= child_len;
+                delete_range.start -= offset;
+                delete_range.end -= offset;
 
-                                if let Some(rest) = rest {
-                                    inode.insert_two(
-                                        idx + 1,
-                                        del,
-                                        idx + 1,
-                                        Node::Leaf(rest),
-                                    )
-                                } else {
-                                    inode.insert(idx + 1, del)
-                                }
-                            } else {
-                                None
-                            };
-                        },
-                    }
+                if child.is_internal() {
+                    let extra = inode.with_child_mut(idx, |child| {
+                        let inode = child.as_internal_mut();
+                        delete(inode, delete_range)
+                    });
+
+                    return extra.and_then(|e| {
+                        inode.insert(idx + 1, Node::Internal(e))
+                    });
                 } else {
-                    return delete_range_in_deepest(inode, delete_range);
+                    let (deleted, rest) = inode.with_child_mut(idx, |child| {
+                        let fragment = child.as_leaf_mut();
+                        fragment.delete_range(delete_range)
+                    });
+
+                    let deleted = deleted.map(Node::Leaf)?;
+
+                    let offset = idx + 1;
+
+                    return if let Some(rest) = rest.map(Node::Leaf) {
+                        inode.insert_two(offset, deleted, offset, rest)
+                    } else {
+                        inode.insert(offset, deleted)
+                    };
                 }
+            } else {
+                return delete_range_in_deepest(inode, delete_range);
             }
         }
 
-        extra.and_then(|e| inode.insert(child_idx + 1, Node::Internal(e)))
+        unreachable!();
     }
 
     #[inline]
@@ -309,6 +308,8 @@ mod tree_delete {
                 child.delete()
             }
         }
+
+        *inode.summary_mut() = inode.summarize();
 
         match (extra_from_start, extra_from_end) {
             (Some(start), Some(end)) => {
@@ -357,6 +358,8 @@ mod tree_delete {
             child.delete()
         }
 
+        *inode.summary_mut() = inode.summarize();
+
         extra.and_then(|e| inode.insert(start_idx + 1, e)).map(Node::Internal)
     }
 
@@ -388,6 +391,8 @@ mod tree_delete {
                 offset += child_len;
             }
         }
+
+        *inode.summary_mut() = inode.summarize();
 
         extra.and_then(|e| inode.insert(end_idx + 1, e)).map(Node::Internal)
     }

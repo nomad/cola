@@ -6,7 +6,9 @@ pub trait Summarize: Debug {
         + Default
         + Copy
         + Add<Self::Summary, Output = Self::Summary>
+        + Sub<Self::Summary, Output = Self::Summary>
         + AddAssign<Self::Summary>
+        + SubAssign<Self::Summary>
         + PartialEq<Self::Summary>;
 
     fn summarize(&self) -> Self::Summary;
@@ -36,6 +38,22 @@ pub enum Node<const ARITY: usize, Leaf: Summarize> {
 
 impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
     #[inline]
+    pub fn as_internal_mut(&mut self) -> &mut Inode<ARITY, Leaf> {
+        match self {
+            Node::Internal(inode) => inode,
+            Node::Leaf(_) => unreachable!(),
+        }
+    }
+
+    #[inline]
+    pub fn as_leaf_mut(&mut self) -> &mut Leaf {
+        match self {
+            Node::Internal(_) => unreachable!(),
+            Node::Leaf(leaf) => leaf,
+        }
+    }
+
+    #[inline]
     pub fn depth(&self) -> usize {
         match self {
             Node::Internal(inode) => inode.depth(),
@@ -49,6 +67,11 @@ impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
         C: Into<Vec<Node<ARITY, Leaf>>>,
     {
         Self::Internal(Inode::from_children(children))
+    }
+
+    #[inline]
+    pub fn is_internal(&self) -> bool {
+        matches!(self, Node::Internal(_))
     }
 
     #[inline]
@@ -260,23 +283,25 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     fn split_at(&mut self, offset: usize) -> Self {
         debug_assert!(offset <= self.len());
 
-        let mut new_summary = Leaf::Summary::default();
+        let summary = if offset <= self.len() {
+            let new_summary = sum_summaries(&self.children[..offset]);
+            let s = self.summary - new_summary;
+            self.summary = new_summary;
+            s
+        } else {
+            let s = sum_summaries(&self.children[offset..]);
+            self.summary -= s;
+            s
+        };
 
-        let mut other_summary = Leaf::Summary::default();
+        let children = self.children.drain(offset..).collect();
 
-        for summary in self.children()[..offset].iter().map(Node::summary) {
-            new_summary += summary;
-        }
+        Self { children, summary }
+    }
 
-        for summary in self.children()[offset..].iter().map(Node::summary) {
-            other_summary += summary;
-        }
-
-        self.summary = new_summary;
-
-        let other_children = self.children.drain(offset..).collect();
-
-        Self { children: other_children, summary: other_summary }
+    #[inline]
+    pub fn summarize(&self) -> Leaf::Summary {
+        sum_summaries(self.children())
     }
 
     #[inline]
@@ -288,6 +313,33 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     pub fn summary_mut(&mut self) -> &mut Leaf::Summary {
         &mut self.summary
     }
+
+    #[inline]
+    pub fn with_child_mut<F, T>(
+        &mut self,
+        child_idx: usize,
+        with_child: F,
+    ) -> T
+    where
+        F: FnOnce(&mut Node<ARITY, Leaf>) -> T,
+    {
+        let child = &mut self.children[child_idx];
+        self.summary -= child.summary();
+        let res = with_child(child);
+        self.summary += child.summary();
+        res
+    }
+}
+
+#[inline]
+fn sum_summaries<const N: usize, Leaf: Summarize>(
+    nodes: &[Node<N, Leaf>],
+) -> Leaf::Summary {
+    let mut summary = Leaf::Summary::default();
+    for s in nodes.iter().map(Node::summary) {
+        summary += s
+    }
+    summary
 }
 
 impl<const N: usize, Leaf: Summarize> core::fmt::Debug for Node<N, Leaf> {
