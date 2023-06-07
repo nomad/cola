@@ -139,7 +139,7 @@ mod serde;
 use btree::Tree;
 use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
 pub use crdt_edit::CrdtEdit;
-use fragment::{Fragment, FragmentSummary};
+use fragment::{Fragment, FragmentSummary, RunId};
 use metrics::ByteMetric;
 use replica::EditId;
 pub use replica::Replica;

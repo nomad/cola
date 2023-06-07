@@ -88,21 +88,30 @@ impl Replica {
         self.fragment_tree.insert(insert_at, |ByteMetric(offset), parent| {
             let len = text.len();
 
+            let run_id: RunId = todo!();
+
             if byte_offset == 0 {
                 // The parent is the edit that we're inserting *after*. When
                 // the user inserts at the beginning of the buffer there's no
                 // such edit.
                 // In this case we use a special `EditId` called "zero" whose
                 // replica id and timestamp are both 0.
-                let edit = Fragment::new(id, EditId::zero(), 0, lamport, len);
+                let edit =
+                    Fragment::new(id, run_id, EditId::zero(), 0, lamport, len);
                 fragment = edit;
                 return (core::mem::replace(parent, edit), None);
             }
 
             let parent_offset = byte_offset - offset;
 
-            let edit =
-                Fragment::new(id, parent.id(), parent_offset, lamport, len);
+            let edit = Fragment::new(
+                id,
+                run_id,
+                parent.id(),
+                parent_offset,
+                lamport,
+                len,
+            );
 
             fragment = edit;
 
@@ -136,7 +145,8 @@ impl Replica {
 
         let len = chunks.map(|s| s.len()).sum::<usize>();
 
-        let fragment = Fragment::new(edit, origin, 0, lamport, len);
+        let fragment =
+            Fragment::new(edit, RunId::default(), origin, 0, lamport, len);
 
         let fragment_tree = Tree::from(fragment);
 

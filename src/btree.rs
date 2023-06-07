@@ -2,9 +2,19 @@ use core::ops::Range;
 
 use crate::node::{Inode, Metric, Node, Summarize};
 
-#[derive(Clone)]
 pub struct Tree<const ARITY: usize, Leaf: Summarize> {
     root: Node<ARITY, Leaf>,
+}
+
+impl<const ARITY: usize, Leaf: Summarize> Clone for Tree<ARITY, Leaf>
+where
+    Leaf: Clone,
+    Leaf::Summary: Clone,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        Self { root: self.root.clone() }
+    }
 }
 
 impl<const ARITY: usize, Leaf: Summarize> core::fmt::Debug

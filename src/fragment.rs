@@ -4,10 +4,13 @@ use super::{EditId, LamportTimestamp};
 use crate::node::Summarize;
 
 /// TODO: docs
-#[derive(Copy, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct Fragment {
     /// TODO: docs
-    id: EditId,
+    edit_id: EditId,
+
+    /// TODO: docs
+    run_id: RunId,
 
     /// TODO: docs
     timestamp: LamportTimestamp,
@@ -31,7 +34,7 @@ impl core::fmt::Debug for Fragment {
         write!(
             f,
             "{:?} L({}) |> {:?} @ {}, {} {}",
-            self.id,
+            self.edit_id,
             self.timestamp.as_u64(),
             self.parent,
             self.offset_in_parent,
@@ -101,18 +104,27 @@ impl Fragment {
 
     #[inline]
     pub(super) fn id(&self) -> EditId {
-        self.id
+        self.edit_id
     }
 
     #[inline]
     pub(crate) fn new(
-        id: EditId,
+        edit_id: EditId,
+        run_id: RunId,
         parent: EditId,
         offset_in_parent: usize,
         timestamp: LamportTimestamp,
         len: usize,
     ) -> Self {
-        Self { id, parent, offset_in_parent, timestamp, len, is_visible: true }
+        Self {
+            edit_id,
+            run_id,
+            parent,
+            offset_in_parent,
+            timestamp,
+            len,
+            is_visible: true,
+        }
     }
 
     /// TODO: docs
@@ -130,9 +142,41 @@ impl Fragment {
 }
 
 /// TODO: docs
-#[derive(Clone, Copy, Default, PartialEq)]
+///
+/// The `Ord` implementation for `Vec`s is a lexicographic sort, so we can
+/// derive those traits.
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RunId {
+    /// TODO: docs
+    letters: Vec<u16>,
+}
+
+impl AddAssign<&Self> for RunId {
+    #[inline]
+    fn add_assign(&mut self, other: &Self) {
+        if &*self < other {
+            *self = other.clone();
+        }
+    }
+}
+
+impl SubAssign<&Self> for RunId {
+    #[inline]
+    fn sub_assign(&mut self, other: &Self) {
+        if &*self > other {
+            *self = other.clone();
+        }
+    }
+}
+
+/// TODO: docs
+#[derive(Clone, Default, PartialEq)]
 pub struct FragmentSummary {
+    /// TODO: docs
     pub(super) len: usize,
+
+    /// TODO: docs
+    max_run_id: RunId,
 }
 
 impl core::fmt::Debug for FragmentSummary {
@@ -155,6 +199,7 @@ impl AddAssign<Self> for FragmentSummary {
     #[inline]
     fn add_assign(&mut self, other: Self) {
         self.len += other.len;
+        self.max_run_id += &other.max_run_id;
     }
 }
 
@@ -172,6 +217,7 @@ impl SubAssign<Self> for FragmentSummary {
     #[inline]
     fn sub_assign(&mut self, other: Self) {
         self.len -= other.len;
+        self.max_run_id -= &other.max_run_id;
     }
 }
 
@@ -180,6 +226,9 @@ impl Summarize for Fragment {
 
     #[inline]
     fn summarize(&self) -> Self::Summary {
-        FragmentSummary { len: self.len * (self.is_visible as usize) }
+        FragmentSummary {
+            len: self.len * (self.is_visible as usize),
+            max_run_id: self.run_id.clone(),
+        }
     }
 }

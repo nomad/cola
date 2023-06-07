@@ -4,7 +4,6 @@ use core::ops::{Add, AddAssign, Sub, SubAssign};
 pub trait Summarize: Debug {
     type Summary: Debug
         + Default
-        + Copy
         + Add<Self::Summary, Output = Self::Summary>
         + Sub<Self::Summary, Output = Self::Summary>
         + AddAssign<Self::Summary>
@@ -30,10 +29,23 @@ pub trait Metric<Leaf: Summarize>:
     fn measure_summary(summary: &Leaf::Summary) -> Self;
 }
 
-#[derive(Clone)]
 pub enum Node<const ARITY: usize, Leaf: Summarize> {
     Internal(Inode<ARITY, Leaf>),
     Leaf(Leaf),
+}
+
+impl<const N: usize, Leaf: Summarize> Clone for Node<N, Leaf>
+where
+    Leaf: Clone,
+    Leaf::Summary: Clone,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        match self {
+            Self::Internal(inode) => Self::Internal(inode.clone()),
+            Self::Leaf(leaf) => Self::Leaf(leaf.clone()),
+        }
+    }
 }
 
 impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
@@ -91,10 +103,20 @@ impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
     }
 }
 
-#[derive(Clone)]
 pub struct Inode<const N: usize, Leaf: Summarize> {
     children: Vec<Node<N, Leaf>>,
     summary: Leaf::Summary,
+}
+
+impl<const N: usize, Leaf: Summarize> Clone for Inode<N, Leaf>
+where
+    Leaf: Clone,
+    Leaf::Summary: Clone,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        Self { children: self.children.clone(), summary: self.summary.clone() }
+    }
 }
 
 impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
@@ -147,6 +169,7 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
         Self { children, summary }
     }
 
+    /// TODO: docs
     #[inline]
     pub fn insert(
         &mut self,
@@ -180,6 +203,7 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
         }
     }
 
+    /// TODO: docs
     #[inline]
     pub fn insert_two(
         &mut self,
