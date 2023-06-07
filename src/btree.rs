@@ -62,18 +62,18 @@ impl<const ARITY: usize, Leaf: Summarize> Btree<ARITY, Leaf> {
 
 mod tree_insert {
     use super::*;
-    use crate::{Fragment, Replica};
+    use crate::{EditRun, Replica};
 
-    type Tree = super::Btree<{ Replica::arity() }, Fragment>;
-    type Node = super::Node<{ Replica::arity() }, Fragment>;
-    type Inode = super::Inode<{ Replica::arity() }, Fragment>;
+    type Tree = super::Btree<{ Replica::arity() }, EditRun>;
+    type Node = super::Node<{ Replica::arity() }, EditRun>;
+    type Inode = super::Inode<{ Replica::arity() }, EditRun>;
 
     impl Tree {
         #[inline]
         pub fn insert<M, F>(&mut self, insert_at: M, insert_with: F)
         where
-            M: Metric<Fragment>,
-            F: FnOnce(M, &mut Fragment) -> (Fragment, Option<Fragment>),
+            M: Metric<EditRun>,
+            F: FnOnce(M, &mut EditRun) -> (EditRun, Option<EditRun>),
         {
             debug_assert!(insert_at <= self.measure::<M>());
 
@@ -117,8 +117,8 @@ mod tree_insert {
         insert_with: F,
     ) -> Option<Inode>
     where
-        M: Metric<Fragment>,
-        F: FnOnce(M, &mut Fragment) -> (Fragment, Option<Fragment>),
+        M: Metric<EditRun>,
+        F: FnOnce(M, &mut EditRun) -> (EditRun, Option<EditRun>),
     {
         let mut offset = M::zero();
 
@@ -167,11 +167,11 @@ mod tree_insert {
 
 mod tree_delete {
     use super::*;
-    use crate::{Fragment, Replica};
+    use crate::{EditRun, Replica};
 
-    type Tree = super::Btree<{ Replica::arity() }, Fragment>;
-    type Node = super::Node<{ Replica::arity() }, Fragment>;
-    type Inode = super::Inode<{ Replica::arity() }, Fragment>;
+    type Tree = super::Btree<{ Replica::arity() }, EditRun>;
+    type Node = super::Node<{ Replica::arity() }, EditRun>;
+    type Inode = super::Inode<{ Replica::arity() }, EditRun>;
 
     impl Tree {
         #[inline]

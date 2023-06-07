@@ -1,7 +1,7 @@
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
-use super::{Fragment, FragmentSummary};
 use crate::node::Metric;
+use crate::{EditRun, RunSummary};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteMetric(pub(super) usize);
@@ -38,19 +38,19 @@ impl SubAssign for ByteMetric {
     }
 }
 
-impl Metric<Fragment> for ByteMetric {
+impl Metric<EditRun> for ByteMetric {
     #[inline]
     fn zero() -> Self {
         Self(0)
     }
 
     #[inline]
-    fn measure_leaf(fragment: &Fragment) -> Self {
+    fn measure_leaf(fragment: &EditRun) -> Self {
         Self(fragment.len())
     }
 
     #[inline]
-    fn measure_summary(summary: &FragmentSummary) -> Self {
+    fn measure_summary(summary: &RunSummary) -> Self {
         Self(summary.len)
     }
 }

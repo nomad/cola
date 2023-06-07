@@ -5,7 +5,7 @@ use crate::node::Summarize;
 
 /// TODO: docs
 #[derive(Clone, Default)]
-pub struct Fragment {
+pub struct EditRun {
     /// TODO: docs
     edit_id: EditId,
 
@@ -28,7 +28,7 @@ pub struct Fragment {
     is_visible: bool,
 }
 
-impl core::fmt::Debug for Fragment {
+impl core::fmt::Debug for EditRun {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
@@ -44,7 +44,7 @@ impl core::fmt::Debug for Fragment {
     }
 }
 
-impl Fragment {
+impl EditRun {
     #[inline]
     pub fn delete(&mut self) {
         self.is_visible = false;
@@ -171,7 +171,7 @@ impl SubAssign<&Self> for RunId {
 
 /// TODO: docs
 #[derive(Clone, Default, PartialEq)]
-pub struct FragmentSummary {
+pub struct RunSummary {
     /// TODO: docs
     pub(super) len: usize,
 
@@ -179,13 +179,13 @@ pub struct FragmentSummary {
     max_run_id: RunId,
 }
 
-impl core::fmt::Debug for FragmentSummary {
+impl core::fmt::Debug for RunSummary {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{{ len: {} }}", self.len)
     }
 }
 
-impl Add<Self> for FragmentSummary {
+impl Add<Self> for RunSummary {
     type Output = Self;
 
     #[inline]
@@ -195,7 +195,7 @@ impl Add<Self> for FragmentSummary {
     }
 }
 
-impl AddAssign<Self> for FragmentSummary {
+impl AddAssign<Self> for RunSummary {
     #[inline]
     fn add_assign(&mut self, other: Self) {
         self.len += other.len;
@@ -203,7 +203,7 @@ impl AddAssign<Self> for FragmentSummary {
     }
 }
 
-impl Sub<Self> for FragmentSummary {
+impl Sub<Self> for RunSummary {
     type Output = Self;
 
     #[inline]
@@ -213,7 +213,7 @@ impl Sub<Self> for FragmentSummary {
     }
 }
 
-impl SubAssign<Self> for FragmentSummary {
+impl SubAssign<Self> for RunSummary {
     #[inline]
     fn sub_assign(&mut self, other: Self) {
         self.len -= other.len;
@@ -221,12 +221,12 @@ impl SubAssign<Self> for FragmentSummary {
     }
 }
 
-impl Summarize for Fragment {
-    type Summary = FragmentSummary;
+impl Summarize for EditRun {
+    type Summary = RunSummary;
 
     #[inline]
     fn summarize(&self) -> Self::Summary {
-        FragmentSummary {
+        RunSummary {
             len: self.len * (self.is_visible as usize),
             max_run_id: self.run_id.clone(),
         }

@@ -14,7 +14,7 @@ pub struct Replica {
     id: ReplicaId,
 
     /// TODO: docs
-    fragment_tree: Btree<ARITY, Fragment>,
+    edit_runs: Btree<ARITY, EditRun>,
 
     /// TODO: docs
     local_clock: LocalClock,
@@ -27,9 +27,9 @@ pub struct Replica {
 }
 
 impl core::fmt::Debug for Replica {
-    #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        // Here we just report the ReplicaId to avoid leaking the internals.
+        // In the public Debug we just print the ReplicaId to avoid leaking
+        // our internals.
         //
         // During development the `Replica::debug()` method (which is public
         // but hidden from the API) can be used to obtain a more useful
@@ -64,7 +64,7 @@ impl Replica {
         let (start, end) =
             range_bounds_to_start_end(byte_range, 0, self.len());
 
-        self.fragment_tree.delete(start..end);
+        self.edit_runs.delete(start..end);
 
         CrdtEdit::noop()
     }
@@ -81,11 +81,11 @@ impl Replica {
 
         let lamport = self.lamport_clock.next();
 
-        let mut fragment = Fragment::default();
+        let mut fragment = EditRun::default();
 
         let insert_at = ByteMetric(byte_offset);
 
-        self.fragment_tree.insert(insert_at, |ByteMetric(offset), parent| {
+        self.edit_runs.insert(insert_at, |ByteMetric(offset), parent| {
             let len = text.len();
 
             let run_id: RunId = todo!();
@@ -97,14 +97,14 @@ impl Replica {
                 // In this case we use a special `EditId` called "zero" whose
                 // replica id and timestamp are both 0.
                 let edit =
-                    Fragment::new(id, run_id, EditId::zero(), 0, lamport, len);
+                    EditRun::new(id, run_id, EditId::zero(), 0, lamport, len);
                 fragment = edit;
                 return (core::mem::replace(parent, edit), None);
             }
 
             let parent_offset = byte_offset - offset;
 
-            let edit = Fragment::new(
+            let edit = EditRun::new(
                 id,
                 run_id,
                 parent.id(),
@@ -124,7 +124,7 @@ impl Replica {
     /// TODO: docs
     #[inline]
     pub fn len(&self) -> usize {
-        self.fragment_tree.summary().len
+        self.edit_runs.summary().len
     }
 
     /// TODO: docs
@@ -146,13 +146,13 @@ impl Replica {
         let len = chunks.map(|s| s.len()).sum::<usize>();
 
         let fragment =
-            Fragment::new(edit, RunId::default(), origin, 0, lamport, len);
+            EditRun::new(edit, RunId::default(), origin, 0, lamport, len);
 
         let fragment_tree = Btree::from(fragment);
 
         Self {
             id,
-            fragment_tree,
+            edit_runs: fragment_tree,
             local_clock,
             lamport_clock,
             pending: VecDeque::new(),
@@ -308,7 +308,7 @@ mod debug {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
-                .field("fragments", &self.0.fragment_tree)
+                .field("fragments", &self.0.edit_runs)
                 .field("local", &self.0.local_clock)
                 .field("lamport", &self.0.lamport_clock)
                 .field("pending", &self.0.pending)
