@@ -2,11 +2,20 @@ use core::ops::Range;
 
 use crate::node::{Inode, Metric, Node, Summarize};
 
-pub struct Tree<const ARITY: usize, Leaf: Summarize> {
+/// TODO: docs
+pub struct Btree<const ARITY: usize, Leaf: Summarize> {
     root: Node<ARITY, Leaf>,
 }
 
-impl<const ARITY: usize, Leaf: Summarize> Clone for Tree<ARITY, Leaf>
+impl<const ARITY: usize, Leaf: Summarize> core::fmt::Debug
+    for Btree<ARITY, Leaf>
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Debug::fmt(&self.root, f)
+    }
+}
+
+impl<const ARITY: usize, Leaf: Summarize> Clone for Btree<ARITY, Leaf>
 where
     Leaf: Clone,
     Leaf::Summary: Clone,
@@ -17,22 +26,14 @@ where
     }
 }
 
-impl<const ARITY: usize, Leaf: Summarize> core::fmt::Debug
-    for Tree<ARITY, Leaf>
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Debug::fmt(&self.root, f)
-    }
-}
-
-impl<const ARITY: usize, Leaf: Summarize> From<Leaf> for Tree<ARITY, Leaf> {
+impl<const ARITY: usize, Leaf: Summarize> From<Leaf> for Btree<ARITY, Leaf> {
     #[inline]
     fn from(leaf: Leaf) -> Self {
         Self { root: Node::Leaf(leaf) }
     }
 }
 
-impl<const ARITY: usize, Leaf: Summarize> Tree<ARITY, Leaf> {
+impl<const ARITY: usize, Leaf: Summarize> Btree<ARITY, Leaf> {
     #[inline]
     fn measure<M: Metric<Leaf>>(&self) -> M {
         M::measure_summary(&self.summary())
@@ -63,7 +64,7 @@ mod tree_insert {
     use super::*;
     use crate::{Fragment, Replica};
 
-    type Tree = super::Tree<{ Replica::arity() }, Fragment>;
+    type Tree = super::Btree<{ Replica::arity() }, Fragment>;
     type Node = super::Node<{ Replica::arity() }, Fragment>;
     type Inode = super::Inode<{ Replica::arity() }, Fragment>;
 
@@ -168,7 +169,7 @@ mod tree_delete {
     use super::*;
     use crate::{Fragment, Replica};
 
-    type Tree = super::Tree<{ Replica::arity() }, Fragment>;
+    type Tree = super::Btree<{ Replica::arity() }, Fragment>;
     type Node = super::Node<{ Replica::arity() }, Fragment>;
     type Inode = super::Inode<{ Replica::arity() }, Fragment>;
 

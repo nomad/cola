@@ -136,7 +136,7 @@ mod text_edit;
 #[cfg(feature = "serde")]
 mod serde;
 
-use btree::Tree;
+use btree::Btree;
 use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
 pub use crdt_edit::CrdtEdit;
 use fragment::{Fragment, FragmentSummary, RunId};

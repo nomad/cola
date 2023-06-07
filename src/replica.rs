@@ -14,7 +14,7 @@ pub struct Replica {
     id: ReplicaId,
 
     /// TODO: docs
-    fragment_tree: Tree<ARITY, Fragment>,
+    fragment_tree: Btree<ARITY, Fragment>,
 
     /// TODO: docs
     local_clock: LocalClock,
@@ -148,7 +148,7 @@ impl Replica {
         let fragment =
             Fragment::new(edit, RunId::default(), origin, 0, lamport, len);
 
-        let fragment_tree = Tree::from(fragment);
+        let fragment_tree = Btree::from(fragment);
 
         Self {
             id,
