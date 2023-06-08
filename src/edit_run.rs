@@ -1,26 +1,26 @@
 use alloc::rc::Rc;
 use core::ops::{Add, AddAssign, Range, Sub, SubAssign};
 
-use super::{EditId, LamportTimestamp};
 use crate::node::Summarize;
+use crate::*;
 
 /// TODO: docs
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct EditRun {
     /// TODO: docs
     edit_id: EditId,
 
     /// TODO: docs
+    insertion_id: InsertionId,
+
+    /// TODO: docs
     run_id: RunId,
 
     /// TODO: docs
-    timestamp: LamportTimestamp,
+    next_run_id: RunId,
 
     /// TODO: docs
-    parent: EditId,
-
-    /// TODO: docs
-    offset_in_parent: usize,
+    lamport_ts: LamportTimestamp,
 
     /// TODO: docs
     len: usize,
@@ -30,15 +30,14 @@ pub struct EditRun {
 }
 
 impl core::fmt::Debug for EditRun {
-    #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:?} L({}) |> {:?} @ {}, {} {}",
+            "{:?} L({}) |> {:?}, {:?} {} {}",
             self.edit_id,
-            self.timestamp.as_u64(),
-            self.parent,
-            self.offset_in_parent,
+            self.lamport_ts.as_u64(),
+            self.insertion_id,
+            self.run_id,
             self.len,
             if self.is_visible { "✔️" } else { "🪦" },
         )
@@ -98,31 +97,134 @@ impl EditRun {
         }
     }
 
+    /// TODO: docs
+    pub fn insert(
+        &mut self,
+        edit_id: EditId,
+        lamport_ts: LamportTimestamp,
+        at_offset: usize,
+        len: usize,
+    ) -> (Self, Option<Self>) {
+        let insertion_id = InsertionId { inside_of: self.edit_id, at_offset };
+
+        // The new run starts at the beginning of this run => swap this run w/
+        // the new one and return self.
+        if at_offset == 0 {
+            let new_run = Self {
+                edit_id,
+                insertion_id,
+                run_id: RunId::between(&RunId::zero(), &self.run_id),
+                next_run_id: self.run_id.clone(),
+                lamport_ts,
+                len,
+                is_visible: true,
+            };
+
+            let this = core::mem::replace(self, new_run);
+
+            (this, None)
+        }
+        // The new run starts at the end of this run.
+        else if at_offset == self.len {
+            let run_id = RunId::between(&self.run_id, &self.next_run_id);
+
+            let next_run_id = self.next_run_id.clone();
+
+            self.next_run_id = run_id.clone();
+
+            let new_run = Self {
+                edit_id,
+                insertion_id,
+                run_id,
+                next_run_id,
+                lamport_ts,
+                len,
+                is_visible: true,
+            };
+
+            (new_run, None)
+        }
+        // The new run splits this run.
+        else {
+            let split_run_id = RunId::between(&self.run_id, &self.next_run_id);
+
+            let new_run_id = RunId::between(&self.run_id, &split_run_id);
+
+            let new_run = Self {
+                edit_id,
+                insertion_id,
+                run_id: new_run_id.clone(),
+                next_run_id: split_run_id.clone(),
+                lamport_ts,
+                len,
+                is_visible: true,
+            };
+
+            let old_next_run_id =
+                core::mem::replace(&mut self.next_run_id, new_run_id);
+
+            let split_run = Self {
+                edit_id: self.edit_id,
+                insertion_id: self.insertion_id,
+                run_id: split_run_id,
+                next_run_id: old_next_run_id,
+                lamport_ts: self.lamport_ts,
+                len: self.len - at_offset,
+                is_visible: self.is_visible,
+            };
+
+            self.len = at_offset;
+
+            (new_run, Some(split_run))
+        }
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn insertion_id(&self) -> InsertionId {
+        self.insertion_id
+    }
+
     #[inline]
     pub(super) fn len(&self) -> usize {
         self.len
     }
 
-    #[inline]
-    pub(super) fn id(&self) -> EditId {
-        self.edit_id
-    }
+    //#[inline]
+    //pub(crate) fn new(
+    //    edit_id: EditId,
+    //    run_id: RunId,
+    //    parent: EditId,
+    //    offset_in_parent: usize,
+    //    timestamp: LamportTimestamp,
+    //    len: usize,
+    //) -> Self {
+    //    Self {
+    //        edit_id,
+    //        run_id,
+    //        parent,
+    //        offset_in_parent,
+    //        lamport_ts: timestamp,
+    //        len,
+    //        is_visible: true,
+    //    }
+    //}
 
-    #[inline]
-    pub(crate) fn new(
+    /// TODO: docs
+    pub fn origin(
         edit_id: EditId,
-        run_id: RunId,
-        parent: EditId,
-        offset_in_parent: usize,
-        timestamp: LamportTimestamp,
+        lamport_ts: LamportTimestamp,
         len: usize,
     ) -> Self {
+        debug_assert_eq!(0, edit_id.local_timestamp_at_creation.as_u64());
+        debug_assert_eq!(0, lamport_ts.as_u64());
+
         Self {
             edit_id,
-            run_id,
-            parent,
-            offset_in_parent,
-            timestamp,
+            insertion_id: InsertionId::origin(),
+            run_id: RunId::from([u16::MAX / 2]),
+            next_run_id: RunId::from([u16::MAX]),
+            lamport_ts,
             len,
             is_visible: true,
         }
@@ -143,12 +245,68 @@ impl EditRun {
 }
 
 /// TODO: docs
+#[derive(Copy, Clone)]
+pub struct EditId {
+    /// TODO: docs
+    created_by: ReplicaId,
+
+    /// TODO: docs
+    local_timestamp_at_creation: LocalTimestamp,
+}
+
+impl core::fmt::Debug for EditId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(
+            f,
+            "{:x}.{}",
+            self.created_by.as_u32(),
+            self.local_timestamp_at_creation.as_u64()
+        )
+    }
+}
+
+impl EditId {
+    pub fn new(replica_id: ReplicaId, timestamp: LocalTimestamp) -> Self {
+        Self { created_by: replica_id, local_timestamp_at_creation: timestamp }
+    }
+}
+
+/// TODO: docs
+#[derive(Copy, Clone)]
+pub struct InsertionId {
+    /// TODO: docs
+    inside_of: EditId,
+
+    /// TODO: docs
+    at_offset: usize,
+}
+
+impl core::fmt::Debug for InsertionId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{:?} @ {}", self.inside_of, self.at_offset)
+    }
+}
+
+impl InsertionId {
+    /// TODO: docs
+    pub fn origin() -> Self {
+        Self {
+            inside_of: EditId {
+                created_by: ReplicaId::zero(),
+                local_timestamp_at_creation: LocalTimestamp::default(),
+            },
+            at_offset: 0,
+        }
+    }
+}
+
+/// TODO: docs
 ///
 /// The `Ord` implementation for `Vec`s [is already][lexi] a lexicographic
 /// sort, so we can just derive those traits.
 ///
 /// [lexi]: https://doc.rust-lang.org/std/vec/struct.Vec.html#impl-Ord-for-Vec<,+A>
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RunId {
     /// TODO: docs
     letters: Rc<[u16]>,
@@ -160,10 +318,23 @@ unsafe impl Send for RunId {}
 /// SAFETY: same as above.
 unsafe impl Sync for RunId {}
 
+impl core::fmt::Debug for RunId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Debug::fmt(&self.letters, f)
+    }
+}
+
 impl Default for RunId {
     #[inline]
     fn default() -> Self {
         Self { letters: Rc::from([u16::MAX / 2]) }
+    }
+}
+
+impl<I: IntoIterator<Item = u16>> From<I> for RunId {
+    #[inline]
+    fn from(iter: I) -> Self {
+        Self { letters: iter.into_iter().collect() }
     }
 }
 
@@ -174,7 +345,7 @@ impl RunId {
     ///
     /// This function assumes the left id is the smaller one, and it'll panic
     /// if the left id is greater than or equal to the right id.
-    pub fn between(left: &Self, right: &Self) -> Self {
+    fn between(left: &Self, right: &Self) -> Self {
         debug_assert!(left < right);
 
         let mut letters = Vec::new();
@@ -186,16 +357,21 @@ impl RunId {
             right.letters.iter().copied().chain(core::iter::repeat(u16::MAX));
 
         for (left, right) in left_then_zero.zip(right_then_max) {
-            let halfway = (left + right) / 2;
+            let halfway = (right - left) / 2;
 
-            letters.push(halfway);
+            letters.push(left + halfway);
 
-            if halfway != left {
+            if halfway != 0 {
                 break;
             }
         }
 
         Self { letters: Rc::from(letters) }
+    }
+
+    /// TODO: docs
+    fn zero() -> Self {
+        Self { letters: Rc::from([0]) }
     }
 }
 
@@ -211,7 +387,7 @@ pub struct RunSummary {
 
 impl core::fmt::Debug for RunSummary {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{{ len: {} }}", self.len)
+        write!(f, "{{ len: {}, max_run_id: {:?} }}", self.len, self.max_run_id)
     }
 }
 
@@ -272,12 +448,6 @@ impl Summarize for EditRun {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    impl<I: IntoIterator<Item = u16>> From<I> for RunId {
-        fn from(iter: I) -> Self {
-            Self { letters: iter.into_iter().collect() }
-        }
-    }
 
     #[test]
     fn run_id_0() {

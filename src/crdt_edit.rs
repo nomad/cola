@@ -1,4 +1,4 @@
-use super::EditRun;
+use crate::*;
 
 /// An opaque object to be fed to [`Replica::merge()`](crate::Replica::merge).
 #[derive(Debug, Clone)]
@@ -8,8 +8,12 @@ pub struct CrdtEdit {
 
 impl CrdtEdit {
     #[inline]
-    pub(super) fn insertion(fragment: EditRun, content: String) -> Self {
-        Self { inner: CrdtEditInner::Insertion { fragment, content } }
+    pub(super) fn insertion(
+        content: String,
+        _insertion_id: InsertionId,
+        _lamport_ts: LamportTimestamp,
+    ) -> Self {
+        Self { inner: CrdtEditInner::Insertion { content } }
     }
 
     #[inline]
@@ -20,7 +24,7 @@ impl CrdtEdit {
 
 #[derive(Debug, Clone)]
 pub(super) enum CrdtEditInner {
-    Insertion { fragment: EditRun, content: String },
+    Insertion { content: String },
 
     NoOp,
 }

@@ -1,13 +1,15 @@
+use alloc::borrow::Cow;
 use core::fmt::Debug;
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 pub trait Summarize: Debug {
     type Summary: Debug
         + Default
-        + Add<Self::Summary, Output = Self::Summary>
-        + Sub<Self::Summary, Output = Self::Summary>
-        + AddAssign<Self::Summary>
-        + SubAssign<Self::Summary>
+        + Clone
+        + for<'a> Add<&'a Self::Summary, Output = Self::Summary>
+        + for<'a> Sub<&'a Self::Summary, Output = Self::Summary>
+        + for<'a> AddAssign<&'a Self::Summary>
+        + for<'a> SubAssign<&'a Self::Summary>
         + PartialEq<Self::Summary>;
 
     fn summarize(&self) -> Self::Summary;
@@ -95,10 +97,10 @@ impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
     }
 
     #[inline]
-    pub fn summary(&self) -> Leaf::Summary {
+    pub fn summary(&self) -> Cow<'_, Leaf::Summary> {
         match self {
-            Node::Internal(inode) => inode.summary(),
-            Node::Leaf(leaf) => leaf.summarize(),
+            Node::Internal(inode) => Cow::Borrowed(inode.summary()),
+            Node::Leaf(leaf) => Cow::Owned(leaf.summarize()),
         }
     }
 }
@@ -160,10 +162,10 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
             return Self::empty();
         }
 
-        let mut summary = children[0].summary();
+        let mut summary = children[0].summary().into_owned();
 
         for child in &children[1..] {
-            summary += child.summary();
+            summary += &child.summary();
         }
 
         Self { children, summary }
@@ -197,7 +199,7 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
 
             Some(rest)
         } else {
-            self.summary += child.summary();
+            self.summary += &child.summary();
             self.children.insert(offset, child);
             None
         }
@@ -288,7 +290,7 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
 
     #[inline]
     pub fn measure<M: Metric<Leaf>>(&self) -> M {
-        M::measure_summary(&self.summary())
+        M::measure_summary(self.summary())
     }
 
     #[inline]
@@ -299,7 +301,7 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     #[inline]
     pub fn push(&mut self, child: Node<ARITY, Leaf>) {
         debug_assert!(!self.is_full());
-        self.summary += child.summary();
+        self.summary += &child.summary();
         self.children.push(child);
     }
 
@@ -307,14 +309,14 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     fn split_at(&mut self, offset: usize) -> Self {
         debug_assert!(offset <= self.len());
 
-        let summary = if offset <= self.len() {
+        let summary = if offset <= self.len() / 2 {
             let new_summary = sum_summaries(&self.children[..offset]);
-            let s = self.summary - new_summary;
+            let s = self.summary.clone() - &new_summary;
             self.summary = new_summary;
             s
         } else {
             let s = sum_summaries(&self.children[offset..]);
-            self.summary -= s;
+            self.summary -= &s;
             s
         };
 
@@ -329,8 +331,8 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     }
 
     #[inline]
-    pub fn summary(&self) -> Leaf::Summary {
-        self.summary
+    pub fn summary(&self) -> &Leaf::Summary {
+        &self.summary
     }
 
     #[inline]
@@ -348,9 +350,9 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
         F: FnOnce(&mut Node<ARITY, Leaf>) -> T,
     {
         let child = &mut self.children[child_idx];
-        self.summary -= child.summary();
+        self.summary -= &child.summary();
         let res = with_child(child);
-        self.summary += child.summary();
+        self.summary += &child.summary();
         res
     }
 }
@@ -361,7 +363,7 @@ fn sum_summaries<const N: usize, Leaf: Summarize>(
 ) -> Leaf::Summary {
     let mut summary = Leaf::Summary::default();
     for s in nodes.iter().map(Node::summary) {
-        summary += s
+        summary += &s
     }
     summary
 }

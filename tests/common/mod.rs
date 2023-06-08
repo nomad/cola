@@ -7,11 +7,9 @@ pub struct Replica<B: Buffer> {
     crdt: cola::Replica,
 }
 
-impl<B: Buffer> Clone for Replica<B> {
+impl<B: Buffer + Clone> Clone for Replica<B> {
     fn clone(&self) -> Self {
-        let crdt = self.crdt.clone();
-        let buffer = B::from_chunks(crdt.contents());
-        Self { buffer, crdt }
+        Self { buffer: self.buffer.clone(), crdt: self.crdt.clone() }
     }
 }
 
@@ -53,14 +51,14 @@ impl<B: Buffer> Replica<B> {
     }
 
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) {
-        for edit in self.crdt.merge(crdt_edit) {
+        if let Some(edit) = self.crdt.merge(crdt_edit) {
             self.buffer.replace(edit.range, &edit.contents);
         }
     }
 
     pub fn new<T: Into<B>>(text: T) -> Self {
         let buffer = text.into();
-        let crdt = cola::Replica::new(buffer.chunks());
+        let crdt = cola::Replica::from_chunks(buffer.chunks());
         Self { buffer, crdt }
     }
 }

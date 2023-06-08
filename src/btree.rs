@@ -1,4 +1,5 @@
 use core::ops::Range;
+use std::borrow::Cow;
 
 use crate::node::{Inode, Metric, Node, Summarize};
 
@@ -35,12 +36,7 @@ impl<const ARITY: usize, Leaf: Summarize> From<Leaf> for Btree<ARITY, Leaf> {
 
 impl<const ARITY: usize, Leaf: Summarize> Btree<ARITY, Leaf> {
     #[inline]
-    fn measure<M: Metric<Leaf>>(&self) -> M {
-        M::measure_summary(&self.summary())
-    }
-
-    #[inline]
-    fn replace_root<F>(&mut self, replace_with: F)
+    pub fn replace_root<F>(&mut self, replace_with: F)
     where
         F: FnOnce(Node<ARITY, Leaf>) -> Node<ARITY, Leaf>,
     {
@@ -50,118 +46,13 @@ impl<const ARITY: usize, Leaf: Summarize> Btree<ARITY, Leaf> {
     }
 
     #[inline]
-    fn root_mut(&mut self) -> &mut Node<ARITY, Leaf> {
+    pub fn root_mut(&mut self) -> &mut Node<ARITY, Leaf> {
         &mut self.root
     }
 
     #[inline]
-    pub fn summary(&self) -> Leaf::Summary {
+    pub fn summary(&self) -> Cow<'_, Leaf::Summary> {
         self.root.summary()
-    }
-}
-
-mod tree_insert {
-    use super::*;
-    use crate::{EditRun, Replica};
-
-    type Tree = super::Btree<{ Replica::arity() }, EditRun>;
-    type Node = super::Node<{ Replica::arity() }, EditRun>;
-    type Inode = super::Inode<{ Replica::arity() }, EditRun>;
-
-    impl Tree {
-        #[inline]
-        pub fn insert<M, F>(&mut self, insert_at: M, insert_with: F)
-        where
-            M: Metric<EditRun>,
-            F: FnOnce(M, &mut EditRun) -> (EditRun, Option<EditRun>),
-        {
-            debug_assert!(insert_at <= self.measure::<M>());
-
-            let root = match &mut self.root {
-                Node::Internal(inode) => inode,
-
-                Node::Leaf(fragment) => {
-                    let (leaf, extra) = insert_with(M::zero(), fragment);
-
-                    self.replace_root(|old_root| {
-                        let leaf = Node::Leaf(leaf);
-
-                        let children = if let Some(extra) = extra {
-                            vec![old_root, leaf, Node::Leaf(extra)]
-                        } else {
-                            vec![old_root, leaf]
-                        };
-
-                        Node::from_children(children)
-                    });
-
-                    return;
-                },
-            };
-
-            if let Some(extra) =
-                tree_insert::insert(root, insert_at, insert_with)
-                    .map(Node::Internal)
-            {
-                self.replace_root(|old_root| {
-                    Node::from_children(vec![old_root, extra])
-                });
-            }
-        }
-    }
-
-    #[inline]
-    pub(super) fn insert<M, F>(
-        inode: &mut Inode,
-        mut insert_at: M,
-        insert_with: F,
-    ) -> Option<Inode>
-    where
-        M: Metric<EditRun>,
-        F: FnOnce(M, &mut EditRun) -> (EditRun, Option<EditRun>),
-    {
-        let mut offset = M::zero();
-
-        for (idx, child) in inode.children_mut().iter_mut().enumerate() {
-            let child_measure = child.measure::<M>();
-
-            offset += child_measure;
-
-            let child_contains_insert = offset >= insert_at;
-
-            if child_contains_insert {
-                offset -= child_measure;
-                insert_at -= offset;
-
-                if child.is_internal() {
-                    let extra = inode.with_child_mut(idx, |child| {
-                        let inode = child.as_internal_mut();
-                        insert(inode, insert_at, insert_with)
-                    });
-
-                    return extra.and_then(|e| {
-                        inode.insert(idx + 1, Node::Internal(e))
-                    });
-                } else {
-                    let (leaf, extra) = inode.with_child_mut(idx, |child| {
-                        let fragment = child.as_leaf_mut();
-                        insert_with(offset, fragment)
-                    });
-
-                    let leaf = Node::Leaf(leaf);
-
-                    let offset = idx + 1;
-
-                    return if let Some(extra) = extra.map(Node::Leaf) {
-                        inode.insert_two(offset, leaf, offset, extra)
-                    } else {
-                        inode.insert(offset, leaf)
-                    };
-                }
-            }
-        }
-
-        unreachable!();
     }
 }
 
