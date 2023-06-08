@@ -131,6 +131,7 @@ mod edit_run;
 mod metrics;
 mod node;
 mod replica;
+mod run_pointers;
 mod text_edit;
 
 #[cfg(feature = "serde")]
@@ -143,4 +144,5 @@ use edit_run::{EditId, EditRun, InsertionId, RunId, RunSummary};
 use metrics::ByteMetric;
 pub use replica::Replica;
 use replica::ReplicaId;
+use run_pointers::RunPointers;
 pub use text_edit::TextEdit;

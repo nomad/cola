@@ -48,6 +48,9 @@ pub struct Replica {
     edit_runs: Btree<ARITY, EditRun>,
 
     /// TODO: docs
+    run_pointers: RunPointers,
+
+    /// TODO: docs
     local_clock: LocalClock,
 
     /// TODO: docs
@@ -102,9 +105,12 @@ impl Replica {
 
         let edit_runs = Btree::from(origin_run);
 
+        let run_pointers = RunPointers::new(edit_id, len);
+
         Self {
             id: replica_id,
             edit_runs,
+            run_pointers,
             local_clock,
             lamport_clock,
             pending: VecDeque::new(),

@@ -266,8 +266,19 @@ impl core::fmt::Debug for EditId {
 }
 
 impl EditId {
+    #[inline]
+    pub fn local_ts(&self) -> LocalTimestamp {
+        self.local_timestamp_at_creation
+    }
+
+    #[inline]
     pub fn new(replica_id: ReplicaId, timestamp: LocalTimestamp) -> Self {
         Self { created_by: replica_id, local_timestamp_at_creation: timestamp }
+    }
+
+    #[inline]
+    pub fn replica_id(&self) -> ReplicaId {
+        self.created_by
     }
 }
 
