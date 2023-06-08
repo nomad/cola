@@ -1,3 +1,4 @@
+use alloc::rc::Rc;
 use core::ops::{Add, AddAssign, Range, Sub, SubAssign};
 
 use super::{EditId, LamportTimestamp};
@@ -147,14 +148,32 @@ impl EditRun {
 /// sort, so we can just derive those traits.
 ///
 /// [lexi]: https://doc.rust-lang.org/std/vec/struct.Vec.html#impl-Ord-for-Vec<,+A>
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RunId {
     /// TODO: docs
-    letters: Vec<u16>,
+    letters: Rc<[u16]>,
+}
+
+/// SAFETY: `RunId`s are never shared between different threads.
+unsafe impl Send for RunId {}
+
+/// SAFETY: same as above.
+unsafe impl Sync for RunId {}
+
+impl Default for RunId {
+    #[inline]
+    fn default() -> Self {
+        Self { letters: Rc::from([u16::MAX / 2]) }
+    }
 }
 
 impl RunId {
     /// TODO: docs
+    ///
+    /// # Panics
+    ///
+    /// This function assumes the left id is the smaller one, and it'll panic
+    /// if the left id is greater than or equal to the right id.
     pub fn between(left: &Self, right: &Self) -> Self {
         debug_assert!(left < right);
 
@@ -176,21 +195,7 @@ impl RunId {
             }
         }
 
-        Self { letters }
-    }
-}
-
-impl AddAssign<&Self> for RunId {
-    #[inline]
-    fn add_assign(&mut self, other: &Self) {}
-}
-
-impl SubAssign<&Self> for RunId {
-    #[inline]
-    fn sub_assign(&mut self, other: &Self) {
-        if &*self > other {
-            *self = other.clone();
-        }
+        Self { letters: Rc::from(letters) }
     }
 }
 
