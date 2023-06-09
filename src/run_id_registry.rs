@@ -92,7 +92,7 @@ impl RunIdRegistry {
 
     /// TODO: docs
     #[inline]
-    pub fn push_id(
+    pub fn add_insertion(
         &mut self,
         insertion_id: InsertionId,
         insertion_len: usize,
@@ -109,7 +109,7 @@ impl RunIdRegistry {
 
     /// TODO: docs
     #[inline]
-    pub fn split_id(
+    pub fn split_insertion(
         &mut self,
         insertion_id: InsertionId,
         split_at: usize,

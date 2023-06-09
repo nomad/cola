@@ -307,6 +307,7 @@ mod upstream_insert {
                     lamport_ts,
                     byte_offset,
                     text_len,
+                    id_registry,
                 );
 
                 let insertion_id = new_run.insertion_id();
@@ -328,8 +329,14 @@ mod upstream_insert {
             },
         };
 
-        let (insertion_id, root_split) =
-            insert(root, edit_id, lamport_ts, byte_offset, text_len);
+        let (insertion_id, root_split) = insert(
+            root,
+            id_registry,
+            edit_id,
+            lamport_ts,
+            byte_offset,
+            text_len,
+        );
 
         if let Some(root_split) = root_split.map(Node::Internal) {
             btree.replace_root(|old_root| {
@@ -343,6 +350,7 @@ mod upstream_insert {
     /// TODO: docs
     fn insert(
         inode: &mut Inode,
+        id_registry: &mut RunIdRegistry,
         edit_id: InsertionId,
         lamport_ts: LamportTimestamp,
         byte_offset: usize,
@@ -362,6 +370,7 @@ mod upstream_insert {
                     let (id, split) = inode.with_child_mut(idx, |child| {
                         insert(
                             child.as_internal_mut(),
+                            id_registry,
                             edit_id,
                             lamport_ts,
                             byte_offset - offset,
@@ -382,6 +391,7 @@ mod upstream_insert {
                                 lamport_ts,
                                 byte_offset - offset,
                                 text_len,
+                                id_registry,
                             )
                         });
 

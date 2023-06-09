@@ -104,6 +104,7 @@ impl EditRun {
         lamport_ts: LamportTimestamp,
         at_offset: usize,
         len: usize,
+        id_registry: &mut RunIdRegistry,
     ) -> (Self, Option<Self>) {
         let insertion_id =
             InsertionAnchor { inside_of: self.edit_id, at_offset };
@@ -111,15 +112,19 @@ impl EditRun {
         // The new run starts at the beginning of this run => swap this run w/
         // the new one and return self.
         if at_offset == 0 {
+            let run_id = RunId::between(&RunId::zero(), &self.run_id);
+
             let new_run = Self {
                 edit_id,
                 insertion_id,
-                run_id: RunId::between(&RunId::zero(), &self.run_id),
+                run_id: run_id.clone(),
                 next_run_id: self.run_id.clone(),
                 lamport_ts,
                 len,
                 is_visible: true,
             };
+
+            id_registry.add_insertion(edit_id, len, run_id);
 
             let this = core::mem::replace(self, new_run);
 
@@ -136,12 +141,14 @@ impl EditRun {
             let new_run = Self {
                 edit_id,
                 insertion_id,
-                run_id,
+                run_id: run_id.clone(),
                 next_run_id,
                 lamport_ts,
                 len,
                 is_visible: true,
             };
+
+            id_registry.add_insertion(edit_id, len, run_id);
 
             (new_run, None)
         }
@@ -161,13 +168,15 @@ impl EditRun {
                 is_visible: true,
             };
 
+            id_registry.add_insertion(edit_id, len, new_run_id.clone());
+
             let old_next_run_id =
                 core::mem::replace(&mut self.next_run_id, new_run_id);
 
             let split_run = Self {
                 edit_id: self.edit_id,
                 insertion_id: self.insertion_id,
-                run_id: split_run_id,
+                run_id: split_run_id.clone(),
                 next_run_id: old_next_run_id,
                 lamport_ts: self.lamport_ts,
                 len: self.len - at_offset,
@@ -175,6 +184,8 @@ impl EditRun {
             };
 
             self.len = at_offset;
+
+            id_registry.split_insertion(self.edit_id, at_offset, split_run_id);
 
             (new_run, Some(split_run))
         }
@@ -190,26 +201,6 @@ impl EditRun {
     pub(super) fn len(&self) -> usize {
         self.len
     }
-
-    //#[inline]
-    //pub(crate) fn new(
-    //    edit_id: EditId,
-    //    run_id: RunId,
-    //    parent: EditId,
-    //    offset_in_parent: usize,
-    //    timestamp: LamportTimestamp,
-    //    len: usize,
-    //) -> Self {
-    //    Self {
-    //        edit_id,
-    //        run_id,
-    //        parent,
-    //        offset_in_parent,
-    //        lamport_ts: timestamp,
-    //        len,
-    //        is_visible: true,
-    //    }
-    //}
 
     /// TODO: docs
     pub fn origin(
