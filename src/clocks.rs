@@ -24,8 +24,13 @@ pub struct LocalTimestamp(u64);
 
 impl LocalTimestamp {
     #[inline]
-    pub(super) const fn as_u64(&self) -> u64 {
+    pub const fn as_u64(&self) -> u64 {
         self.0
+    }
+
+    /// TODO: docs
+    pub fn from_u64(ts: u64) -> Self {
+        Self(ts)
     }
 }
 

@@ -48,7 +48,7 @@ pub struct Replica {
     edit_runs: Btree<ARITY, EditRun>,
 
     /// TODO: docs
-    run_pointers: RunIdRegistry,
+    id_registry: RunIdRegistry,
 
     /// TODO: docs
     local_clock: LocalClock,
@@ -112,7 +112,7 @@ impl Replica {
         Self {
             id: replica_id,
             edit_runs,
-            run_pointers,
+            id_registry: run_pointers,
             local_clock,
             lamport_clock,
             pending: VecDeque::new(),
@@ -133,6 +133,7 @@ impl Replica {
 
         let insertion_id = upstream_insert::inserted(
             &mut self.edit_runs,
+            &mut self.id_registry,
             edit_id,
             lamport_ts,
             byte_offset,
@@ -267,6 +268,7 @@ mod debug {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
                 .field("edit_runs", &self.0.edit_runs)
+                .field("id_registry", &self.0.id_registry)
                 .field("local", &self.0.local_clock)
                 .field("lamport", &self.0.lamport_clock)
                 .field("pending", &self.0.pending)
@@ -290,6 +292,7 @@ mod upstream_insert {
     /// TODO: docs
     pub fn inserted(
         btree: &mut Btree,
+        id_registry: &mut RunIdRegistry,
         edit_id: InsertionId,
         lamport_ts: LamportTimestamp,
         byte_offset: usize,

@@ -16,9 +16,50 @@ pub struct RunIdRegistry {
     histories: Btree<REPLICA_HISTORIES_ARITY, ReplicaHistory>,
 }
 
+// TODO: explain why we're printing it this way
 impl core::fmt::Debug for RunIdRegistry {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        type Node = node::Node<REPLICA_HISTORIES_ARITY, ReplicaHistory>;
+
+        fn for_each_insertion<F>(root: &Node, mut fun: F)
+        where
+            F: FnMut(ReplicaId, LocalTimestamp, &Insertion),
+        {
+            fn dfs<F>(node: &Node, with_leaf: &mut F)
+            where
+                F: FnMut(&ReplicaHistory),
+            {
+                match node {
+                    Node::Internal(inode) => {
+                        for child in inode.children() {
+                            dfs(child, with_leaf);
+                        }
+                    },
+
+                    Node::Leaf(leaf) => with_leaf(leaf),
+                }
+            }
+
+            let mut f = |ReplicaHistory { id, history }: &ReplicaHistory| {
+                let replica_id = *id;
+
+                for (idx, insertion) in history.insertions.iter().enumerate() {
+                    let insertion_ts = LocalTimestamp::from_u64(idx as u64);
+                    fun(replica_id, insertion_ts, insertion);
+                }
+            };
+
+            dfs(root, &mut f);
+        }
+
+        let root = self.histories.root();
+
         let mut map = f.debug_map();
+
+        for_each_insertion(root, |replica_id, insertion_ts, insertion| {
+            let insertion_id = InsertionId::new(replica_id, insertion_ts);
+            let _ = map.entry(&insertion_id, &insertion.runs);
+        });
 
         map.finish()
     }
@@ -426,13 +467,19 @@ impl Insertion {
 }
 
 /// TODO: docs
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct InsertionRun {
     /// TODO: docs
     run_id: RunId,
 
     /// TODO: docs
     len: usize,
+}
+
+impl core::fmt::Debug for InsertionRun {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{} @ {:?}", self.len, self.run_id)
+    }
 }
 
 impl InsertionRun {
@@ -451,9 +498,15 @@ impl InsertionRun {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 struct RunSummary {
     len: usize,
+}
+
+impl core::fmt::Debug for RunSummary {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{{ len: {} }}", self.len)
+    }
 }
 
 impl AddAssign<&Self> for RunSummary {
