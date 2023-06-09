@@ -46,6 +46,11 @@ impl<const ARITY: usize, Leaf: Summarize> Btree<ARITY, Leaf> {
     }
 
     #[inline]
+    pub fn root(&self) -> &Node<ARITY, Leaf> {
+        &self.root
+    }
+
+    #[inline]
     pub fn root_mut(&mut self) -> &mut Node<ARITY, Leaf> {
         &mut self.root
     }

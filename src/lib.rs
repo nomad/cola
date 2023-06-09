@@ -131,7 +131,7 @@ mod edit_run;
 mod metrics;
 mod node;
 mod replica;
-mod run_pointers;
+mod run_id_registry;
 mod text_edit;
 
 #[cfg(feature = "serde")]
@@ -140,9 +140,9 @@ mod serde;
 use btree::Btree;
 use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
 pub use crdt_edit::CrdtEdit;
-use edit_run::{EditId, EditRun, InsertionId, RunId, RunSummary};
+use edit_run::{EditRun, InsertionAnchor, InsertionId, RunId, RunSummary};
 use metrics::ByteMetric;
 pub use replica::Replica;
 use replica::ReplicaId;
-use run_pointers::RunPointers;
+use run_id_registry::RunIdRegistry;
 pub use text_edit::TextEdit;

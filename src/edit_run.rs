@@ -8,10 +8,10 @@ use crate::*;
 #[derive(Clone)]
 pub struct EditRun {
     /// TODO: docs
-    edit_id: EditId,
+    edit_id: InsertionId,
 
     /// TODO: docs
-    insertion_id: InsertionId,
+    insertion_id: InsertionAnchor,
 
     /// TODO: docs
     run_id: RunId,
@@ -100,12 +100,13 @@ impl EditRun {
     /// TODO: docs
     pub fn insert(
         &mut self,
-        edit_id: EditId,
+        edit_id: InsertionId,
         lamport_ts: LamportTimestamp,
         at_offset: usize,
         len: usize,
     ) -> (Self, Option<Self>) {
-        let insertion_id = InsertionId { inside_of: self.edit_id, at_offset };
+        let insertion_id =
+            InsertionAnchor { inside_of: self.edit_id, at_offset };
 
         // The new run starts at the beginning of this run => swap this run w/
         // the new one and return self.
@@ -181,7 +182,7 @@ impl EditRun {
 
     /// TODO: docs
     #[inline]
-    pub fn insertion_id(&self) -> InsertionId {
+    pub fn insertion_id(&self) -> InsertionAnchor {
         self.insertion_id
     }
 
@@ -212,7 +213,7 @@ impl EditRun {
 
     /// TODO: docs
     pub fn origin(
-        edit_id: EditId,
+        edit_id: InsertionId,
         lamport_ts: LamportTimestamp,
         len: usize,
     ) -> Self {
@@ -221,13 +222,19 @@ impl EditRun {
 
         Self {
             edit_id,
-            insertion_id: InsertionId::origin(),
+            insertion_id: InsertionAnchor::origin(),
             run_id: RunId::from([u16::MAX / 2]),
             next_run_id: RunId::from([u16::MAX]),
             lamport_ts,
             len,
             is_visible: true,
         }
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn run_id(&self) -> &RunId {
+        &self.run_id
     }
 
     /// TODO: docs
@@ -246,7 +253,7 @@ impl EditRun {
 
 /// TODO: docs
 #[derive(Copy, Clone)]
-pub struct EditId {
+pub struct InsertionId {
     /// TODO: docs
     created_by: ReplicaId,
 
@@ -254,7 +261,7 @@ pub struct EditId {
     local_timestamp_at_creation: LocalTimestamp,
 }
 
-impl core::fmt::Debug for EditId {
+impl core::fmt::Debug for InsertionId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
@@ -265,7 +272,7 @@ impl core::fmt::Debug for EditId {
     }
 }
 
-impl EditId {
+impl InsertionId {
     #[inline]
     pub fn local_ts(&self) -> LocalTimestamp {
         self.local_timestamp_at_creation
@@ -284,25 +291,35 @@ impl EditId {
 
 /// TODO: docs
 #[derive(Copy, Clone)]
-pub struct InsertionId {
+pub struct InsertionAnchor {
     /// TODO: docs
-    inside_of: EditId,
+    inside_of: InsertionId,
 
     /// TODO: docs
     at_offset: usize,
 }
 
-impl core::fmt::Debug for InsertionId {
+impl core::fmt::Debug for InsertionAnchor {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{:?} @ {}", self.inside_of, self.at_offset)
     }
 }
 
-impl InsertionId {
+impl InsertionAnchor {
+    /// TODO: docs
+    pub fn insertion_id(&self) -> InsertionId {
+        self.inside_of
+    }
+
+    /// TODO: docs
+    pub fn offset(&self) -> usize {
+        self.at_offset
+    }
+
     /// TODO: docs
     pub fn origin() -> Self {
         Self {
-            inside_of: EditId {
+            inside_of: InsertionId {
                 created_by: ReplicaId::zero(),
                 local_timestamp_at_creation: LocalTimestamp::default(),
             },

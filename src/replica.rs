@@ -48,7 +48,7 @@ pub struct Replica {
     edit_runs: Btree<ARITY, EditRun>,
 
     /// TODO: docs
-    run_pointers: RunPointers,
+    run_pointers: RunIdRegistry,
 
     /// TODO: docs
     local_clock: LocalClock,
@@ -97,15 +97,17 @@ impl Replica {
 
         let mut lamport_clock = LamportClock::default();
 
-        let edit_id = EditId::new(replica_id, local_clock.next());
+        let insertion_id = InsertionId::new(replica_id, local_clock.next());
 
         let len = chunks.map(|s| s.len()).sum::<usize>();
 
-        let origin_run = EditRun::origin(edit_id, lamport_clock.next(), len);
+        let origin_run =
+            EditRun::origin(insertion_id, lamport_clock.next(), len);
+
+        let run_pointers =
+            RunIdRegistry::new(insertion_id, origin_run.run_id().clone(), len);
 
         let edit_runs = Btree::from(origin_run);
-
-        let run_pointers = RunPointers::new(edit_id, len);
 
         Self {
             id: replica_id,
@@ -148,8 +150,8 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    fn next_edit_id(&mut self) -> EditId {
-        EditId::new(self.id, self.local_clock.next())
+    fn next_edit_id(&mut self) -> InsertionId {
+        InsertionId::new(self.id, self.local_clock.next())
     }
 
     /// TODO: docs
@@ -288,11 +290,11 @@ mod upstream_insert {
     /// TODO: docs
     pub fn inserted(
         btree: &mut Btree,
-        edit_id: EditId,
+        edit_id: InsertionId,
         lamport_ts: LamportTimestamp,
         byte_offset: usize,
         text_len: usize,
-    ) -> InsertionId {
+    ) -> InsertionAnchor {
         let root = match btree.root_mut() {
             Node::Internal(inode) => inode,
 
@@ -338,11 +340,11 @@ mod upstream_insert {
     /// TODO: docs
     fn insert(
         inode: &mut Inode,
-        edit_id: EditId,
+        edit_id: InsertionId,
         lamport_ts: LamportTimestamp,
         byte_offset: usize,
         text_len: usize,
-    ) -> (InsertionId, Option<Inode>) {
+    ) -> (InsertionAnchor, Option<Inode>) {
         let mut offset = 0;
 
         for (idx, child) in inode.children_mut().iter_mut().enumerate() {
