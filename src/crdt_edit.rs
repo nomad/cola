@@ -10,7 +10,8 @@ impl CrdtEdit {
     #[inline]
     pub(super) fn insertion(
         content: String,
-        _insertion_id: InsertionAnchor,
+        _insertion_id: InsertionId,
+        _insertion_anchor: InsertionAnchor,
         _lamport_ts: LamportTimestamp,
     ) -> Self {
         Self { inner: CrdtEditInner::Insertion { content } }

@@ -51,12 +51,16 @@ impl EditRun {
     }
 
     #[inline]
-    pub fn delete_from(&mut self, offset: usize) -> Option<Self> {
+    pub fn delete_from(
+        &mut self,
+        offset: usize,
+        id_registry: &mut RunIdRegistry,
+    ) -> Option<Self> {
         if offset == 0 {
             self.is_visible = false;
             None
         } else {
-            self.split(offset).map(|mut del| {
+            self.split(offset, id_registry).map(|mut del| {
                 del.is_visible = false;
                 del
             })
@@ -67,17 +71,18 @@ impl EditRun {
     pub fn delete_range(
         &mut self,
         Range { start, end }: Range<usize>,
+        id_registry: &mut RunIdRegistry,
     ) -> (Option<Self>, Option<Self>) {
         debug_assert!(start <= end);
 
         if start == 0 {
-            (self.delete_up_to(end), None)
+            (self.delete_up_to(end, id_registry), None)
         } else if end >= self.len {
-            (self.delete_from(start), None)
+            (self.delete_from(start, id_registry), None)
         } else {
-            let rest = self.split(end);
+            let rest = self.split(end, id_registry);
 
-            let deleted = self.split(start).map(|mut del| {
+            let deleted = self.split(start, id_registry).map(|mut del| {
                 del.is_visible = false;
                 del
             });
@@ -87,11 +92,15 @@ impl EditRun {
     }
 
     #[inline]
-    pub fn delete_up_to(&mut self, offset: usize) -> Option<Self> {
+    pub fn delete_up_to(
+        &mut self,
+        offset: usize,
+        id_registry: &mut RunIdRegistry,
+    ) -> Option<Self> {
         if offset == 0 {
             None
         } else {
-            let rest = self.split(offset);
+            let rest = self.split(offset, id_registry);
             self.is_visible = false;
             rest
         }
@@ -106,32 +115,10 @@ impl EditRun {
         len: usize,
         id_registry: &mut RunIdRegistry,
     ) -> (Self, Option<Self>) {
-        let insertion_id =
-            InsertionAnchor { inside_of: self.edit_id, at_offset };
+        let insertion_id = InsertionAnchor::new(self.edit_id, at_offset);
 
-        // The new run starts at the beginning of this run => swap this run w/
-        // the new one and return self.
-        if at_offset == 0 {
-            let run_id = RunId::between(&RunId::zero(), &self.run_id);
-
-            let new_run = Self {
-                edit_id,
-                insertion_id,
-                run_id: run_id.clone(),
-                next_run_id: self.run_id.clone(),
-                lamport_ts,
-                len,
-                is_visible: true,
-            };
-
-            id_registry.add_insertion(edit_id, len, run_id);
-
-            let this = core::mem::replace(self, new_run);
-
-            (this, None)
-        }
         // The new run starts at the end of this run.
-        else if at_offset == self.len {
+        if at_offset == self.len {
             let run_id = RunId::between(&self.run_id, &self.next_run_id);
 
             let next_run_id = self.next_run_id.clone();
@@ -151,6 +138,27 @@ impl EditRun {
             id_registry.add_insertion(edit_id, len, run_id);
 
             (new_run, None)
+        }
+        // The new run starts at the beginning of this run => swap this run w/
+        // the new one and return self.
+        else if at_offset == 0 {
+            let run_id = RunId::between(&RunId::zero(), &self.run_id);
+
+            let new_run = Self {
+                edit_id,
+                insertion_id,
+                run_id: run_id.clone(),
+                next_run_id: self.run_id.clone(),
+                lamport_ts,
+                len,
+                is_visible: true,
+            };
+
+            id_registry.add_insertion(edit_id, len, run_id);
+
+            let this = core::mem::replace(self, new_run);
+
+            (this, None)
         }
         // The new run splits this run.
         else {
@@ -191,10 +199,15 @@ impl EditRun {
         }
     }
 
-    /// TODO: docs
+    // TODO: docs
     #[inline]
-    pub fn insertion_id(&self) -> InsertionAnchor {
+    pub fn anchor(&self) -> InsertionAnchor {
         self.insertion_id
+    }
+
+    #[inline]
+    pub fn id(&self) -> InsertionId {
+        self.edit_id
     }
 
     #[inline]
@@ -230,11 +243,30 @@ impl EditRun {
 
     /// TODO: docs
     #[inline]
-    pub fn split(&mut self, byte_offset: usize) -> Option<Self> {
+    pub fn split(
+        &mut self,
+        byte_offset: usize,
+        id_registry: &mut RunIdRegistry,
+    ) -> Option<Self> {
         if byte_offset < self.len {
+            let rest_run_id = RunId::between(&self.run_id, &self.next_run_id);
+
             let mut rest = self.clone();
+
+            rest.run_id = rest_run_id.clone();
+
             rest.len = self.len - byte_offset;
+
+            self.next_run_id = rest_run_id.clone();
+
             self.len = byte_offset;
+
+            id_registry.split_insertion(
+                self.edit_id,
+                byte_offset,
+                rest_run_id,
+            );
+
             Some(rest)
         } else {
             None
@@ -300,6 +332,10 @@ impl InsertionAnchor {
     /// TODO: docs
     pub fn insertion_id(&self) -> InsertionId {
         self.inside_of
+    }
+
+    pub fn new(insertion_id: InsertionId, at_offset: usize) -> Self {
+        Self { inside_of: insertion_id, at_offset }
     }
 
     /// TODO: docs
