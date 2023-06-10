@@ -55,8 +55,9 @@ impl LamportClock {
 
     /// TODO: docs
     #[inline]
-    pub fn update(&mut self, other: Self) {
+    pub fn update(&mut self, other: LamportTimestamp) -> LamportTimestamp {
         self.0 = self.0.max(other.0) + 1;
+        LamportTimestamp(self.0)
     }
 }
 

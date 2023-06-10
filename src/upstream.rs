@@ -11,19 +11,19 @@ mod insert {
 
     /// TODO: docs
     pub fn insert(
-        btree: &mut RunTree,
+        run_tree: &mut RunTree,
         id_registry: &mut RunIdRegistry,
-        edit_id: InsertionId,
+        insertion_id: InsertionId,
         lamport_ts: LamportTimestamp,
         byte_offset: usize,
         text_len: usize,
     ) -> InsertionAnchor {
-        let root = match btree.root_mut() {
+        let root = match run_tree.root_mut() {
             Node::Internal(inode) => inode,
 
             Node::Leaf(edit_run) => {
                 let (new_run, split_run) = edit_run.insert(
-                    edit_id,
+                    insertion_id,
                     lamport_ts,
                     byte_offset,
                     text_len,
@@ -34,7 +34,7 @@ mod insert {
 
                 let new_run = Node::Leaf(new_run);
 
-                btree.replace_root(|first_run| {
+                run_tree.replace_root(|first_run| {
                     let new_children =
                         if let Some(split_run) = split_run.map(Node::Leaf) {
                             vec![first_run, new_run, split_run]
@@ -52,14 +52,14 @@ mod insert {
         let (insertion_id, root_split) = insertedd(
             root,
             id_registry,
-            edit_id,
+            insertion_id,
             lamport_ts,
             byte_offset,
             text_len,
         );
 
         if let Some(root_split) = root_split.map(Node::Internal) {
-            btree.replace_root(|old_root| {
+            run_tree.replace_root(|old_root| {
                 Node::from_children(vec![old_root, root_split])
             });
         }

@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::collections::VecDeque;
 use core::ops::RangeBounds;
 
@@ -162,8 +163,68 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    pub fn merge(&mut self, _crdt_edit: &CrdtEdit) -> Option<TextEdit> {
-        None
+    pub fn merge<'a, E>(&mut self, crdt_edit: E) -> Option<TextEdit<'a>>
+    where
+        E: Into<Cow<'a, CrdtEdit>>,
+    {
+        let crdt_edit = crdt_edit.into();
+
+        match crdt_edit {
+            Cow::Owned(CrdtEdit {
+                kind:
+                    CrdtEditKind::Insertion { content, id, anchor, lamport_ts },
+            }) => self.merge_insertion(
+                Cow::Owned(content),
+                id,
+                anchor,
+                lamport_ts,
+            ),
+
+            Cow::Borrowed(CrdtEdit {
+                kind:
+                    CrdtEditKind::Insertion { content, id, anchor, lamport_ts },
+            }) => self.merge_insertion(
+                Cow::Borrowed(content.as_str()),
+                *id,
+                *anchor,
+                *lamport_ts,
+            ),
+
+            _ => None,
+        }
+    }
+
+    fn merge_insertion<'a>(
+        &mut self,
+        content: Cow<'a, str>,
+        id: InsertionId,
+        anchor: InsertionAnchor,
+        lamport_ts: LamportTimestamp,
+    ) -> Option<TextEdit<'a>> {
+        let Some(run_id) = self.id_registry.get_run_id(&anchor) else {
+            let crdt_edit = CrdtEdit::insertion(
+                content.into_owned(),
+                id,
+                anchor,
+                lamport_ts,
+            );
+            self.pending.push_back(crdt_edit);
+            return None;
+        };
+
+        let lamport_ts = self.lamport_clock.update(lamport_ts);
+
+        let offset = downstream::insert(
+            &mut self.edit_runs,
+            &mut self.id_registry,
+            id,
+            lamport_ts,
+            anchor,
+            run_id,
+            content.len(),
+        );
+
+        Some(TextEdit::new(content, offset..offset))
     }
 
     /// TODO: docs

@@ -141,6 +141,7 @@ mod serde;
 use btree::{Btree, Inode, Metric, Node, Summarize};
 use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
 pub use crdt_edit::CrdtEdit;
+use crdt_edit::CrdtEditKind;
 use edit_run::{EditRun, InsertionAnchor, InsertionId, RunId, RunSummary};
 use metrics::ByteMetric;
 pub use replica::Replica;
