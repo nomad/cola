@@ -1,5 +1,5 @@
 use alloc::rc::Rc;
-use core::ops::{Add, AddAssign, Range, Sub, SubAssign};
+use core::ops::{Add, AddAssign, Range};
 
 use crate::node::Summarize;
 use crate::*;
@@ -427,27 +427,6 @@ impl Add<&Self> for RunSummary {
     #[inline]
     fn add(mut self, rhs: &Self) -> Self {
         self += rhs;
-        self
-    }
-}
-
-impl SubAssign<&Self> for RunSummary {
-    #[inline]
-    fn sub_assign(&mut self, other: &Self) {
-        self.len -= other.len;
-
-        if self.max_run_id > other.max_run_id {
-            self.max_run_id = other.max_run_id.clone();
-        }
-    }
-}
-
-impl Sub<&Self> for RunSummary {
-    type Output = Self;
-
-    #[inline]
-    fn sub(mut self, rhs: &Self) -> Self {
-        self -= rhs;
         self
     }
 }

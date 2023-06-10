@@ -1,4 +1,4 @@
-use core::ops::{Add, AddAssign, Index, IndexMut, Sub, SubAssign};
+use core::ops::{Add, AddAssign, Index, IndexMut};
 
 use crate::node::{Node, Summarize};
 use crate::*;
@@ -254,25 +254,6 @@ impl Add<&Self> for MaxReplicaSummary {
     }
 }
 
-impl SubAssign<&Self> for MaxReplicaSummary {
-    #[inline]
-    fn sub_assign(&mut self, other: &Self) {
-        if self.max_replica_id > other.max_replica_id {
-            *self = *other;
-        }
-    }
-}
-
-impl Sub<&Self> for MaxReplicaSummary {
-    type Output = Self;
-
-    #[inline]
-    fn sub(mut self, other: &Self) -> Self::Output {
-        self -= other;
-        self
-    }
-}
-
 impl Summarize for ReplicaHistory {
     type Summary = MaxReplicaSummary;
 
@@ -522,23 +503,6 @@ impl Add<&Self> for RunSummary {
     #[inline]
     fn add(mut self, other: &Self) -> Self::Output {
         self += other;
-        self
-    }
-}
-
-impl SubAssign<&Self> for RunSummary {
-    #[inline]
-    fn sub_assign(&mut self, other: &Self) {
-        self.len -= other.len;
-    }
-}
-
-impl Sub<&Self> for RunSummary {
-    type Output = Self;
-
-    #[inline]
-    fn sub(mut self, other: &Self) -> Self::Output {
-        self -= other;
         self
     }
 }

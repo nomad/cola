@@ -7,9 +7,7 @@ pub trait Summarize: Debug {
         + Default
         + Clone
         + for<'a> Add<&'a Self::Summary, Output = Self::Summary>
-        + for<'a> Sub<&'a Self::Summary, Output = Self::Summary>
         + for<'a> AddAssign<&'a Self::Summary>
-        + for<'a> SubAssign<&'a Self::Summary>
         + PartialEq<Self::Summary>;
 
     fn summarize(&self) -> Self::Summary;
@@ -309,16 +307,9 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     fn split_at(&mut self, offset: usize) -> Self {
         debug_assert!(offset <= self.len());
 
-        let summary = if offset <= self.len() / 2 {
-            let new_summary = sum_summaries(&self.children[..offset]);
-            let s = self.summary.clone() - &new_summary;
-            self.summary = new_summary;
-            s
-        } else {
-            let s = sum_summaries(&self.children[offset..]);
-            self.summary -= &s;
-            s
-        };
+        self.summary = sum_summaries(&self.children[..offset]);
+
+        let summary = sum_summaries(&self.children[offset..]);
 
         let children = self.children.drain(offset..).collect();
 
@@ -349,10 +340,8 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     where
         F: FnOnce(&mut Node<ARITY, Leaf>) -> T,
     {
-        let child = &mut self.children[child_idx];
-        self.summary -= &child.summary();
-        let res = with_child(child);
-        self.summary += &child.summary();
+        let res = with_child(&mut self.children[child_idx]);
+        self.summary = sum_summaries(self.children());
         res
     }
 }
