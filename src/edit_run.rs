@@ -1,7 +1,6 @@
 use alloc::rc::Rc;
 use core::ops::{Add, AddAssign, Range};
 
-use crate::node::Summarize;
 use crate::*;
 
 /// TODO: docs

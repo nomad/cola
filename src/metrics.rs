@@ -1,7 +1,6 @@
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
-use crate::node::Metric;
-use crate::{EditRun, RunSummary};
+use crate::{EditRun, Metric, RunSummary};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteMetric(pub(super) usize);

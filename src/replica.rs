@@ -281,9 +281,9 @@ mod debug {
     }
 }
 
-type Node = node::Node<ARITY, EditRun>;
+type Node = crate::Node<ARITY, EditRun>;
 
-type Inode = node::Inode<ARITY, EditRun>;
+type Inode = crate::Inode<ARITY, EditRun>;
 
 mod upstream_insert {
     //! This module handles the logic used to create [`CrdtEdit`]s after the

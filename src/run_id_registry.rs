@@ -1,6 +1,5 @@
 use core::ops::{Add, AddAssign, Index, IndexMut};
 
-use crate::node::{Node, Summarize};
 use crate::*;
 
 /// TODO: docs
@@ -19,7 +18,7 @@ pub struct RunIdRegistry {
 // TODO: explain why we're printing it this way
 impl core::fmt::Debug for RunIdRegistry {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        type Node = node::Node<REPLICA_HISTORIES_ARITY, ReplicaHistory>;
+        type Node = crate::Node<REPLICA_HISTORIES_ARITY, ReplicaHistory>;
 
         fn for_each_insertion<F>(root: &Node, mut fun: F)
         where
@@ -126,7 +125,7 @@ impl RunIdRegistry {
 
     /// TODO: docs
     fn add_history(&mut self, replica_id: ReplicaId) {
-        type Node = node::Node<REPLICA_HISTORIES_ARITY, ReplicaHistory>;
+        type Node = crate::Node<REPLICA_HISTORIES_ARITY, ReplicaHistory>;
 
         fn add(node: &mut Node, replica_id: ReplicaId) -> Option<Node> {
             let inode = match node {
@@ -395,7 +394,7 @@ impl Insertion {
 
     /// TODO: docs
     fn split(&mut self, split_at: usize, left_run_id: RunId) {
-        type Node = node::Node<INSERTION_RUNS_ARITY, InsertionRun>;
+        type Node = crate::Node<INSERTION_RUNS_ARITY, InsertionRun>;
 
         fn split(
             node: &mut Node,
