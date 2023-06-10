@@ -34,11 +34,9 @@ pub struct Btree<const ARITY: usize, Leaf: Summarize> {
     root: Node<ARITY, Leaf>,
 }
 
-impl<const ARITY: usize, Leaf: Summarize> core::fmt::Debug
-    for Btree<ARITY, Leaf>
-{
+impl<const ARITY: usize, Leaf: Summarize> Debug for Btree<ARITY, Leaf> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Debug::fmt(&self.root, f)
+        Debug::fmt(&self.root, f)
     }
 }
 
@@ -145,9 +143,9 @@ impl<const ARITY: usize, Leaf: Summarize> Node<ARITY, Leaf> {
     }
 
     #[inline]
-    pub fn measure<M: Metric<Leaf>>(&self) -> M {
+    pub fn _measure<M: Metric<Leaf>>(&self) -> M {
         match self {
-            Node::Internal(inode) => inode.measure(),
+            Node::Internal(inode) => inode._measure(),
             Node::Leaf(leaf) => M::measure_leaf(leaf),
         }
     }
@@ -345,20 +343,13 @@ impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
     }
 
     #[inline]
-    pub fn measure<M: Metric<Leaf>>(&self) -> M {
+    pub fn _measure<M: Metric<Leaf>>(&self) -> M {
         M::measure_summary(self.summary())
     }
 
     #[inline]
     const fn min_children() -> usize {
         ARITY / 2
-    }
-
-    #[inline]
-    pub fn push(&mut self, child: Node<ARITY, Leaf>) {
-        debug_assert!(!self.is_full());
-        self.summary += &child.summary();
-        self.children.push(child);
     }
 
     #[inline]
@@ -415,16 +406,16 @@ fn sum_summaries<const N: usize, Leaf: Summarize>(
     summary
 }
 
-impl<const N: usize, Leaf: Summarize> core::fmt::Debug for Node<N, Leaf> {
+impl<const N: usize, Leaf: Summarize> Debug for Node<N, Leaf> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            Node::Internal(inode) => core::fmt::Debug::fmt(inode, f),
-            Node::Leaf(leaf) => core::fmt::Debug::fmt(leaf, f),
+            Node::Internal(inode) => Debug::fmt(inode, f),
+            Node::Leaf(leaf) => Debug::fmt(leaf, f),
         }
     }
 }
 
-impl<const N: usize, Leaf: Summarize> core::fmt::Debug for Inode<N, Leaf> {
+impl<const N: usize, Leaf: Summarize> Debug for Inode<N, Leaf> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         pretty_print_inode(self, &mut String::new(), "", 0, f)
     }

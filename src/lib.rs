@@ -127,11 +127,13 @@ extern crate alloc;
 mod btree;
 mod clocks;
 mod crdt_edit;
+mod downstream;
 mod edit_run;
 mod metrics;
 mod replica;
 mod run_id_registry;
 mod text_edit;
+mod upstream;
 
 #[cfg(feature = "serde")]
 mod serde;
@@ -142,6 +144,6 @@ pub use crdt_edit::CrdtEdit;
 use edit_run::{EditRun, InsertionAnchor, InsertionId, RunId, RunSummary};
 use metrics::ByteMetric;
 pub use replica::Replica;
-use replica::ReplicaId;
+use replica::{ReplicaId, RunInode, RunNode, RunTree};
 use run_id_registry::RunIdRegistry;
 pub use text_edit::TextEdit;
