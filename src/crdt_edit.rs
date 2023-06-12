@@ -11,7 +11,7 @@ impl CrdtEdit {
     pub(super) fn insertion(
         content: String,
         id: InsertionId,
-        anchor: InsertionAnchor,
+        anchor: Anchor,
         lamport_ts: LamportTimestamp,
     ) -> Self {
         Self {
@@ -30,7 +30,7 @@ pub enum CrdtEditKind {
     Insertion {
         content: String,
         id: InsertionId,
-        anchor: InsertionAnchor,
+        anchor: Anchor,
         lamport_ts: LamportTimestamp,
     },
 

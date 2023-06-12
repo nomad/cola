@@ -66,7 +66,7 @@ impl core::fmt::Debug for RunIdRegistry {
 
 impl RunIdRegistry {
     /// TODO: docs
-    pub fn new(insertion_id: InsertionId, run_id: RunId, len: usize) -> Self {
+    pub fn new(insertion_id: InsertionId, run_id: RunId, len: Length) -> Self {
         debug_assert_eq!(0, insertion_id.local_ts().as_u64());
 
         let mut history = InsertionHistory::new();
@@ -74,16 +74,30 @@ impl RunIdRegistry {
         history.push_insertion(insertion_id.local_ts(), run_id, len);
 
         let replica_history =
-            ReplicaHistory { history, id: insertion_id.replica_id() };
+            ReplicaHistory { history, id: insertion_id.replica_id().clone() };
 
         Self { histories: Btree::from(replica_history) }
     }
 
     /// TODO: docs
-    pub fn get_run_id(&mut self, anchor: &InsertionAnchor) -> Option<RunId> {
+    ///
+    /// replica.local_ts @ offset
+    ///
+    /// this method should probably give back a Vec<RunId> because for a given
+    /// anchor there are in general multiple insertions that start there.
+    ///
+    /// For every InsertionRun we should probably also save the list of
+    /// InsertionIds whose anchor is that run.
+    ///
+    /// Then the caller of this method gets back a `Vec<(ReplicaId,
+    /// LamportTimestamp, RunId)>` which are sorted by `RunId`.
+    ///
+    /// Then they sort first by decreasing lamport timestamp, and if that's
+    /// tied they then sort by replica id.
+    pub fn get_run_id(&mut self, anchor: &Anchor) -> Option<RunId> {
         let insertion_id = anchor.insertion_id();
 
-        self.with_history_mut(insertion_id.replica_id(), |history| {
+        self.with_history_mut(insertion_id.replica_id().clone(), |history| {
             let insertion = history.get_insertion(insertion_id.local_ts())?;
             Some(insertion.run_at_offset(anchor.offset()))
         })
@@ -94,10 +108,10 @@ impl RunIdRegistry {
     pub fn add_insertion(
         &mut self,
         insertion_id: InsertionId,
-        insertion_len: usize,
+        insertion_len: Length,
         run_id: RunId,
     ) {
-        self.with_history_mut(insertion_id.replica_id(), |history| {
+        self.with_history_mut(insertion_id.replica_id().clone(), |history| {
             history.push_insertion(
                 insertion_id.local_ts(),
                 run_id,
@@ -111,10 +125,10 @@ impl RunIdRegistry {
     pub fn split_insertion(
         &mut self,
         insertion_id: InsertionId,
-        split_at: usize,
+        split_at: Length,
         split_run_id: RunId,
     ) {
-        self.with_history_mut(insertion_id.replica_id(), |history| {
+        self.with_history_mut(insertion_id.replica_id().clone(), |history| {
             history.split_insertion(
                 insertion_id.local_ts(),
                 split_at,
@@ -299,7 +313,7 @@ impl InsertionHistory {
         &mut self,
         insertion_ts: LocalTimestamp,
         run_id: RunId,
-        insertion_len: usize,
+        insertion_len: Length,
     ) {
         debug_assert_eq!(self.insertions.len() as u64, insertion_ts.as_u64());
         self.insertions.push(Insertion::new(run_id, insertion_len));
@@ -315,7 +329,7 @@ impl InsertionHistory {
     fn split_insertion(
         &mut self,
         insertion_ts: LocalTimestamp,
-        split_at: usize,
+        split_at: Length,
         left_run_id: RunId,
     ) {
         self[insertion_ts].split(split_at, left_run_id);
@@ -350,17 +364,17 @@ struct Insertion {
 impl Insertion {
     /// TODO: docs
     #[inline]
-    fn new(run_id: RunId, len: usize) -> Self {
+    fn new(run_id: RunId, len: Length) -> Self {
         Self { runs: Btree::from(InsertionRun::new(run_id, len)) }
     }
 
     #[inline]
-    fn len(&self) -> usize {
+    fn len(&self) -> Length {
         self.runs.summary().len
     }
 
     /// TODO: docs
-    fn run_at_offset(&self, offset: usize) -> RunId {
+    fn run_at_offset(&self, offset: Length) -> RunId {
         debug_assert!(offset <= self.len());
 
         let mut node = self.runs.root();
@@ -393,12 +407,12 @@ impl Insertion {
     }
 
     /// TODO: docs
-    fn split(&mut self, split_at: usize, left_run_id: RunId) {
+    fn split(&mut self, split_at: Length, left_run_id: RunId) {
         type Node = crate::Node<INSERTION_RUNS_ARITY, InsertionRun>;
 
         fn split(
             node: &mut Node,
-            split_at: usize,
+            split_at: Length,
             left_run_id: RunId,
         ) -> Option<Node> {
             let inode = match node {
@@ -453,7 +467,7 @@ struct InsertionRun {
     run_id: RunId,
 
     /// TODO: docs
-    len: usize,
+    len: Length,
 }
 
 impl core::fmt::Debug for InsertionRun {
@@ -465,12 +479,12 @@ impl core::fmt::Debug for InsertionRun {
 impl InsertionRun {
     /// TODO: docs
     #[inline]
-    fn new(run_id: RunId, len: usize) -> Self {
+    fn new(run_id: RunId, len: Length) -> Self {
         Self { run_id, len }
     }
 
     #[inline]
-    fn split(&mut self, at_offset: usize, left_run_id: RunId) -> Self {
+    fn split(&mut self, at_offset: Length, left_run_id: RunId) -> Self {
         debug_assert!(at_offset < self.len);
         let rest = Self { run_id: left_run_id, len: self.len - at_offset };
         self.len = at_offset;
@@ -480,7 +494,7 @@ impl InsertionRun {
 
 #[derive(Clone, Default, PartialEq)]
 struct RunSummary {
-    len: usize,
+    len: Length,
 }
 
 impl core::fmt::Debug for RunSummary {

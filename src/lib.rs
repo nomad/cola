@@ -128,8 +128,8 @@ mod btree;
 mod clocks;
 mod crdt_edit;
 mod downstream;
-mod edit_run;
-mod metrics;
+mod insertion_run;
+mod metric;
 mod replica;
 mod run_id_registry;
 mod text_edit;
@@ -138,12 +138,12 @@ mod upstream;
 #[cfg(feature = "serde")]
 mod serde;
 
-use btree::{Btree, Inode, Metric, Node, Summarize};
+use btree::{Btree, Inode, Node, Summarize};
 use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
-use edit_run::{EditRun, InsertionAnchor, InsertionId, RunId, RunSummary};
-use metrics::ByteMetric;
+use insertion_run::{Anchor, InsertionId, InsertionRun, RunId, RunSummary};
+pub use metric::{ByteMetric, Length, Metric};
 pub use replica::Replica;
 use replica::{ReplicaId, RunInode, RunNode, RunTree};
 use run_id_registry::RunIdRegistry;

@@ -9,6 +9,11 @@ impl core::fmt::Debug for LocalClock {
 }
 
 impl LocalClock {
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// TODO: docs
     #[inline]
     pub fn next(&mut self) -> LocalTimestamp {
@@ -28,15 +33,15 @@ impl LocalTimestamp {
         self.0
     }
 
-    /// TODO: docs
-    pub fn from_u64(ts: u64) -> Self {
+    #[inline]
+    pub const fn from_u64(ts: u64) -> Self {
         Self(ts)
     }
 }
 
 /// TODO: docs
 #[derive(Copy, Clone, Default)]
-pub(super) struct LamportClock(u64);
+pub struct LamportClock(u64);
 
 impl core::fmt::Debug for LamportClock {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -45,6 +50,11 @@ impl core::fmt::Debug for LamportClock {
 }
 
 impl LamportClock {
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// TODO: docs
     #[inline]
     pub fn next(&mut self) -> LamportTimestamp {

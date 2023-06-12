@@ -60,7 +60,7 @@ impl<B: Buffer> Replica<B> {
 
     pub fn new<T: Into<B>>(text: T) -> Self {
         let buffer = text.into();
-        let crdt = cola::Replica::from_chunks(buffer.chunks());
+        let crdt = buffer.chunks().collect();
         Self { buffer, crdt }
     }
 }
