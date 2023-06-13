@@ -179,7 +179,7 @@ impl<M: Metric> Replica<M> {
     #[allow(clippy::len_without_is_empty)]
     #[doc(hidden)]
     pub fn len(&self) -> Length {
-        self.insertion_runs.summary()
+        self.insertion_runs.len()
     }
 
     /// TODO: docs

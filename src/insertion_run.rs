@@ -407,10 +407,10 @@ impl Anchor {
 }
 
 impl Summarize for InsertionRun {
-    type Summary = Length;
+    type Length = Length;
 
     #[inline]
-    fn summarize(&self) -> Self::Summary {
+    fn summarize(&self) -> Self::Length {
         self.len * (self.is_visible as Length)
     }
 }
