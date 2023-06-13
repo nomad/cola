@@ -70,6 +70,18 @@ impl<const ARITY: usize, Leaf: Summarize> Btree<ARITY, Leaf> {
     }
 
     #[inline]
+    pub fn replace_root_with_current_and(&mut self, node: Node<ARITY, Leaf>) {
+        debug_assert_eq!(self.root.depth(), node.depth());
+
+        self.replace_root(|old_root| {
+            let mut children = Vec::with_capacity(ARITY);
+            children.push(old_root);
+            children.push(node);
+            Node::from_children(children)
+        });
+    }
+
+    #[inline]
     pub fn root(&self) -> &Node<ARITY, Leaf> {
         &self.root
     }

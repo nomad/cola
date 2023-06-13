@@ -10,20 +10,16 @@ use crate::*;
 /// TODO: docs
 const ARITY: usize = 32;
 
-pub type RunTree = Btree<ARITY, InsertionRun>;
-pub type RunNode = Node<ARITY, InsertionRun>;
-pub type RunInode = Inode<ARITY, InsertionRun>;
-
 /// TODO: docs
 pub struct Replica<M: Metric = ByteMetric> {
     /// TODO: docs
     id: ReplicaId,
 
     /// TODO: docs
-    insertion_runs: RunTree,
+    insertion_runs: Gtree<ARITY, InsertionRun>,
 
     /// TODO: docs
-    run_pointers: RunIdRegistry,
+    // run_indexes: RunIdRegistry,
 
     /// TODO: docs
     local_clock: LocalClock,
@@ -80,7 +76,7 @@ impl<M: Metric> Clone for Replica<M> {
             id: ReplicaId::new(),
             insertion_runs: self.insertion_runs.clone(),
             local_clock: LocalClock::new(),
-            run_pointers: self.run_pointers.clone(),
+            // run_indexes: self.run_indexes.clone(),
             lamport_clock,
             pending: self.pending.clone(),
             metric: PhantomData,
@@ -108,11 +104,11 @@ impl<M: Metric> Replica<M> {
             return CrdtEdit::noop();
         }
 
-        upstream::delete(
-            &mut self.insertion_runs,
-            &mut self.run_pointers,
-            start..end,
-        );
+        //upstream::delete(
+        //    &mut self.insertion_runs,
+        //    &mut self.run_indexes,
+        //    start..end,
+        //);
 
         CrdtEdit::noop()
     }
@@ -134,15 +130,15 @@ impl<M: Metric> Replica<M> {
             len,
         );
 
-        let run_pointers =
-            RunIdRegistry::new(insertion_id, origin_run.run_id.clone(), len);
+        // let run_pointers =
+        //     RunIdRegistry::new(insertion_id, origin_run.run_id.clone(), len);
 
-        let insertion_runs = Btree::from(origin_run);
+        let insertion_runs = Gtree::new(origin_run);
 
         Self {
             id: replica_id,
             insertion_runs,
-            run_pointers,
+            // run_indexes: run_pointers,
             local_clock,
             lamport_clock,
             pending: VecDeque::new(),
@@ -165,15 +161,15 @@ impl<M: Metric> Replica<M> {
 
         let len = M::len(&text);
 
-        let anchor = upstream::insert(
-            &mut self.insertion_runs,
-            &mut self.run_pointers,
-            &mut self.local_clock,
-            &mut self.lamport_clock,
-            self.id,
-            offset.into(),
-            len,
-        );
+        //let anchor = upstream::insert(
+        //    &mut self.insertion_runs,
+        //    &mut self.run_indexes,
+        //    &mut self.local_clock,
+        //    &mut self.lamport_clock,
+        //    self.id,
+        //    offset.into(),
+        //    len,
+        //);
 
         CrdtEdit::noop()
         // CrdtEdit::insertion(text, id, anchor, lamport_ts)
@@ -183,7 +179,7 @@ impl<M: Metric> Replica<M> {
     #[allow(clippy::len_without_is_empty)]
     #[doc(hidden)]
     pub fn len(&self) -> Length {
-        self.insertion_runs.summary().len
+        self.insertion_runs.summary()
     }
 
     /// TODO: docs
@@ -232,32 +228,34 @@ impl<M: Metric> Replica<M> {
         anchor: Anchor,
         lamport_ts: LamportTimestamp,
     ) -> Option<TextEdit<'a>> {
-        let Some(run_id) = self.run_pointers.get_run_id(&anchor) else {
-            let crdt_edit = CrdtEdit::insertion(
-                content.into_owned(),
-                id,
-                anchor,
-                lamport_ts,
-            );
-            self.pending.push_back(crdt_edit);
-            return None;
-        };
+        todo!();
 
-        let len = M::len(&content);
+        //let Some(run_id) = self.run_indexes.get_run_id(&anchor) else {
+        //    let crdt_edit = CrdtEdit::insertion(
+        //        content.into_owned(),
+        //        id,
+        //        anchor,
+        //        lamport_ts,
+        //    );
+        //    self.pending.push_back(crdt_edit);
+        //    return None;
+        //};
 
-        let lamport_ts = self.lamport_clock.update(lamport_ts);
+        //let len = M::len(&content);
 
-        let offset = downstream::insert(
-            &mut self.insertion_runs,
-            &mut self.run_pointers,
-            id,
-            lamport_ts,
-            anchor,
-            run_id,
-            len,
-        );
+        //let lamport_ts = self.lamport_clock.update(lamport_ts);
 
-        Some(TextEdit::new(content, offset..offset))
+        //let offset = downstream::insert(
+        //    &mut self.insertion_runs,
+        //    &mut self.run_indexes,
+        //    id,
+        //    lamport_ts,
+        //    anchor,
+        //    run_id,
+        //    len,
+        //);
+
+        //Some(TextEdit::new(content, offset..offset))
     }
 
     /// TODO: docs
@@ -324,33 +322,6 @@ impl<'a, M: Metric> FromIterator<&'a str> for Replica<M> {
     }
 }
 
-#[inline]
-fn range_bounds_to_start_end<L, R>(
-    range: R,
-    lo: Length,
-    hi: Length,
-) -> (Length, Length)
-where
-    L: Into<Length> + Copy,
-    R: core::ops::RangeBounds<L>,
-{
-    use core::ops::Bound;
-
-    let start = match range.start_bound() {
-        Bound::Included(&n) => n.into(),
-        Bound::Excluded(&n) => n.into() + 1,
-        Bound::Unbounded => lo,
-    };
-
-    let end = match range.end_bound() {
-        Bound::Included(&n) => n.into() + 1,
-        Bound::Excluded(&n) => n.into(),
-        Bound::Unbounded => hi,
-    };
-
-    (start, end)
-}
-
 #[cfg(debug_assertions)]
 mod debug {
     use super::*;
@@ -362,7 +333,7 @@ mod debug {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
                 .field("edit_runs", &self.0.insertion_runs)
-                .field("id_registry", &self.0.run_pointers)
+                // .field("id_registry", &self.0.run_indexes)
                 .field("local", &self.0.local_clock)
                 .field("lamport", &self.0.lamport_clock)
                 .field("pending", &self.0.pending)

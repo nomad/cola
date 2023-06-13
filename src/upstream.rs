@@ -88,9 +88,7 @@ mod insert {
         );
 
         if let Some(root_split) = root_split.map(Node::Internal) {
-            run_tree.replace_root(|old_root| {
-                Node::from_children(vec![old_root, root_split])
-            });
+            run_tree.replace_root_with_current_and(root_split);
         }
 
         insertion_id
@@ -235,9 +233,7 @@ mod delete {
         if let Some(root_split) =
             deleted(root, id_registry, range).map(Node::Internal)
         {
-            run_tree.replace_root(|old_root| {
-                Node::from_children(vec![old_root, root_split])
-            });
+            run_tree.replace_root_with_current_and(root_split);
         }
     }
 
@@ -253,7 +249,7 @@ mod delete {
 
             offset += child_len;
 
-            if offset < range.start {
+            if offset <= range.start {
                 continue;
             }
 
@@ -337,7 +333,7 @@ mod delete {
 
             offset += child_len;
 
-            if offset >= range.start {
+            if offset > range.start {
                 start_idx = idx;
                 let delete_from = range.start + child_len - offset;
                 extra_from_start =

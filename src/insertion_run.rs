@@ -1,6 +1,5 @@
-use alloc::rc::Rc;
 use core::cmp::Ordering;
-use core::ops::{Add, AddAssign, Range};
+use core::ops::Range;
 
 use crate::*;
 
@@ -24,23 +23,16 @@ pub struct InsertionRun {
 
     /// TODO: docs
     is_last_run: bool,
-
-    /// TODO: docs
-    pub(crate) run_id: RunId,
-
-    /// TODO: docs
-    pub(crate) next_run_id: RunId,
 }
 
 impl core::fmt::Debug for InsertionRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:?} L({}) |> {:?}, {:?} {} {}",
+            "{:?} L({}) |> {:?}, {} {}",
             self.id,
             self.lamport_ts.as_u64(),
             self.inserted_at,
-            self.run_id,
             self.len,
             if self.is_visible { "✔️" } else { "🪦" },
         )
@@ -79,7 +71,7 @@ impl InsertionRun {
         at_offset: Length,
         local_clock: &mut LocalClock,
         lamport_clock: &mut LamportClock,
-        id_registry: &mut RunIdRegistry,
+        //id_registry: &mut RunIdRegistry,
     ) -> (Option<Self>, Option<Self>) {
         // When a new insertion extends a previous insertion neither the local
         // nor the lamport clocks are increased. In a way it's like we're
@@ -92,7 +84,7 @@ impl InsertionRun {
             || lamport_clock.next(),
             run_len,
             at_offset,
-            id_registry,
+            //id_registry,
         )
     }
 
@@ -104,7 +96,7 @@ impl InsertionRun {
         run_len: Length,
         at_offset: Length,
         lamport_ts: LamportTimestamp,
-        id_registry: &mut RunIdRegistry,
+        //id_registry: &mut RunIdRegistry,
     ) -> (Option<Self>, Option<Self>) {
         self.bisect(
             &id.replica_id().clone(),
@@ -112,7 +104,7 @@ impl InsertionRun {
             || lamport_ts,
             run_len,
             at_offset,
-            id_registry,
+            //id_registry,
         )
     }
 
@@ -124,7 +116,7 @@ impl InsertionRun {
         get_lamport_ts: impl FnOnce() -> LamportTimestamp,
         run_len: Length,
         at_offset: Length,
-        id_registry: &mut RunIdRegistry,
+        //id_registry: &mut RunIdRegistry,
     ) -> (Option<Self>, Option<Self>) {
         debug_assert!(at_offset <= self.len);
 
@@ -145,8 +137,6 @@ impl InsertionRun {
                 len: run_len,
                 is_visible: true,
                 is_last_run: true,
-                run_id: RunId::between(&RunId::zero(), &self.run_id),
-                next_run_id: self.run_id.clone(),
             };
 
             // id_registry.add_insertion(run.id, run.len, run.id.clone());
@@ -158,25 +148,19 @@ impl InsertionRun {
             let new_run = Self {
                 id: get_insertion_id(),
                 inserted_at: Anchor::new(self.id.clone(), self.len),
-                run_id: RunId::between(&self.run_id, &self.next_run_id),
-                next_run_id: self.next_run_id.clone(),
                 lamport_ts: get_lamport_ts(),
                 len: run_len,
                 is_visible: true,
                 is_last_run: true,
             };
 
-            self.next_run_id = new_run.run_id.clone();
-
             (Some(new_run), None)
         } else {
-            let split_run = self.split(at_offset, id_registry);
+            let split_run = self.split(at_offset /* id_registry */);
 
             let new_run = Self {
                 id: get_insertion_id(),
                 inserted_at: Anchor::new(self.id.clone(), self.len),
-                run_id: RunId::between(&self.run_id, &split_run.run_id),
-                next_run_id: split_run.run_id.clone(),
                 lamport_ts: get_lamport_ts(),
                 len: run_len,
                 is_visible: true,
@@ -219,13 +203,13 @@ impl InsertionRun {
     pub fn delete_from(
         &mut self,
         offset: Length,
-        id_registry: &mut RunIdRegistry,
+        //id_registry: &mut RunIdRegistry,
     ) -> Option<Self> {
         if offset == 0 {
             self.is_visible = false;
             None
         } else if offset < self.len {
-            let mut del = self.split(offset, id_registry);
+            let mut del = self.split(offset /* , id_registry */);
             del.is_visible = false;
             Some(del)
         } else {
@@ -237,19 +221,19 @@ impl InsertionRun {
     pub fn delete_range(
         &mut self,
         Range { start, end }: Range<Length>,
-        id_registry: &mut RunIdRegistry,
+        //id_registry: &mut RunIdRegistry,
     ) -> (Option<Self>, Option<Self>) {
         debug_assert!(start <= end);
 
         if start == end {
             (None, None)
         } else if start == 0 {
-            (self.delete_up_to(end, id_registry), None)
+            (self.delete_up_to(end /* id_registry */), None)
         } else if end >= self.len {
-            (self.delete_from(start, id_registry), None)
+            (self.delete_from(start /* id_registry */), None)
         } else {
-            let rest = self.split(end, id_registry);
-            let mut deleted = self.split(start, id_registry);
+            let rest = self.split(end /* id_registry */);
+            let mut deleted = self.split(start /* id_registry */);
             deleted.is_visible = false;
             (Some(deleted), Some(rest))
         }
@@ -259,12 +243,12 @@ impl InsertionRun {
     pub fn delete_up_to(
         &mut self,
         offset: Length,
-        id_registry: &mut RunIdRegistry,
+        // id_registry: &mut RunIdRegistry,
     ) -> Option<Self> {
         if offset == 0 {
             None
         } else if offset < self.len {
-            let rest = self.split(offset, id_registry);
+            let rest = self.split(offset /* id_registry */);
             self.is_visible = false;
             Some(rest)
         } else {
@@ -277,21 +261,15 @@ impl InsertionRun {
     fn split(
         &mut self,
         at_offset: Length,
-        id_registry: &mut RunIdRegistry,
+        // id_registry: &mut RunIdRegistry,
     ) -> Self {
         debug_assert!(at_offset > 0 && at_offset < self.len);
 
-        let split_run_id = RunId::between(&self.run_id, &self.next_run_id);
-
         let mut split = self.clone();
-
-        split.run_id = split_run_id.clone();
 
         split.len = self.len - at_offset;
 
         split.is_last_run = self.is_last_run;
-
-        self.next_run_id = split_run_id;
 
         self.len = at_offset;
 
@@ -318,8 +296,6 @@ impl InsertionRun {
         Self {
             id,
             inserted_at: Anchor::origin(),
-            run_id: RunId::from([u16::MAX / 2]),
-            next_run_id: RunId::from([u16::MAX]),
             lamport_ts,
             len,
             is_visible: true,
@@ -430,145 +406,16 @@ impl Anchor {
     }
 }
 
-/// TODO: docs
-///
-/// The `Ord` implementation for `Vec`s [is already][lexi] a lexicographic
-/// sort, so we can just derive those traits.
-///
-/// [lexi]: https://doc.rust-lang.org/std/vec/struct.Vec.html#impl-Ord-for-Vec<,+A>
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RunId {
-    /// TODO: docs
-    letters: Rc<[u16]>,
-}
-
-/// SAFETY: `RunId`s are never shared between different threads.
-unsafe impl Send for RunId {}
-
-/// SAFETY: same as above.
-unsafe impl Sync for RunId {}
-
-impl core::fmt::Debug for RunId {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        core::fmt::Debug::fmt(&self.letters, f)
-    }
-}
-
-impl Default for RunId {
-    #[inline]
-    fn default() -> Self {
-        Self { letters: Rc::from([u16::MAX / 2]) }
-    }
-}
-
-impl<I: IntoIterator<Item = u16>> From<I> for RunId {
-    #[inline]
-    fn from(iter: I) -> Self {
-        Self { letters: iter.into_iter().collect() }
-    }
-}
-
-impl RunId {
-    /// TODO: docs
-    ///
-    /// # Panics
-    ///
-    /// This function assumes the left id is the smaller one, and it'll panic
-    /// if the left id is greater than or equal to the right id.
-    fn between(left: &Self, right: &Self) -> Self {
-        debug_assert!(left < right);
-
-        let mut letters = Vec::new();
-
-        let left_then_zero =
-            left.letters.iter().copied().chain(core::iter::repeat(0));
-
-        let right_then_max =
-            right.letters.iter().copied().chain(core::iter::repeat(u16::MAX));
-
-        for (left, right) in left_then_zero.zip(right_then_max) {
-            let halfway = (right - left) / 2;
-
-            letters.push(left + halfway);
-
-            if halfway != 0 {
-                break;
-            }
-        }
-
-        Self { letters: Rc::from(letters) }
-    }
-
-    /// TODO: docs
-    fn zero() -> Self {
-        Self { letters: Rc::from([0]) }
-    }
-}
-
-/// TODO: docs
-#[derive(Clone, Default, PartialEq)]
-pub struct RunSummary {
-    /// TODO: docs
-    pub(crate) len: Length,
-
-    /// TODO: docs
-    pub(crate) max_run_id: RunId,
-}
-
-impl core::fmt::Debug for RunSummary {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{{ len: {}, max_run_id: {:?} }}", self.len, self.max_run_id)
-    }
-}
-
-impl RunSummary {
-    #[inline(always)]
-    pub fn len(&self) -> Length {
-        self.len
-    }
-}
-
-impl AddAssign<&Self> for RunSummary {
-    #[inline]
-    fn add_assign(&mut self, other: &Self) {
-        self.len += other.len;
-
-        if self.max_run_id < other.max_run_id {
-            self.max_run_id = other.max_run_id.clone();
-        }
-    }
-}
-
-impl Add<&Self> for RunSummary {
-    type Output = Self;
-
-    #[inline]
-    fn add(mut self, rhs: &Self) -> Self {
-        self += rhs;
-        self
-    }
-}
-
 impl Summarize for InsertionRun {
-    type Summary = RunSummary;
+    type Summary = Length;
 
     #[inline]
     fn summarize(&self) -> Self::Summary {
-        RunSummary {
-            len: self.len * (self.is_visible as Length),
-            max_run_id: self.run_id.clone(),
-        }
+        self.len * (self.is_visible as Length)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn run_id_0() {
-        let left = RunId::from([1]);
-        let right = RunId::from([3]);
-        assert_eq!(RunId::between(&left, &right), RunId::from([2]));
-    }
 }

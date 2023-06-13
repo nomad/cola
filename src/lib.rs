@@ -124,27 +124,74 @@
 
 extern crate alloc;
 
-mod btree;
+// mod btree;
 mod clocks;
 mod crdt_edit;
-mod downstream;
+// mod downstream;
+mod gtree;
 mod insertion_run;
-mod metric;
 mod replica;
-mod run_id_registry;
+// mod run_id_registry;
 mod text_edit;
-mod upstream;
+// mod upstream;
 
 #[cfg(feature = "serde")]
 mod serde;
 
-use btree::{Btree, Inode, Node, Summarize};
+// use btree::{Btree, Inode, Node};
 use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
-use insertion_run::{Anchor, InsertionId, InsertionRun, RunId, RunSummary};
-pub use metric::{ByteMetric, Length, Metric};
+use gtree::{Gtree, Summarize};
+use insertion_run::{Anchor, InsertionId, InsertionRun};
 pub use replica::Replica;
-use replica::{ReplicaId, RunInode, RunNode, RunTree};
-use run_id_registry::RunIdRegistry;
+use replica::ReplicaId;
+// use run_id_registry::RunIdRegistry;
 pub use text_edit::TextEdit;
+
+/// TODO: docs
+pub type Length = usize;
+
+/// TODO: docs
+pub trait Metric {
+    /// TODO: docs
+    fn len(s: &str) -> Length;
+}
+
+/// TODO: docs
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ByteMetric;
+
+impl Metric for ByteMetric {
+    #[inline]
+    fn len(s: &str) -> Length {
+        s.len()
+    }
+}
+
+#[inline]
+fn range_bounds_to_start_end<L, R>(
+    range: R,
+    lo: Length,
+    hi: Length,
+) -> (Length, Length)
+where
+    L: Into<Length> + Copy,
+    R: core::ops::RangeBounds<L>,
+{
+    use core::ops::Bound;
+
+    let start = match range.start_bound() {
+        Bound::Included(&n) => n.into(),
+        Bound::Excluded(&n) => n.into() + 1,
+        Bound::Unbounded => lo,
+    };
+
+    let end = match range.end_bound() {
+        Bound::Included(&n) => n.into() + 1,
+        Bound::Excluded(&n) => n.into(),
+        Bound::Unbounded => hi,
+    };
+
+    (start, end)
+}
