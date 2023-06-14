@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use core::ops::{Add, AddAssign, Index, IndexMut, Sub, SubAssign};
+use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 /// TODO: docs
 pub trait Summarize: Debug + Sized + 'static {
@@ -19,10 +19,10 @@ pub trait Summarize: Debug + Sized + 'static {
 /// A grow-only tree.
 ///
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Gtree<const ARITY: usize, Leaf: Summarize> {
     /// TODO: docs
-    nodes: Vec<Inode<ARITY, Leaf>>,
+    inodes: Vec<Inode<ARITY, Leaf>>,
 
     /// TODO: docs
     root_idx: GtreeIdx,
@@ -44,69 +44,65 @@ impl GtreeIdx {
     }
 }
 
-impl<const ARITY: usize, Leaf: Summarize> Index<GtreeIdx>
-    for Gtree<ARITY, Leaf>
-{
-    type Output = Inode<ARITY, Leaf>;
-
-    #[inline]
-    fn index(&self, idx: GtreeIdx) -> &Self::Output {
-        &self.nodes[idx.0]
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GtreeLeafIdx {
+    row: GtreeIdx,
+    col: usize,
 }
 
-impl<const ARITY: usize, Leaf: Summarize> IndexMut<GtreeIdx>
+impl<const ARITY: usize, Leaf: Summarize + Debug> Debug
     for Gtree<ARITY, Leaf>
 {
-    #[inline]
-    fn index_mut(&mut self, idx: GtreeIdx) -> &mut Self::Output {
-        &mut self.nodes[idx.0]
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let mut dbg = f.debug_map();
+
+        for (idx, inode) in self.inodes.iter().enumerate() {
+            let root_marker = if idx == self.root_idx.0 { "R" } else { "" };
+            let key = format!(" {root_marker} {idx}");
+            dbg.entry(&key, inode);
+        }
+
+        Ok(())
     }
 }
 
 impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
-    /// TODO: docs
     #[inline]
-    pub fn new(first_leaf: Leaf) -> Self {
-        let root_idx = GtreeIdx(0);
-
-        let root = Inode::first_root(first_leaf);
-
-        let mut nodes = Vec::with_capacity(256);
-
-        nodes.push(root);
-
-        Self { nodes, root_idx }
+    fn inode(&self, idx: GtreeIdx) -> &Inode<ARITY, Leaf> {
+        &self.inodes[idx.0]
     }
 
     #[inline]
-    fn root(&self) -> &Inode<ARITY, Leaf> {
-        &self[self.root_idx]
-    }
-
-    #[inline]
-    fn child_lengths(
-        &self,
-        child_idx: GtreeIdx,
-    ) -> impl Iterator<Item = Leaf::Length> + '_ {
-        core::iter::empty()
-    }
-
-    #[inline]
-    fn inode(&mut self, idx: GtreeIdx) -> &mut Inode<ARITY, Leaf> {
-        &mut self.nodes[idx.0]
-    }
-
-    #[inline]
-    fn push(&mut self, inode: Inode<ARITY, Leaf>) -> GtreeIdx {
-        assert!(self.nodes.len() < usize::MAX);
-        self.nodes.push(inode);
-        GtreeIdx(self.nodes.len())
+    fn inode_mut(&mut self, idx: GtreeIdx) -> &mut Inode<ARITY, Leaf> {
+        &mut self.inodes[idx.0]
     }
 
     #[inline]
     pub fn len(&self) -> Leaf::Length {
-        self.root().summary
+        self.root().len()
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn new(first_leaf: Leaf) -> Self {
+        let root = Inode::first_root(first_leaf);
+        let mut nodes = Vec::with_capacity(256);
+        nodes.push(root);
+        Self { inodes: nodes, root_idx: GtreeIdx(0) }
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn push(&mut self, inode: Inode<ARITY, Leaf>) -> GtreeIdx {
+        let idx = GtreeIdx(self.inodes.len());
+        assert!(!idx.is_dangling());
+        self.inodes.push(inode);
+        idx
+    }
+
+    #[inline]
+    fn root(&self) -> &Inode<ARITY, Leaf> {
+        self.inode(self.root_idx)
     }
 
     /// TODO: docs
@@ -115,20 +111,28 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
         let summary = self.len() + root_split.len();
         let other_idx = self.push(root_split);
         let new_root = Inode::new_root(self.root_idx, other_idx, summary);
-        self.root_idx = self.push(new_root);
+        let new_root_idx = self.push(new_root);
+        *self.root_mut().parent_mut() = new_root_idx;
+        *self.inode_mut(other_idx).parent_mut() = new_root_idx;
+        self.root_idx = new_root_idx;
+    }
+
+    #[inline]
+    fn root_mut(&mut self) -> &mut Inode<ARITY, Leaf> {
+        self.inode_mut(self.root_idx)
     }
 
     /// TODO: docs
     #[inline]
-    pub fn with_leaf_mut<F: FnOnce(&mut Leaf) -> Option<Leaf>>(
-        &mut self,
-        at_summary: Leaf::Length,
-        fun: F,
-    ) {
+    pub fn with_leaf_mut<F>(&mut self, at_offset: Leaf::Length, fun: F)
+    where
+        F: FnOnce(&mut Leaf, Leaf::Length) -> (Option<Leaf>, Option<Leaf>),
+    {
         if let Some(root_split) = tree_traversal::recurse_to_leaf(
             self,
             self.root_idx,
-            at_summary,
+            Leaf::Length::default(),
+            at_offset,
             fun,
         ) {
             self.root_has_split(root_split)
@@ -136,207 +140,357 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
     }
 }
 
-/// TODO: docs
-struct Inode<const ARITY: usize, Leaf: Summarize> {
-    /// TODO: docs
-    summary: Leaf::Length,
-
-    /// TODO: docs
-    parent: GtreeIdx,
-
-    /// TODO: docs
-    has_leaves: bool,
-
-    /// TODO: docs
-    children: Children<ARITY, NodePtr<Leaf>>,
+enum Either<Left, Right> {
+    Left(Left),
+    Right(Right),
 }
 
-impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
-    /// TODO: docs
-    #[inline]
-    fn child(&mut self, child_idx: usize) -> Either<GtreeIdx, &mut Leaf> {
-        let child = &mut self.children.as_mut_slice()[child_idx];
+use inode::Inode;
 
-        if self.has_leaves {
-            // SAFETY: all the children are leaf nodes.
-            Either::Right(unsafe { child.as_leaf_mut() })
-        } else {
-            // SAFETY: all the children are internal indexes.
-            Either::Left(unsafe { child.as_idx() })
-        }
+mod inode {
+    use super::*;
+
+    /// TODO: docs
+    pub(super) struct Inode<const ARITY: usize, Leaf: Summarize> {
+        /// TODO: docs
+        summary: Leaf::Length,
+
+        /// TODO: docs
+        parent: GtreeIdx,
+
+        /// TODO: docs
+        has_leaves: bool,
+
+        /// TODO: docs
+        children: Children<ARITY, (Leaf::Length, NodePtr<Leaf>)>,
     }
 
-    /// TODO: docs
-    #[inline]
-    fn first_root(first_leaf: Leaf) -> Self {
-        let len = first_leaf.summarize();
+    impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
+        /// TODO: docs
+        #[inline]
+        pub fn child_mut(
+            &mut self,
+            child_idx: usize,
+        ) -> Either<GtreeIdx, &mut Leaf> {
+            let (_, child) = &mut self.children.as_mut_slice()[child_idx];
 
-        let mut children = Children::new();
-
-        let leaf_ptr = NodePtr::new_to_leaf(first_leaf);
-
-        // SAFETY: the children are still empty so definitely not full.
-        unsafe { children.push(leaf_ptr) };
-
-        Self {
-            summary: len,
-            parent: GtreeIdx::dangling(),
-            has_leaves: true,
-            children,
-        }
-    }
-
-    /// TODO: docs
-    fn insert(
-        &mut self,
-        at_offset: usize,
-        child: NodePtr<Leaf>,
-        child_len: Leaf::Length,
-    ) -> Option<Self> {
-        debug_assert!(at_offset <= self.children.len());
-
-        if self.is_full() {
-            let split_offset = self.children.len() - Self::min_children();
-
-            // Split so that the extra inode always has the minimum number of
-            // children.
-            let rest = if at_offset <= Self::min_children() {
-                let rest = self.split(split_offset);
-                self.insert(at_offset, child, child_len);
-                rest
+            if self.has_leaves {
+                // SAFETY: all the children are leaf nodes.
+                Either::Right(unsafe { child.as_leaf_mut() })
             } else {
-                let mut rest = self.split(split_offset + 1);
-                rest.insert(at_offset - self.children.len(), child, child_len);
-                rest
+                // SAFETY: all the children are internal indexes.
+                Either::Left(unsafe { child.as_idx() })
+            }
+        }
+
+        #[inline]
+        pub fn children(&self) -> &[(Leaf::Length, NodePtr<Leaf>)] {
+            self.children.as_slice()
+        }
+
+        /// TODO: docs
+        #[inline]
+        pub fn first_root(first_leaf: Leaf) -> Self {
+            let len = first_leaf.summarize();
+
+            let mut children = Children::new();
+
+            let leaf_ptr = NodePtr::from_leaf(first_leaf);
+
+            // SAFETY: the children are still empty so definitely not full.
+            unsafe { children.push((len, leaf_ptr)) };
+
+            Self {
+                summary: len,
+                parent: GtreeIdx::dangling(),
+                has_leaves: true,
+                children,
+            }
+        }
+
+        /// TODO: docs
+        fn insert(
+            &mut self,
+            at_offset: usize,
+            child: NodePtr<Leaf>,
+            child_len: Leaf::Length,
+        ) -> Option<Self> {
+            debug_assert!(at_offset <= self.children.len());
+
+            if self.is_full() {
+                let split_offset = self.children.len() - Self::min_children();
+
+                // Split so that the extra inode always has the minimum number
+                // of children.
+                let rest = if at_offset <= Self::min_children() {
+                    let rest = self.split(split_offset);
+                    self.insert(at_offset, child, child_len);
+                    rest
+                } else {
+                    let mut rest = self.split(split_offset + 1);
+                    rest.insert(
+                        at_offset - self.children.len(),
+                        child,
+                        child_len,
+                    );
+                    rest
+                };
+
+                debug_assert_eq!(rest.children.len(), Self::min_children());
+
+                Some(rest)
+            } else {
+                self.summary += child_len;
+                // SAFETY: Self is not full.
+                unsafe { self.children.insert(at_offset, (child_len, child)) };
+                None
+            }
+        }
+
+        #[inline]
+        pub fn insert_leaf(
+            &mut self,
+            at_offset: usize,
+            leaf: Leaf,
+        ) -> Option<Self> {
+            debug_assert!(self.has_leaves);
+            let summary = leaf.summarize();
+            self.insert(at_offset, NodePtr::from_leaf(leaf), summary)
+        }
+
+        #[inline]
+        pub fn insert_internal_idx(
+            &mut self,
+            at_offset: usize,
+            idx: GtreeIdx,
+            len: Leaf::Length,
+        ) -> Option<Self> {
+            debug_assert!(!self.has_leaves);
+            self.insert(at_offset, NodePtr::from_idx(idx), len)
+        }
+
+        #[inline]
+        pub fn insert_two_leaves(
+            &mut self,
+            mut first_offset: usize,
+            mut first_leaf: Leaf,
+            mut second_offset: usize,
+            mut second_leaf: Leaf,
+        ) -> Option<Self> {
+            use core::cmp::Ordering;
+
+            debug_assert!(Self::min_children() >= 2);
+
+            if first_offset > second_offset {
+                (first_leaf, second_leaf, first_offset, second_offset) =
+                    (second_leaf, first_leaf, second_offset, first_offset)
+            }
+
+            debug_assert!(second_offset <= self.children.len());
+
+            if Self::max_children() - self.children.len() < 2 {
+                let split_offset = self.children.len() - Self::min_children();
+
+                let children_after_b = self.children.len() - second_offset;
+
+                // Split so that the extra inode always has the minimum number
+                // of children.
+                //
+                // The logic to make this work is a bit annoying to reason
+                // about. We should probably add some unit tests to avoid
+                // possible regressions.
+                let rest =
+                    match children_after_b.cmp(&(Self::min_children() - 1)) {
+                        Ordering::Greater => {
+                            let rest = self.split(split_offset);
+                            self.insert_two_leaves(
+                                first_offset,
+                                first_leaf,
+                                second_offset,
+                                second_leaf,
+                            );
+                            rest
+                        },
+
+                        Ordering::Less if first_offset >= split_offset + 2 => {
+                            let mut rest = self.split(split_offset + 2);
+                            first_offset -= self.children.len();
+                            second_offset -= self.children.len();
+                            rest.insert_two_leaves(
+                                first_offset,
+                                first_leaf,
+                                second_offset,
+                                second_leaf,
+                            );
+                            rest
+                        },
+
+                        _ => {
+                            let mut rest = self.split(split_offset + 1);
+                            rest.insert_leaf(
+                                second_offset - self.children.len(),
+                                second_leaf,
+                            );
+                            self.insert_leaf(first_offset, first_leaf);
+                            rest
+                        },
+                    };
+
+                debug_assert_eq!(rest.children.len(), Self::min_children());
+
+                Some(rest)
+            } else {
+                self.insert_leaf(first_offset, first_leaf);
+                self.insert_leaf(second_offset + 1, second_leaf);
+                None
+            }
+        }
+
+        #[inline]
+        fn is_full(&self) -> bool {
+            self.children.is_full()
+        }
+
+        #[inline]
+        pub fn len(&self) -> Leaf::Length {
+            self.summary
+        }
+
+        #[inline]
+        const fn max_children() -> usize {
+            ARITY
+        }
+
+        #[inline]
+        const fn min_children() -> usize {
+            ARITY / 2
+        }
+
+        #[inline]
+        pub fn new_root(
+            old_root: GtreeIdx,
+            root_split: GtreeIdx,
+            len: Leaf::Length,
+        ) -> Self {
+            let mut children = Children::new();
+
+            // SAFETY: the children are still empty so definitely not full.
+            unsafe {
+                children.push((len, NodePtr::from_idx(old_root)));
+                children.push((len, NodePtr::from_idx(root_split)));
             };
 
-            debug_assert_eq!(rest.children.len(), Self::min_children());
-
-            Some(rest)
-        } else {
-            self.summary += child_len;
-            // SAFETY: Self is not full.
-            unsafe { self.children.insert(at_offset, child) };
-            None
-        }
-    }
-
-    #[inline]
-    fn insert_leaf(&mut self, at_offset: usize, leaf: Leaf) -> Option<Self> {
-        debug_assert!(self.has_leaves);
-        let summary = leaf.summarize();
-        self.insert(at_offset, NodePtr::new_to_leaf(leaf), summary)
-    }
-
-    #[inline]
-    fn insert_internal_idx(
-        &mut self,
-        at_offset: usize,
-        idx: GtreeIdx,
-        len: Leaf::Length,
-    ) -> Option<Self> {
-        debug_assert!(!self.has_leaves);
-        self.insert(at_offset, NodePtr::new_to_idx(idx), len)
-    }
-
-    #[inline]
-    fn is_full(&self) -> bool {
-        self.children.is_full()
-    }
-
-    #[inline]
-    fn len(&self) -> Leaf::Length {
-        self.summary
-    }
-
-    #[inline]
-    const fn min_children() -> usize {
-        ARITY / 2
-    }
-
-    #[inline]
-    fn new_root(
-        old_root: GtreeIdx,
-        root_split: GtreeIdx,
-        len: Leaf::Length,
-    ) -> Self {
-        let mut children = Children::new();
-
-        // SAFETY: the children are still empty so definitely not full.
-        unsafe {
-            children.push(NodePtr::new_to_idx(old_root));
-            children.push(NodePtr::new_to_idx(root_split));
-        };
-
-        Self {
-            summary: len,
-            parent: GtreeIdx::dangling(),
-            has_leaves: false,
-            children,
-        }
-    }
-
-    #[inline]
-    fn split(&mut self, at_offset: usize) -> Self {
-        let other_children = unsafe { self.children.split(at_offset) };
-
-        // TODO: adjust summaries
-
-        todo!();
-    }
-}
-
-impl<const ARITY: usize, Leaf: Summarize + Debug> Debug
-    for Inode<ARITY, Leaf>
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        todo!();
-    }
-}
-
-impl<const ARITY: usize, Leaf: Summarize + Clone> Clone
-    for Inode<ARITY, Leaf>
-{
-    #[inline]
-    fn clone(&self) -> Self {
-        let mut new_children = Children::new();
-
-        if self.has_leaves {
-            for child in self.children.as_slice() {
-                // SAFETY: this inode stores leaves so the child points to a
-                // leaf that's never been dropped.
-                let leaf = unsafe { child.as_leaf() };
-                let ptr = NodePtr::new_to_leaf(leaf.clone());
-                unsafe { new_children.push(ptr) };
-            }
-        } else {
-            for child in self.children.as_slice() {
-                // SAFETY: this inode stores leaves so the child points to a
-                // leaf that's never been dropped.
-                let idx = unsafe { child.as_idx() };
-                let ptr = NodePtr::new_to_idx(idx);
-                unsafe { new_children.push(ptr) };
+            Self {
+                summary: len,
+                parent: GtreeIdx::dangling(),
+                has_leaves: false,
+                children,
             }
         }
 
-        Self {
-            summary: self.summary,
-            parent: self.parent,
-            has_leaves: self.has_leaves,
-            children: new_children,
+        #[inline]
+        pub fn parent_mut(&mut self) -> &mut GtreeIdx {
+            &mut self.parent
+        }
+
+        #[inline]
+        fn split(&mut self, at_offset: usize) -> Self {
+            let other_children = unsafe { self.children.split(at_offset) };
+
+            let (new_summary, other_summary) =
+                if self.children.len() < other_children.len() {
+                    let mut s = Leaf::Length::default();
+                    for &(child_summary, _) in self.children.as_slice() {
+                        s += child_summary;
+                    }
+                    (s, self.summary - s)
+                } else {
+                    let mut s = Leaf::Length::default();
+                    for &(child_summary, _) in other_children.as_slice() {
+                        s += child_summary;
+                    }
+                    (self.summary - s, s)
+                };
+
+            self.summary = new_summary;
+
+            Self {
+                parent: GtreeIdx::dangling(),
+                has_leaves: self.has_leaves,
+                summary: other_summary,
+                children: other_children,
+            }
         }
     }
-}
 
-impl<const ARITY: usize, Leaf: Summarize> Drop for Inode<ARITY, Leaf> {
-    #[inline]
-    fn drop(&mut self) {
-        if self.has_leaves {
-            for child in self.children.as_mut_slice() {
-                // SAFETY: this inode stores leaves so the child points to a
-                // leaf that's never been dropped.
-                unsafe {
-                    core::ptr::drop_in_place(child.as_leaf_mut());
+    impl<const ARITY: usize, Leaf: Summarize + Debug> Debug
+        for Inode<ARITY, Leaf>
+    {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let mut dbg = f.debug_list();
+
+            let children = self.children();
+
+            if self.has_leaves {
+                for (_, child) in children {
+                    let leaf = unsafe { child.as_leaf() };
+                    dbg.entry(leaf);
+                }
+            } else {
+                for (_, child) in children {
+                    let idx = unsafe { child.as_idx() };
+                    dbg.entry(&idx);
+                }
+            }
+
+            Ok(())
+        }
+    }
+
+    impl<const ARITY: usize, Leaf: Summarize + Clone> Clone
+        for Inode<ARITY, Leaf>
+    {
+        #[inline]
+        fn clone(&self) -> Self {
+            let mut new_children = Children::new();
+
+            if self.has_leaves {
+                for &(len, ref child) in self.children.as_slice() {
+                    // SAFETY: this inode stores leaves so the child points to
+                    // a leaf that's never been dropped.
+                    let leaf = unsafe { child.as_leaf() };
+                    let ptr = NodePtr::from_leaf(leaf.clone());
+                    unsafe { new_children.push((len, ptr)) };
+                }
+            } else {
+                for &(len, ref child) in self.children.as_slice() {
+                    // SAFETY: this inode stores leaves so the child points to
+                    // a leaf that's never been dropped.
+                    let idx = unsafe { child.as_idx() };
+                    let ptr = NodePtr::from_idx(idx);
+                    unsafe { new_children.push((len, ptr)) };
+                }
+            }
+
+            Self {
+                summary: self.summary,
+                parent: self.parent,
+                has_leaves: self.has_leaves,
+                children: new_children,
+            }
+        }
+    }
+
+    impl<const ARITY: usize, Leaf: Summarize> Drop for Inode<ARITY, Leaf> {
+        #[inline]
+        fn drop(&mut self) {
+            if self.has_leaves {
+                for (_, child) in self.children.as_mut_slice() {
+                    // SAFETY: this inode stores leaves so the child points to
+                    // a leaf that's never been dropped.
+                    unsafe {
+                        core::ptr::drop_in_place(child.as_leaf_mut());
+                    }
                 }
             }
         }
@@ -488,36 +642,14 @@ mod node_ptr {
         }
 
         #[inline]
-        pub fn new_to_idx(tree_idx: GtreeIdx) -> Self {
+        pub fn from_idx(tree_idx: GtreeIdx) -> Self {
             Self { to_internal: tree_idx }
         }
 
         #[inline]
-        pub fn new_to_leaf(leaf: Leaf) -> Self {
+        pub fn from_leaf(leaf: Leaf) -> Self {
             let ptr = Box::leak::<'static>(Box::new(leaf));
             Self { to_leaf: unsafe { NonNull::new_unchecked(ptr) } }
-        }
-    }
-
-    impl<Leaf: Summarize> NodePtr<Leaf> {
-        #[inline]
-        pub unsafe fn as_internal<'this, 'tree: 'this, const ARITY: usize>(
-            &'this self,
-            gtree: &'tree Gtree<ARITY, Leaf>,
-        ) -> &'this Inode<ARITY, Leaf> {
-            &gtree[self.to_internal]
-        }
-
-        #[inline]
-        pub unsafe fn as_internal_mut<
-            'this,
-            'tree: 'this,
-            const ARITY: usize,
-        >(
-            &'this mut self,
-            gtree: &'tree mut Gtree<ARITY, Leaf>,
-        ) -> &'this mut Inode<ARITY, Leaf> {
-            &mut gtree[self.to_internal]
         }
     }
 }
@@ -528,18 +660,19 @@ mod tree_traversal {
     pub(super) fn recurse_to_leaf<const N: usize, L, F>(
         gtree: &mut Gtree<N, L>,
         idx: GtreeIdx,
+        mut offset: L::Length,
         at_offset: L::Length,
         fun: F,
     ) -> Option<Inode<N, L>>
     where
         L: Summarize,
-        F: FnOnce(&mut L) -> Option<L>,
+        F: FnOnce(&mut L, L::Length) -> (Option<L>, Option<L>),
     {
-        let mut offset = L::Length::default();
-
         let mut child_idx = 0;
 
-        for (idx, child_len) in gtree.child_lengths(idx).enumerate() {
+        let children = gtree.inode(idx).children();
+
+        for (idx, &(child_len, _)) in children.iter().enumerate() {
             offset += child_len;
 
             if offset >= at_offset {
@@ -549,16 +682,16 @@ mod tree_traversal {
             }
         }
 
-        match gtree.inode(idx).child(child_idx) {
+        match gtree.inode_mut(idx).child_mut(child_idx) {
             Either::Left(next_idx) => {
                 let maybe_split =
-                    recurse_to_leaf(gtree, next_idx, at_offset - offset, fun);
+                    recurse_to_leaf(gtree, next_idx, offset, at_offset, fun);
 
-                if let Some(split) = maybe_split {
-                    // TODO: when am I updating split's parent?
+                if let Some(mut split) = maybe_split {
+                    *split.parent_mut() = idx;
                     let len = split.len();
                     let pushed_idx = gtree.push(split);
-                    let inode = gtree.inode(idx);
+                    let inode = gtree.inode_mut(idx);
                     inode.insert_internal_idx(child_idx + 1, pushed_idx, len)
                 } else {
                     None
@@ -566,22 +699,22 @@ mod tree_traversal {
             },
 
             Either::Right(leaf) => {
-                if let Some(other) = fun(leaf) {
-                    let inode = gtree.inode(idx);
-                    inode.insert_leaf(child_idx + 1, other)
+                let (left, right) = fun(leaf, offset);
+
+                if let Some(left) = left {
+                    let inode = gtree.inode_mut(idx);
+
+                    let offset = child_idx + 1;
+
+                    if let Some(right) = right {
+                        inode.insert_two_leaves(offset, left, offset, right)
+                    } else {
+                        inode.insert_leaf(offset, left)
+                    }
                 } else {
                     None
                 }
             },
         }
-    }
-}
-
-use either::Either;
-
-mod either {
-    pub(super) enum Either<Left, Right> {
-        Left(Left),
-        Right(Right),
     }
 }
