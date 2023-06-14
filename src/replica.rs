@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::*;
 
 /// TODO: docs
-const ARITY: usize = 32;
+const ARITY: usize = 4;
 
 /// TODO: docs
 pub struct Replica<M: Metric = ByteMetric> {
@@ -153,25 +153,36 @@ impl<M: Metric> Replica<M> {
         L: Into<Length>,
         T: Into<String>,
     {
+        let offset = offset.into();
+
         let text = text.into();
 
         if text.is_empty() {
             return CrdtEdit::noop();
         }
 
-        let len = M::len(&text);
+        let run_len = M::len(&text);
 
-        //let anchor = upstream::insert(
-        //    &mut self.insertion_runs,
-        //    &mut self.run_indexes,
-        //    &mut self.local_clock,
-        //    &mut self.lamport_clock,
-        //    self.id,
-        //    offset.into(),
-        //    len,
-        //);
+        let mut anchor = None;
+
+        let insert_with = |run: &mut InsertionRun, run_offset: Length| {
+            let (new_run, split_run) = run.bisect_by_local_run(
+                self.id,
+                run_len,
+                offset - run_offset,
+                &mut self.local_clock,
+                &mut self.lamport_clock,
+            );
+
+            anchor = new_run.as_ref().map(|r| r.anchor().clone());
+
+            (new_run, split_run)
+        };
+
+        self.insertion_runs.with_leaf_mut(offset, insert_with);
 
         CrdtEdit::noop()
+
         // CrdtEdit::insertion(text, id, anchor, lamport_ts)
     }
 

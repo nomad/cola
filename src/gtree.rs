@@ -29,8 +29,14 @@ pub struct Gtree<const ARITY: usize, Leaf: Summarize> {
 }
 
 /// TODO: docs
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct GtreeIdx(usize);
+
+impl Debug for GtreeIdx {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "GtreeIdx({})", self.0)
+    }
+}
 
 impl GtreeIdx {
     #[inline]
@@ -54,15 +60,26 @@ impl<const ARITY: usize, Leaf: Summarize + Debug> Debug
     for Gtree<ARITY, Leaf>
 {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        struct GtreeKey {
+            idx: usize,
+            is_root: bool,
+        }
+
+        impl Debug for GtreeKey {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                let prefix = if self.is_root { "R -> " } else { "" };
+                write!(f, "{prefix}{}", self.idx)
+            }
+        }
+
         let mut dbg = f.debug_map();
 
         for (idx, inode) in self.inodes.iter().enumerate() {
-            let root_marker = if idx == self.root_idx.0 { "R" } else { "" };
-            let key = format!(" {root_marker} {idx}");
+            let key = GtreeKey { idx, is_root: idx == self.root_idx.0 };
             dbg.entry(&key, inode);
         }
 
-        Ok(())
+        dbg.finish()
     }
 }
 
@@ -427,9 +444,29 @@ mod inode {
         for Inode<ARITY, Leaf>
     {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            let mut dbg = f.debug_list();
+            struct DebugInternal<Leaf: Summarize> {
+                len: Leaf::Length,
+                idx: GtreeIdx,
+            }
+
+            impl<Leaf: Summarize> Debug for DebugInternal<Leaf> {
+                fn fmt(
+                    &self,
+                    f: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    write!(f, "{:?} @ {:?}", self.len, self.idx)
+                }
+            }
 
             let children = self.children();
+
+            if !self.parent.is_dangling() {
+                write!(f, "{:?} <- ", self.parent)?;
+            }
+
+            write!(f, "{:?} @ ", self.summary)?;
+
+            let mut dbg = f.debug_list();
 
             if self.has_leaves {
                 for (_, child) in children {
@@ -437,13 +474,14 @@ mod inode {
                     dbg.entry(leaf);
                 }
             } else {
-                for (_, child) in children {
+                for &(len, ref child) in children {
                     let idx = unsafe { child.as_idx() };
-                    dbg.entry(&idx);
+                    let internal = DebugInternal::<Leaf> { len, idx };
+                    dbg.entry(&internal);
                 }
             }
 
-            Ok(())
+            dbg.finish()
         }
     }
 
@@ -594,6 +632,8 @@ mod children {
                     self.len() - at_offset,
                 );
             };
+
+            split.len = self.len - at_offset;
 
             self.len = at_offset;
 
