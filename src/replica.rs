@@ -93,22 +93,31 @@ impl<M: Metric> Replica<M> {
 
     /// TODO: docs
     #[inline]
-    pub fn deleted<R>(&mut self, byte_range: R) -> CrdtEdit
+    pub fn deleted<R>(&mut self, range: R) -> CrdtEdit
     where
         R: RangeBounds<Length>,
     {
-        let (start, end) =
-            range_bounds_to_start_end(byte_range, 0, self.len());
+        let (start, end) = range_bounds_to_start_end(range, 0, self.len());
 
         if start == end {
             return CrdtEdit::no_op();
         }
 
-        //upstream::delete(
-        //    &mut self.insertion_runs,
-        //    &mut self.run_indexes,
-        //    start..end,
-        //);
+        let delete_leaf = InsertionRun::delete;
+
+        let delete_from = InsertionRun::delete_from;
+
+        let delete_up_to = InsertionRun::delete_from;
+
+        let delete_range = InsertionRun::delete_range;
+
+        self.insertion_runs.delete_range(
+            start..end,
+            delete_leaf,
+            delete_from,
+            delete_up_to,
+            delete_range,
+        );
 
         CrdtEdit::no_op()
     }
@@ -124,11 +133,8 @@ impl<M: Metric> Replica<M> {
 
         let insertion_id = InsertionId::new(replica_id, local_clock.next());
 
-        let origin_run = InsertionRun::origin(
-            insertion_id.clone(),
-            lamport_clock.next(),
-            len,
-        );
+        let origin_run =
+            InsertionRun::origin(insertion_id, lamport_clock.next(), len);
 
         // let run_pointers =
         //     RunIdRegistry::new(insertion_id, origin_run.run_id.clone(), len);
@@ -165,11 +171,11 @@ impl<M: Metric> Replica<M> {
 
         let mut anchor = None;
 
-        let insert_with = |run: &mut InsertionRun, run_offset: Length| {
+        let insert_with = |run: &mut InsertionRun, offset: Length| {
             let (new_run, split_run) = run.bisect_by_local_run(
                 self.id,
                 run_len,
-                offset - run_offset,
+                offset,
                 &mut self.local_clock,
                 &mut self.lamport_clock,
             );
@@ -179,7 +185,7 @@ impl<M: Metric> Replica<M> {
             (new_run, split_run)
         };
 
-        self.insertion_runs.with_leaf_mut(offset, insert_with);
+        self.insertion_runs.insert_at_offset(offset, insert_with);
 
         CrdtEdit::no_op()
 

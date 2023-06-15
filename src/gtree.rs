@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use core::ops::{Add, AddAssign, Sub, SubAssign};
+use core::ops::{Add, AddAssign, Range, Sub, SubAssign};
 
 /// TODO: docs
 pub trait Summarize: Debug + Sized + 'static {
@@ -110,7 +110,12 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
 
     /// TODO: docs
     #[inline]
-    fn push(&mut self, inode: Inode<ARITY, Leaf>) -> GtreeIdx {
+    fn push(
+        &mut self,
+        mut inode: Inode<ARITY, Leaf>,
+        parent_idx: GtreeIdx,
+    ) -> GtreeIdx {
+        *inode.parent_mut() = parent_idx;
         let idx = GtreeIdx(self.inodes.len());
         assert!(!idx.is_dangling());
         self.inodes.push(inode);
@@ -126,12 +131,12 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
     #[inline]
     fn root_has_split(&mut self, root_split: Inode<ARITY, Leaf>) {
         let split_len = root_split.len();
-        let split_idx = self.push(root_split);
+        let split_idx = self.push(root_split, GtreeIdx::dangling());
         let new_root = Inode::new_root(
             (self.root_idx, self.root().len()),
             (split_idx, split_len),
         );
-        let new_root_idx = self.push(new_root);
+        let new_root_idx = self.push(new_root, GtreeIdx::dangling());
         *self.root_mut().parent_mut() = new_root_idx;
         *self.inode_mut(split_idx).parent_mut() = new_root_idx;
         self.root_idx = new_root_idx;
@@ -144,16 +149,43 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
 
     /// TODO: docs
     #[inline]
-    pub fn with_leaf_mut<F>(&mut self, at_offset: Leaf::Length, fun: F)
+    pub fn insert_at_offset<F>(&mut self, offset: Leaf::Length, fun: F)
     where
         F: FnOnce(&mut Leaf, Leaf::Length) -> (Option<Leaf>, Option<Leaf>),
     {
-        if let Some(root_split) = tree_traversal::recurse_to_leaf(
+        if let Some(root_split) =
+            insert::insert_at_offset(self, self.root_idx, offset, fun)
+        {
+            self.root_has_split(root_split)
+        }
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn delete_range<DelLeaf, DelFrom, DelUpTo, DelRange>(
+        &mut self,
+        range: Range<Leaf::Length>,
+        mut delete_leaf: DelLeaf,
+        delete_from: DelFrom,
+        delete_up_to: DelUpTo,
+        delete_range: DelRange,
+    ) where
+        DelLeaf: FnMut(&mut Leaf),
+        DelFrom: FnOnce(&mut Leaf, Leaf::Length) -> Option<Leaf>,
+        DelUpTo: FnOnce(&mut Leaf, Leaf::Length) -> Option<Leaf>,
+        DelRange: FnOnce(
+            &mut Leaf,
+            Range<Leaf::Length>,
+        ) -> (Option<Leaf>, Option<Leaf>),
+    {
+        if let Some(root_split) = delete::delete_range(
             self,
             self.root_idx,
-            Leaf::Length::default(),
-            at_offset,
-            fun,
+            range,
+            &mut delete_leaf,
+            delete_from,
+            delete_up_to,
+            delete_range,
         ) {
             self.root_has_split(root_split)
         }
@@ -186,6 +218,70 @@ mod inode {
     }
 
     impl<const ARITY: usize, Leaf: Summarize> Inode<ARITY, Leaf> {
+        /// TODO: docs
+        #[inline]
+        pub fn child_at_offset<const WITH_RIGHT_BIAS: bool>(
+            &self,
+            at_offset: Leaf::Length,
+        ) -> (usize, Leaf::Length) {
+            let cmp = if WITH_RIGHT_BIAS {
+                Leaf::Length::gt
+            } else {
+                Leaf::Length::ge
+            };
+
+            let mut offset = Leaf::Length::default();
+
+            let children = self.children();
+
+            for (idx, &(child_len, _)) in children.iter().enumerate() {
+                offset += child_len;
+
+                if cmp(&offset, &at_offset) {
+                    return (idx, offset - child_len);
+                }
+            }
+
+            unreachable!();
+        }
+
+        /// TODO: docs
+        #[inline]
+        pub fn child_containing_range(
+            &self,
+            range: Range<Leaf::Length>,
+        ) -> Option<(usize, Leaf::Length)> {
+            let mut offset = Leaf::Length::default();
+
+            let children = self.children();
+
+            for (idx, &(child_len, _)) in children.iter().enumerate() {
+                offset += child_len;
+
+                if offset > range.start {
+                    if offset >= range.end {
+                        return Some((idx, offset - child_len));
+                    } else {
+                        return None;
+                    }
+                }
+            }
+
+            unreachable!();
+        }
+
+        pub fn delete_children(
+            &mut self,
+            idx_range: Range<usize>,
+            _del_leaf: &mut impl FnOnce(&mut Leaf),
+        ) {
+            for (child_len, _) in &mut self.children.as_mut_slice()[idx_range]
+            {
+                let old_len = core::mem::take(child_len);
+                self.summary -= old_len;
+            }
+        }
+
         /// TODO: docs
         #[inline]
         pub fn child_mut(
@@ -241,7 +337,7 @@ mod inode {
         }
 
         /// TODO: docs
-        fn insert(
+        pub fn insert(
             &mut self,
             at_offset: usize,
             child: NodePtr<Leaf>,
@@ -279,6 +375,77 @@ mod inode {
             }
         }
 
+        /// TODO: docs
+        pub fn insert_two(
+            &mut self,
+            mut a_offset: usize,
+            mut a: NodePtr<Leaf>,
+            mut a_len: Leaf::Length,
+            mut b_offset: usize,
+            mut b: NodePtr<Leaf>,
+            mut b_len: Leaf::Length,
+        ) -> Option<Self> {
+            use core::cmp::Ordering;
+
+            debug_assert!(Self::min_children() >= 2);
+
+            if a_offset > b_offset {
+                (a, b, a_offset, b_offset, a_len, b_len) =
+                    (b, a, b_offset, a_offset, b_len, a_len)
+            }
+
+            debug_assert!(b_offset <= self.children.len());
+
+            if Self::max_children() - self.children.len() < 2 {
+                let split_offset = self.children.len() - Self::min_children();
+
+                let children_after_b = self.children.len() - b_offset;
+
+                // Split so that the extra inode always has the minimum number
+                // of children.
+                //
+                // The logic to make this work is a bit annoying to reason
+                // about. We should probably add some unit tests to avoid
+                // possible regressions.
+                let rest = match children_after_b
+                    .cmp(&(Self::min_children() - 1))
+                {
+                    Ordering::Greater => {
+                        let rest = self.split(split_offset);
+                        self.insert_two(
+                            a_offset, a, a_len, b_offset, b, b_len,
+                        );
+                        rest
+                    },
+
+                    Ordering::Less if a_offset >= split_offset + 2 => {
+                        let mut rest = self.split(split_offset + 2);
+                        a_offset -= self.children.len();
+                        b_offset -= self.children.len();
+                        rest.insert_two(
+                            a_offset, a, a_len, b_offset, b, b_len,
+                        );
+                        rest
+                    },
+
+                    _ => {
+                        let mut rest = self.split(split_offset + 1);
+                        rest.insert(b_offset - self.children.len(), b, b_len);
+                        self.insert(a_offset, a, a_len);
+                        rest
+                    },
+                };
+
+                debug_assert_eq!(rest.children.len(), Self::min_children());
+
+                Some(rest)
+            } else {
+                self.insert(a_offset, a, a_len);
+                self.insert(b_offset + 1, b, b_len);
+                None
+            }
+        }
+
         #[inline]
         pub fn insert_leaf(
             &mut self,
@@ -291,7 +458,7 @@ mod inode {
         }
 
         #[inline]
-        pub fn insert_internal_idx(
+        pub fn insert_idx(
             &mut self,
             at_offset: usize,
             idx: GtreeIdx,
@@ -304,78 +471,41 @@ mod inode {
         #[inline]
         pub fn insert_two_leaves(
             &mut self,
-            mut first_offset: usize,
-            mut first_leaf: Leaf,
-            mut second_offset: usize,
-            mut second_leaf: Leaf,
+            first_offset: usize,
+            first_leaf: Leaf,
+            second_offset: usize,
+            second_leaf: Leaf,
         ) -> Option<Self> {
-            use core::cmp::Ordering;
+            let first_len = first_leaf.summarize();
+            let second_len = first_leaf.summarize();
+            self.insert_two(
+                first_offset,
+                NodePtr::from_leaf(first_leaf),
+                first_len,
+                second_offset,
+                NodePtr::from_leaf(second_leaf),
+                second_len,
+            )
+        }
 
-            debug_assert!(Self::min_children() >= 2);
-
-            if first_offset > second_offset {
-                (first_leaf, second_leaf, first_offset, second_offset) =
-                    (second_leaf, first_leaf, second_offset, first_offset)
-            }
-
-            debug_assert!(second_offset <= self.children.len());
-
-            if Self::max_children() - self.children.len() < 2 {
-                let split_offset = self.children.len() - Self::min_children();
-
-                let children_after_b = self.children.len() - second_offset;
-
-                // Split so that the extra inode always has the minimum number
-                // of children.
-                //
-                // The logic to make this work is a bit annoying to reason
-                // about. We should probably add some unit tests to avoid
-                // possible regressions.
-                let rest =
-                    match children_after_b.cmp(&(Self::min_children() - 1)) {
-                        Ordering::Greater => {
-                            let rest = self.split(split_offset);
-                            self.insert_two_leaves(
-                                first_offset,
-                                first_leaf,
-                                second_offset,
-                                second_leaf,
-                            );
-                            rest
-                        },
-
-                        Ordering::Less if first_offset >= split_offset + 2 => {
-                            let mut rest = self.split(split_offset + 2);
-                            first_offset -= self.children.len();
-                            second_offset -= self.children.len();
-                            rest.insert_two_leaves(
-                                first_offset,
-                                first_leaf,
-                                second_offset,
-                                second_leaf,
-                            );
-                            rest
-                        },
-
-                        _ => {
-                            let mut rest = self.split(split_offset + 1);
-                            rest.insert_leaf(
-                                second_offset - self.children.len(),
-                                second_leaf,
-                            );
-                            self.insert_leaf(first_offset, first_leaf);
-                            rest
-                        },
-                    };
-
-                debug_assert_eq!(rest.children.len(), Self::min_children());
-
-                Some(rest)
-            } else {
-                self.insert_leaf(first_offset, first_leaf);
-                self.insert_leaf(second_offset + 1, second_leaf);
-                None
-            }
+        #[inline]
+        pub fn insert_two_idxs(
+            &mut self,
+            first_offset: usize,
+            first_idx: GtreeIdx,
+            first_len: Leaf::Length,
+            second_offset: usize,
+            second_idx: GtreeIdx,
+            second_len: Leaf::Length,
+        ) -> Option<Self> {
+            self.insert_two(
+                first_offset,
+                NodePtr::from_idx(first_idx),
+                first_len,
+                second_offset,
+                NodePtr::from_idx(second_idx),
+                second_len,
+            )
         }
 
         #[inline]
@@ -710,13 +840,14 @@ mod node_ptr {
     }
 }
 
-mod tree_traversal {
+mod insert {
+    //! TODO: docs.
+
     use super::*;
 
-    pub(super) fn recurse_to_leaf<const N: usize, L, F>(
+    pub(super) fn insert_at_offset<const N: usize, L, F>(
         gtree: &mut Gtree<N, L>,
         idx: GtreeIdx,
-        mut offset: L::Length,
         at_offset: L::Length,
         fun: F,
     ) -> Option<Inode<N, L>>
@@ -724,24 +855,14 @@ mod tree_traversal {
         L: Summarize,
         F: FnOnce(&mut L, L::Length) -> (Option<L>, Option<L>),
     {
-        let mut child_idx = 0;
+        let inode = gtree.inode(idx);
 
-        let children = gtree.inode(idx).children();
-
-        for (idx, &(child_len, _)) in children.iter().enumerate() {
-            offset += child_len;
-
-            if offset >= at_offset {
-                offset -= child_len;
-                child_idx = idx;
-                break;
-            }
-        }
+        let (child_idx, offset) = inode.child_at_offset::<false>(at_offset);
 
         match gtree.inode_mut(idx).child_mut(child_idx) {
             Either::Left(next_idx) => {
                 let maybe_split =
-                    recurse_to_leaf(gtree, next_idx, offset, at_offset, fun);
+                    insert_at_offset(gtree, next_idx, at_offset - offset, fun);
 
                 let new_summary = gtree.inode(next_idx).len();
 
@@ -749,12 +870,11 @@ mod tree_traversal {
 
                 inode.update_summary(child_idx, new_summary);
 
-                if let Some(mut split) = maybe_split {
-                    *split.parent_mut() = idx;
+                if let Some(split) = maybe_split {
                     let len = split.len();
-                    let pushed_idx = gtree.push(split);
+                    let pushed_idx = gtree.push(split, idx);
                     let inode = gtree.inode_mut(idx);
-                    inode.insert_internal_idx(child_idx + 1, pushed_idx, len)
+                    inode.insert_idx(child_idx + 1, pushed_idx, len)
                 } else {
                     None
                 }
@@ -782,5 +902,354 @@ mod tree_traversal {
                 }
             },
         }
+    }
+}
+
+mod delete {
+    //! TODO: docs.
+
+    use super::*;
+
+    pub(super) fn delete_range<
+        const N: usize,
+        L,
+        DelLeaf,
+        DelFrom,
+        DelUpTo,
+        DelRange,
+    >(
+        gtree: &mut Gtree<N, L>,
+        idx: GtreeIdx,
+        mut range: Range<L::Length>,
+        del_leaf: &mut DelLeaf,
+        del_from: DelFrom,
+        del_up_to: DelUpTo,
+        del_range: DelRange,
+    ) -> Option<Inode<N, L>>
+    where
+        L: Summarize,
+        DelLeaf: FnMut(&mut L),
+        DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
+        DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
+        DelRange: FnOnce(&mut L, Range<L::Length>) -> (Option<L>, Option<L>),
+    {
+        let inode = gtree.inode(idx);
+
+        let Some((child_idx, offset)) =
+            inode.child_containing_range(range.clone()) else {
+                return delete_range_in_inode(
+                    gtree,
+                    idx,
+                    range,
+                    del_leaf,
+                    del_from,
+                    del_up_to,
+                );
+            };
+
+        range.start -= offset;
+
+        range.end -= offset;
+
+        match gtree.inode_mut(idx).child_mut(child_idx) {
+            Either::Left(next_idx) => {
+                let maybe_split = delete_range(
+                    gtree, next_idx, range, del_leaf, del_from, del_up_to,
+                    del_range,
+                );
+
+                let new_summary = gtree.inode(next_idx).len();
+
+                let inode = gtree.inode_mut(idx);
+
+                inode.update_summary(child_idx, new_summary);
+
+                if let Some(split) = maybe_split {
+                    let len = split.len();
+                    let pushed_idx = gtree.push(split, idx);
+                    let inode = gtree.inode_mut(idx);
+                    inode.insert_idx(child_idx + 1, pushed_idx, len)
+                } else {
+                    None
+                }
+            },
+
+            Either::Right(leaf) => {
+                let (left, right) = del_range(leaf, range);
+
+                let new_summary = leaf.summarize();
+
+                let inode = gtree.inode_mut(idx);
+
+                inode.update_summary(child_idx, new_summary);
+
+                if let Some(left) = left {
+                    let offset = child_idx + 1;
+
+                    if let Some(right) = right {
+                        inode.insert_two_leaves(offset, left, offset, right)
+                    } else {
+                        inode.insert_leaf(offset, left)
+                    }
+                } else {
+                    None
+                }
+            },
+        }
+    }
+
+    fn delete_range_in_inode<const N: usize, L, DelLeaf, DelFrom, DelUpTo>(
+        gtree: &mut Gtree<N, L>,
+        idx: GtreeIdx,
+        range: Range<L::Length>,
+        del_leaf: &mut DelLeaf,
+        del_from: DelFrom,
+        del_up_to: DelUpTo,
+    ) -> Option<Inode<N, L>>
+    where
+        L: Summarize,
+        DelLeaf: FnMut(&mut L),
+        DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
+        DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
+    {
+        let inode = gtree.inode_mut(idx);
+
+        let (start_idx, offset) = inode.child_at_offset::<true>(range.start);
+
+        let delete_from_len = range.start - offset;
+
+        let extra_from_start = match inode.child_mut(start_idx) {
+            Either::Left(child_idx) => {
+                let maybe_split = delete_from(
+                    gtree,
+                    child_idx,
+                    delete_from_len,
+                    del_leaf,
+                    del_from,
+                );
+
+                let new_summary = gtree.inode(child_idx).len();
+                let inode = gtree.inode_mut(idx);
+                inode.update_summary(start_idx, new_summary);
+
+                maybe_split.map(|inode| {
+                    let len = inode.len();
+                    let idx = gtree.push(inode, idx);
+                    (NodePtr::from_idx(idx), len)
+                })
+            },
+
+            Either::Right(leaf) => {
+                let extra = del_from(leaf, delete_from_len);
+
+                let new_summary = leaf.summarize();
+                let inode = gtree.inode_mut(idx);
+                inode.update_summary(start_idx, new_summary);
+
+                extra.map(|leaf| {
+                    let len = leaf.summarize();
+                    (NodePtr::from_leaf(leaf), len)
+                })
+            },
+        };
+
+        let inode = gtree.inode_mut(idx);
+
+        let (end_idx, offset) = inode.child_at_offset::<false>(range.end);
+
+        inode.delete_children(start_idx + 1..end_idx, del_leaf);
+
+        let delete_up_to_len = range.end - offset;
+
+        let extra_from_end = match inode.child_mut(end_idx) {
+            Either::Left(child_idx) => {
+                let maybe_split = delete_up_to(
+                    gtree,
+                    child_idx,
+                    delete_up_to_len,
+                    del_leaf,
+                    del_up_to,
+                );
+
+                let new_summary = gtree.inode(child_idx).len();
+                let inode = gtree.inode_mut(idx);
+                inode.update_summary(start_idx, new_summary);
+
+                maybe_split.map(|inode| {
+                    let len = inode.len();
+                    let idx = gtree.push(inode, idx);
+                    (NodePtr::from_idx(idx), len)
+                })
+            },
+
+            Either::Right(leaf) => {
+                let split = del_up_to(leaf, delete_up_to_len);
+
+                let new_summary = leaf.summarize();
+                let inode = gtree.inode_mut(idx);
+                inode.update_summary(end_idx, new_summary);
+
+                split.map(|leaf| {
+                    let len = leaf.summarize();
+                    (NodePtr::from_leaf(leaf), len)
+                })
+            },
+        };
+
+        let start_offset = start_idx + 1;
+
+        let end_offset = start_idx + 1;
+
+        match (extra_from_start, extra_from_end) {
+            (Some((start, start_len)), Some((end, end_len))) => {
+                let inode = gtree.inode_mut(idx);
+                inode.insert_two(
+                    start_offset,
+                    start,
+                    start_len,
+                    end_offset,
+                    end,
+                    end_len,
+                )
+            },
+
+            (Some((start, len)), None) => {
+                let inode = gtree.inode_mut(idx);
+                inode.insert(start_offset, start, len)
+            },
+
+            (None, Some((end, len))) => {
+                let inode = gtree.inode_mut(idx);
+                inode.insert(end_offset, end, len)
+            },
+
+            (None, None) => None,
+        }
+    }
+
+    fn delete_from<const N: usize, L, DelLeaf, DelFrom>(
+        gtree: &mut Gtree<N, L>,
+        idx: GtreeIdx,
+        from: L::Length,
+        del_leaf: &mut DelLeaf,
+        del_from: DelFrom,
+    ) -> Option<Inode<N, L>>
+    where
+        L: Summarize,
+        DelLeaf: FnMut(&mut L),
+        DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
+    {
+        let inode = gtree.inode(idx);
+
+        let (child_idx, offset) = inode.child_at_offset::<true>(from);
+
+        let from = from - offset;
+
+        let split = match gtree.inode_mut(idx).child_mut(child_idx) {
+            Either::Left(next_idx) => {
+                let maybe_split =
+                    delete_from(gtree, idx, from, del_leaf, del_from);
+
+                let new_summary = gtree.inode(next_idx).len();
+
+                let inode = gtree.inode_mut(idx);
+
+                inode.update_summary(child_idx, new_summary);
+
+                if let Some(split) = maybe_split {
+                    let len = split.len();
+                    let pushed_idx = gtree.push(split, idx);
+                    let inode = gtree.inode_mut(idx);
+                    inode.insert_idx(child_idx + 1, pushed_idx, len)
+                } else {
+                    None
+                }
+            },
+
+            Either::Right(leaf) => {
+                let split = del_from(leaf, from);
+
+                let new_summary = leaf.summarize();
+
+                let inode = gtree.inode_mut(idx);
+
+                inode.update_summary(child_idx, new_summary);
+
+                if let Some(left) = split {
+                    let offset = child_idx + 1;
+                    inode.insert_leaf(offset, left)
+                } else {
+                    None
+                }
+            },
+        };
+
+        let inode = gtree.inode_mut(idx);
+
+        let len = inode.children().len();
+
+        inode.delete_children(child_idx + 1..len, del_leaf);
+
+        split
+    }
+
+    fn delete_up_to<const N: usize, L, DelLeaf, DelUpTo>(
+        gtree: &mut Gtree<N, L>,
+        idx: GtreeIdx,
+        up_to: L::Length,
+        del_leaf: &mut DelLeaf,
+        del_up_to: DelUpTo,
+    ) -> Option<Inode<N, L>>
+    where
+        L: Summarize,
+        DelLeaf: FnMut(&mut L),
+        DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
+    {
+        let inode = gtree.inode_mut(idx);
+
+        let (child_idx, offset) = inode.child_at_offset::<false>(up_to);
+
+        inode.delete_children(0..child_idx, del_leaf);
+
+        let up_to = up_to - offset;
+
+        let split = match gtree.inode_mut(idx).child_mut(child_idx) {
+            Either::Left(next_idx) => {
+                let maybe_split =
+                    delete_up_to(gtree, next_idx, up_to, del_leaf, del_up_to);
+
+                let new_summary = gtree.inode(next_idx).len();
+                let inode = gtree.inode_mut(idx);
+                inode.update_summary(child_idx, new_summary);
+
+                if let Some(split) = maybe_split {
+                    let len = split.len();
+                    let pushed_idx = gtree.push(split, idx);
+                    let inode = gtree.inode_mut(idx);
+                    inode.insert_idx(child_idx + 1, pushed_idx, len)
+                } else {
+                    None
+                }
+            },
+
+            Either::Right(leaf) => {
+                let split = del_up_to(leaf, up_to);
+
+                let new_summary = leaf.summarize();
+
+                let inode = gtree.inode_mut(idx);
+
+                inode.update_summary(child_idx, new_summary);
+
+                if let Some(left) = split {
+                    let offset = child_idx + 1;
+                    inode.insert_leaf(offset, left)
+                } else {
+                    None
+                }
+            },
+        };
+
+        split
     }
 }
