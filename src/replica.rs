@@ -107,7 +107,7 @@ impl<M: Metric> Replica<M> {
 
         let delete_from = InsertionRun::delete_from;
 
-        let delete_up_to = InsertionRun::delete_from;
+        let delete_up_to = InsertionRun::delete_up_to;
 
         let delete_range = InsertionRun::delete_range;
 
