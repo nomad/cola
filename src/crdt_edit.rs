@@ -20,7 +20,7 @@ impl CrdtEdit {
     }
 
     #[inline]
-    pub(super) fn noop() -> Self {
+    pub(super) fn no_op() -> Self {
         Self { kind: CrdtEditKind::NoOp }
     }
 }

@@ -101,7 +101,7 @@ impl<M: Metric> Replica<M> {
             range_bounds_to_start_end(byte_range, 0, self.len());
 
         if start == end {
-            return CrdtEdit::noop();
+            return CrdtEdit::no_op();
         }
 
         //upstream::delete(
@@ -110,7 +110,7 @@ impl<M: Metric> Replica<M> {
         //    start..end,
         //);
 
-        CrdtEdit::noop()
+        CrdtEdit::no_op()
     }
 
     /// TODO: docs
@@ -158,7 +158,7 @@ impl<M: Metric> Replica<M> {
         let text = text.into();
 
         if text.is_empty() {
-            return CrdtEdit::noop();
+            return CrdtEdit::no_op();
         }
 
         let run_len = M::len(&text);
@@ -181,7 +181,7 @@ impl<M: Metric> Replica<M> {
 
         self.insertion_runs.with_leaf_mut(offset, insert_with);
 
-        CrdtEdit::noop()
+        CrdtEdit::no_op()
 
         // CrdtEdit::insertion(text, id, anchor, lamport_ts)
     }
