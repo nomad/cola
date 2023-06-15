@@ -373,7 +373,11 @@ pub struct Anchor {
 
 impl core::fmt::Debug for Anchor {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{:?} @ {}", self.insertion_id, self.offset)
+        if self == &Self::origin() {
+            write!(f, "origin")
+        } else {
+            write!(f, "{:?} @ {}", self.insertion_id, self.offset)
+        }
     }
 }
 
