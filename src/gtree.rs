@@ -125,12 +125,15 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
     /// TODO: docs
     #[inline]
     fn root_has_split(&mut self, root_split: Inode<ARITY, Leaf>) {
-        let summary = self.len() + root_split.len();
-        let other_idx = self.push(root_split);
-        let new_root = Inode::new_root(self.root_idx, other_idx, summary);
+        let split_len = root_split.len();
+        let split_idx = self.push(root_split);
+        let new_root = Inode::new_root(
+            (self.root_idx, self.root().len()),
+            (split_idx, split_len),
+        );
         let new_root_idx = self.push(new_root);
         *self.root_mut().parent_mut() = new_root_idx;
-        *self.inode_mut(other_idx).parent_mut() = new_root_idx;
+        *self.inode_mut(split_idx).parent_mut() = new_root_idx;
         self.root_idx = new_root_idx;
     }
 
@@ -198,6 +201,18 @@ mod inode {
                 // SAFETY: all the children are internal indexes.
                 Either::Left(unsafe { child.as_idx() })
             }
+        }
+
+        #[inline]
+        pub fn update_summary(
+            &mut self,
+            child_idx: usize,
+            new_summary: Leaf::Length,
+        ) {
+            let old_summary = &mut self.children.as_mut_slice()[child_idx].0;
+            self.summary -= *old_summary;
+            self.summary += new_summary;
+            *old_summary = new_summary;
         }
 
         #[inline]
@@ -385,20 +400,21 @@ mod inode {
 
         #[inline]
         pub fn new_root(
-            old_root: GtreeIdx,
-            root_split: GtreeIdx,
-            len: Leaf::Length,
+            (old_root, old_summary): (GtreeIdx, Leaf::Length),
+            (root_split, split_summary): (GtreeIdx, Leaf::Length),
         ) -> Self {
             let mut children = Children::new();
 
+            let total_summary = old_summary + split_summary;
+
             // SAFETY: the children are still empty so definitely not full.
             unsafe {
-                children.push((len, NodePtr::from_idx(old_root)));
-                children.push((len, NodePtr::from_idx(root_split)));
+                children.push((old_summary, NodePtr::from_idx(old_root)));
+                children.push((split_summary, NodePtr::from_idx(root_split)));
             };
 
             Self {
-                summary: len,
+                summary: total_summary,
                 parent: GtreeIdx::dangling(),
                 has_leaves: false,
                 children,
@@ -727,6 +743,12 @@ mod tree_traversal {
                 let maybe_split =
                     recurse_to_leaf(gtree, next_idx, offset, at_offset, fun);
 
+                let new_summary = gtree.inode(next_idx).len();
+
+                let inode = gtree.inode_mut(idx);
+
+                inode.update_summary(child_idx, new_summary);
+
                 if let Some(mut split) = maybe_split {
                     *split.parent_mut() = idx;
                     let len = split.len();
@@ -741,9 +763,13 @@ mod tree_traversal {
             Either::Right(leaf) => {
                 let (left, right) = fun(leaf, offset);
 
-                if let Some(left) = left {
-                    let inode = gtree.inode_mut(idx);
+                let new_summary = leaf.summarize();
 
+                let inode = gtree.inode_mut(idx);
+
+                inode.update_summary(child_idx, new_summary);
+
+                if let Some(left) = left {
                     let offset = child_idx + 1;
 
                     if let Some(right) = right {
