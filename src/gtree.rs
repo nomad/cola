@@ -1035,6 +1035,8 @@ mod delete {
         DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
     {
+        debug_assert!(range.start < range.end);
+
         let inode = gtree.inode_mut(idx);
 
         let (start_idx, start_offset) =
@@ -1163,13 +1165,17 @@ mod delete {
         DelLeaf: FnMut(&mut L),
         DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
     {
-        let inode = gtree.inode(idx);
+        let inode = gtree.inode_mut(idx);
 
         let (child_idx, offset) = inode.child_at_offset::<true>(from);
 
+        let len = inode.children().len();
+
+        inode.delete_children(child_idx + 1..len, del_leaf);
+
         let from = from - offset;
 
-        let split = match gtree.inode_mut(idx).child_mut(child_idx) {
+        let split = match inode.child_mut(child_idx) {
             Either::Left(next_idx) => {
                 let maybe_split =
                     delete_from(gtree, next_idx, from, del_leaf, del_from);
@@ -1208,12 +1214,6 @@ mod delete {
             },
         };
 
-        let inode = gtree.inode_mut(idx);
-
-        let len = inode.children().len();
-
-        inode.delete_children(child_idx + 1..len, del_leaf);
-
         split
     }
 
@@ -1237,7 +1237,7 @@ mod delete {
 
         let up_to = up_to - offset;
 
-        let split = match gtree.inode_mut(idx).child_mut(child_idx) {
+        let split = match inode.child_mut(child_idx) {
             Either::Left(next_idx) => {
                 let maybe_split =
                     delete_up_to(gtree, next_idx, up_to, del_leaf, del_up_to);

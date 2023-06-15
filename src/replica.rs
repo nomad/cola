@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::*;
 
 /// TODO: docs
-const ARITY: usize = 4;
+const ARITY: usize = 32;
 
 /// TODO: docs
 pub struct Replica<M: Metric = ByteMetric> {
