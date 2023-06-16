@@ -16,7 +16,7 @@ pub struct InsertionRun {
     lamport_ts: LamportTimestamp,
 
     /// TODO: docs
-    len: Length,
+    range: Range<Length>,
 
     /// TODO: docs
     is_visible: bool,
@@ -29,12 +29,12 @@ impl core::fmt::Debug for InsertionRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:?} L({}) |> {:?}, {} {}",
+            "{}{:?} L({}) |@ {:?} {:?}",
+            if !self.is_visible { "🪦 " } else { "" },
             self.id,
             self.lamport_ts.as_u64(),
             self.inserted_at,
-            self.len,
-            if self.is_visible { "✔️" } else { "🪦" },
+            self.range,
         )
     }
 }
@@ -108,6 +108,10 @@ impl InsertionRun {
         )
     }
 
+    fn len(&self) -> Length {
+        self.range.end - self.range.start
+    }
+
     /// TODO: docs
     pub fn bisect(
         &mut self,
@@ -118,13 +122,13 @@ impl InsertionRun {
         at_offset: Length,
         //id_registry: &mut RunIdRegistry,
     ) -> (Option<Self>, Option<Self>) {
-        debug_assert!(at_offset <= self.len);
+        debug_assert!(at_offset <= self.range.len());
 
         if replica_id == self.replica_id()
-            && at_offset == self.len
+            && at_offset == self.len()
             && self.is_last_run
         {
-            self.len += run_len;
+            self.range.end += run_len;
 
             // id_registry.extend_insertion(self.insertion_id(), run_len);
 
@@ -134,7 +138,7 @@ impl InsertionRun {
                 id: get_insertion_id(),
                 inserted_at: Anchor::origin(),
                 lamport_ts: get_lamport_ts(),
-                len: run_len,
+                range: 0..run_len,
                 is_visible: true,
                 is_last_run: true,
             };
@@ -144,12 +148,12 @@ impl InsertionRun {
             let this = core::mem::replace(self, run);
 
             (Some(this), None)
-        } else if at_offset == self.len {
+        } else if at_offset == self.len() {
             let new_run = Self {
                 id: get_insertion_id(),
-                inserted_at: Anchor::new(self.id.clone(), self.len),
+                inserted_at: Anchor::new(self.id.clone(), self.range.end),
                 lamport_ts: get_lamport_ts(),
-                len: run_len,
+                range: 0..run_len,
                 is_visible: true,
                 is_last_run: true,
             };
@@ -160,9 +164,9 @@ impl InsertionRun {
 
             let new_run = Self {
                 id: get_insertion_id(),
-                inserted_at: Anchor::new(self.id.clone(), self.len),
+                inserted_at: Anchor::new(self.id.clone(), at_offset),
                 lamport_ts: get_lamport_ts(),
-                len: run_len,
+                range: 0..run_len,
                 is_visible: true,
                 is_last_run: true,
             };
@@ -180,13 +184,23 @@ impl InsertionRun {
     }
 
     #[inline(always)]
-    pub fn anchor(&self) -> &Anchor {
-        &self.inserted_at
+    pub fn anchor(&self) -> Anchor {
+        self.inserted_at.clone()
     }
 
     #[inline(always)]
-    pub fn id(&self) -> &InsertionId {
-        &self.id
+    pub fn id(&self) -> InsertionId {
+        self.id.clone()
+    }
+
+    #[inline(always)]
+    pub fn lamport_ts(&self) -> LamportTimestamp {
+        self.lamport_ts
+    }
+
+    #[inline(always)]
+    pub fn range(&self) -> Range<Length> {
+        self.range.clone()
     }
 
     #[inline(always)]
@@ -208,7 +222,7 @@ impl InsertionRun {
         if offset == 0 {
             self.is_visible = false;
             None
-        } else if offset < self.len {
+        } else if offset < self.len() {
             let mut del = self.split(offset /* , id_registry */);
             del.is_visible = false;
             Some(del)
@@ -229,7 +243,7 @@ impl InsertionRun {
             (None, None)
         } else if start == 0 {
             (self.delete_up_to(end /* id_registry */), None)
-        } else if end >= self.len {
+        } else if end >= self.len() {
             (self.delete_from(start /* id_registry */), None)
         } else {
             let rest = self.split(end /* id_registry */);
@@ -247,7 +261,7 @@ impl InsertionRun {
     ) -> Option<Self> {
         if offset == 0 {
             None
-        } else if offset < self.len {
+        } else if offset < self.len() {
             let rest = self.split(offset /* id_registry */);
             self.is_visible = false;
             Some(rest)
@@ -263,15 +277,15 @@ impl InsertionRun {
         at_offset: Length,
         // id_registry: &mut RunIdRegistry,
     ) -> Self {
-        debug_assert!(at_offset > 0 && at_offset < self.len);
+        debug_assert!(at_offset > 0 && at_offset < self.len());
 
         let mut split = self.clone();
 
-        split.len = self.len - at_offset;
+        split.range.start = self.range.start + at_offset;
 
         split.is_last_run = self.is_last_run;
 
-        self.len = at_offset;
+        self.range.end = split.range.start;
 
         self.is_last_run = false;
 
@@ -297,15 +311,10 @@ impl InsertionRun {
             id,
             inserted_at: Anchor::origin(),
             lamport_ts,
-            len,
+            range: 0..len,
             is_visible: true,
             is_last_run: true,
         }
-    }
-
-    #[inline(always)]
-    pub fn len(&self) -> Length {
-        self.len
     }
 }
 
@@ -376,7 +385,7 @@ impl core::fmt::Debug for Anchor {
         if self == &Self::origin() {
             write!(f, "origin")
         } else {
-            write!(f, "{:?} @ {}", self.insertion_id, self.offset)
+            write!(f, "{:?}->{}", self.insertion_id, self.offset)
         }
     }
 }
@@ -415,7 +424,7 @@ impl Summarize for InsertionRun {
 
     #[inline]
     fn summarize(&self) -> Self::Length {
-        self.len * (self.is_visible as Length)
+        self.len() * (self.is_visible as Length)
     }
 }
 

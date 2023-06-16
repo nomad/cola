@@ -169,10 +169,10 @@ impl<M: Metric> Replica<M> {
 
         let run_len = M::len(&text);
 
-        let mut anchor = None;
+        let mut edit = CrdtEdit::no_op();
 
         let insert_with = |run: &mut InsertionRun, offset: Length| {
-            let (new_run, split_run) = run.bisect_by_local_run(
+            let (inserted_run, split_run) = run.bisect_by_local_run(
                 self.id,
                 run_len,
                 offset,
@@ -180,16 +180,29 @@ impl<M: Metric> Replica<M> {
                 &mut self.lamport_clock,
             );
 
-            anchor = new_run.as_ref().map(|r| r.anchor().clone());
+            edit = if let Some(inserted) = inserted_run.as_ref() {
+                CrdtEdit::new_insertion(
+                    text,
+                    run_len,
+                    inserted.id(),
+                    inserted.anchor(),
+                    inserted.lamport_ts(),
+                )
+            } else {
+                CrdtEdit::continuation(
+                    text,
+                    run_len,
+                    run.id(),
+                    run.range().end,
+                )
+            };
 
-            (new_run, split_run)
+            (inserted_run, split_run)
         };
 
         self.insertion_runs.insert_at_offset(offset, insert_with);
 
-        CrdtEdit::no_op()
-
-        // CrdtEdit::insertion(text, id, anchor, lamport_ts)
+        edit
     }
 
     /// TODO: docs
@@ -216,7 +229,13 @@ impl<M: Metric> Replica<M> {
         match crdt_edit {
             Cow::Owned(CrdtEdit {
                 kind:
-                    CrdtEditKind::Insertion { content, id, anchor, lamport_ts },
+                    CrdtEditKind::Insertion {
+                        content,
+                        id,
+                        anchor,
+                        lamport_ts,
+                        len,
+                    },
             }) => self.merge_insertion(
                 Cow::Owned(content),
                 id,
@@ -226,7 +245,13 @@ impl<M: Metric> Replica<M> {
 
             Cow::Borrowed(CrdtEdit {
                 kind:
-                    CrdtEditKind::Insertion { content, id, anchor, lamport_ts },
+                    CrdtEditKind::Insertion {
+                        content,
+                        id,
+                        anchor,
+                        lamport_ts,
+                        len,
+                    },
             }) => self.merge_insertion(
                 Cow::Borrowed(content.as_str()),
                 id.clone(),
