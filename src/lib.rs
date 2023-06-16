@@ -129,6 +129,7 @@ mod clocks;
 mod crdt_edit;
 // mod downstream;
 mod gtree;
+mod gtree2;
 mod insertion_run;
 mod replica;
 // mod run_id_registry;
