@@ -1,6 +1,6 @@
 /// TODO: docs
 #[derive(Copy, Clone, Default)]
-pub struct LocalClock(u64);
+pub struct LocalClock(u32);
 
 impl core::fmt::Debug for LocalClock {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -25,16 +25,16 @@ impl LocalClock {
 
 /// TODO: docs
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct LocalTimestamp(u64);
+pub struct LocalTimestamp(u32);
 
 impl LocalTimestamp {
     #[inline]
-    pub const fn as_u64(&self) -> u64 {
+    pub const fn as_u32(&self) -> u32 {
         self.0
     }
 
     #[inline]
-    pub const fn from_u64(ts: u64) -> Self {
+    pub const fn from_u32(ts: u32) -> Self {
         Self(ts)
     }
 }

@@ -304,7 +304,7 @@ impl InsertionRun {
         lamport_ts: LamportTimestamp,
         len: Length,
     ) -> Self {
-        debug_assert_eq!(0, id.local_ts.as_u64());
+        debug_assert_eq!(0, id.local_ts.as_u32());
         debug_assert_eq!(0, lamport_ts.as_u64());
 
         Self {
@@ -333,7 +333,7 @@ pub struct InsertionId {
 
 impl core::fmt::Debug for InsertionId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{:x}.{}", self.replica_id.as_u32(), self.local_ts.as_u64())
+        write!(f, "{:x}.{}", self.replica_id.as_u32(), self.local_ts.as_u32())
     }
 }
 
@@ -407,7 +407,7 @@ impl Anchor {
         Self {
             insertion_id: InsertionId {
                 replica_id: ReplicaId::zero(),
-                local_ts: LocalTimestamp::from_u64(0),
+                local_ts: LocalTimestamp::from_u32(0),
             },
             offset: 0,
         }
