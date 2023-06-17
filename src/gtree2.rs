@@ -2,19 +2,49 @@ use core::fmt::Debug;
 use core::ops::{Add, AddAssign, Range, Sub, SubAssign};
 
 /// TODO: docs
+pub trait Summary:
+    Debug
+    + Clone
+    + Add<Self, Output = Self>
+    + AddAssign<Self>
+    + Sub<Self, Output = Self>
+    + SubAssign<Self>
+{
+    fn empty() -> Self;
+}
+
+/// TODO: docs
 pub trait Summarize: Debug {
-    type Summary: Debug
-        + Default
-        + Copy
-        + Add<Self::Summary, Output = Self::Summary>
-        + AddAssign<Self::Summary>
-        + Sub<Self::Summary, Output = Self::Summary>
-        + SubAssign<Self::Summary>
-        + PartialOrd<Self::Summary>
-        + PartialEq<Self::Summary>;
+    type Summary: Summary;
 
     fn summarize(&self) -> Self::Summary;
 }
+
+/// TODO: docs
+pub trait Metric<S: Summary>:
+    Debug
+    + Copy
+    + Add<Self, Output = Self>
+    + AddAssign<Self>
+    + Sub<Self, Output = Self>
+    + SubAssign<Self>
+    + Ord
+{
+    fn zero() -> Self;
+
+    fn measure(summary: &S) -> Self;
+}
+
+//pub trait DeletableLeaf: Summarize {
+//    type DeletePatch;
+//
+//    type DeleteInfo: Debug + Default + AddAssign<Self::DeletePatch>;
+//
+//    fn delete_whole(&mut self) -> DeletePatch;
+//
+//    fn delete_range(&mut self, range: RangeB<Self::Offset>) -> DeletePatch
+//        where
+//}
 
 use gtree::InodeIdx;
 pub use gtree::{Gtree, LeafIdx};
@@ -91,16 +121,13 @@ mod gtree {
 
         /// TODO: docs
         #[inline]
-        pub fn insert_at_offset<F>(
+        pub fn insert_at_offset<M: Metric<Leaf::Summary>, F>(
             &mut self,
-            offset: Leaf::Summary,
+            offset: M,
             insert_with: F,
         ) -> (LeafIdx, Option<LeafIdx>, Option<LeafIdx>)
         where
-            F: FnOnce(
-                &mut Leaf,
-                Leaf::Summary,
-            ) -> (Option<Leaf>, Option<Leaf>),
+            F: FnOnce(&mut Leaf, M) -> (Option<Leaf>, Option<Leaf>),
         {
             let (idxs, maybe_split) = insert::insert_at_offset(
                 self,
@@ -553,10 +580,13 @@ mod inode {
 
         /// TODO: docs
         #[inline]
-        pub fn child_at_offset<const WITH_RIGHT_BIAS: bool>(
+        pub fn child_at_offset<const WITH_RIGHT_BIAS: bool, M>(
             &self,
-            offset: Leaf::Summary,
-        ) -> (usize, Leaf::Summary) {
+            offset: M,
+        ) -> (usize, M)
+        where
+            M: Metric<Leaf::Summary>,
+        {
             todo!()
         }
 
@@ -717,7 +747,7 @@ mod inode {
 
         #[inline]
         pub fn summary(&self) -> Leaf::Summary {
-            self.summary
+            self.summary.clone()
         }
 
         #[inline]
@@ -804,19 +834,20 @@ mod insert {
 
     use super::*;
 
-    pub(super) fn insert_at_offset<const N: usize, L, F>(
+    pub(super) fn insert_at_offset<const N: usize, L, F, M>(
         gtree: &mut Gtree<N, L>,
         in_inode: InodeIdx,
-        mut at_offset: L::Summary,
+        mut at_offset: M,
         insert_with: F,
     ) -> ((LeafIdx, Option<LeafIdx>, Option<LeafIdx>), Option<Inode<N, L>>)
     where
         L: Summarize,
-        F: FnOnce(&mut L, L::Summary) -> (Option<L>, Option<L>),
+        M: Metric<L::Summary>,
+        F: FnOnce(&mut L, M) -> (Option<L>, Option<L>),
     {
         let inode = gtree.inode(in_inode);
 
-        let (child_idx, offset) = inode.child_at_offset::<false>(at_offset);
+        let (child_idx, offset) = inode.child_at_offset::<false, _>(at_offset);
 
         at_offset -= offset;
 
@@ -871,6 +902,8 @@ mod delete {
                 );
             };
 
+        todo!();
+
         range.start -= offset;
 
         range.end -= offset;
@@ -922,7 +955,8 @@ mod delete {
     {
         let inode = gtree.inode(idx);
 
-        let (child_idx, offset) = inode.child_at_offset::<true>(from);
+        let (child_idx, offset) = todo!();
+        //let (child_idx, offset) = inode.child_at_offset::<true, _>(from);
 
         // TODO: delete children
         // let len = inode.children().len();
@@ -960,7 +994,8 @@ mod delete {
     {
         let inode = gtree.inode(idx);
 
-        let (child_idx, offset) = inode.child_at_offset::<false>(up_to);
+        let (child_idx, offset) = todo!();
+        // let (child_idx, offset) = inode.child_at_offset::<false>(up_to);
 
         // TODO: delete children
         // inode.delete_children(0..child_idx, del_leaf);

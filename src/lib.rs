@@ -140,11 +140,11 @@ mod text_edit;
 mod serde;
 
 // use btree::{Btree, Inode, Node};
-use clocks::{LamportClock, LamportTimestamp, LocalClock, LocalTimestamp};
+use clocks::{LamportClock, LamportTimestamp};
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
-use gtree::{Gtree, Summarize};
-use insertion_run::{Anchor, InsertionId, InsertionRun};
+use gtree2::{Gtree, Summarize, Summary};
+use insertion_run::{Anchor, InsertionRun};
 pub use replica::Replica;
 use replica::ReplicaId;
 // use run_id_registry::RunIdRegistry;
@@ -152,6 +152,8 @@ pub use text_edit::TextEdit;
 
 /// TODO: docs
 pub type Length = usize;
+
+type CharacterTimestamp = u64;
 
 /// TODO: docs
 pub trait Metric {

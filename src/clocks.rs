@@ -1,14 +1,14 @@
 /// TODO: docs
 #[derive(Copy, Clone, Default)]
-pub struct LocalClock(u32);
+pub struct CharacterClock(u64);
 
-impl core::fmt::Debug for LocalClock {
+impl core::fmt::Debug for CharacterClock {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "LocalClock({})", self.0)
+        write!(f, "CharacterClock({})", self.0)
     }
 }
 
-impl LocalClock {
+impl CharacterClock {
     #[inline(always)]
     pub fn new() -> Self {
         Self::default()
@@ -16,25 +16,25 @@ impl LocalClock {
 
     /// TODO: docs
     #[inline]
-    pub fn next(&mut self) -> LocalTimestamp {
+    pub fn next(&mut self) -> CharacterTimestamp {
         let next = self.0;
         self.0 += 1;
-        LocalTimestamp(next)
+        CharacterTimestamp(next)
     }
 }
 
 /// TODO: docs
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct LocalTimestamp(u32);
+pub struct CharacterTimestamp(pub u64);
 
-impl LocalTimestamp {
+impl CharacterTimestamp {
     #[inline]
-    pub const fn as_u32(&self) -> u32 {
+    pub const fn as_u64(&self) -> u64 {
         self.0
     }
 
     #[inline]
-    pub const fn from_u32(ts: u32) -> Self {
+    pub const fn from_u64(ts: u64) -> Self {
         Self(ts)
     }
 }

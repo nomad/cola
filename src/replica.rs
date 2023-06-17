@@ -1,7 +1,7 @@
 use alloc::borrow::Cow;
 use alloc::collections::VecDeque;
 use core::marker::PhantomData;
-use core::ops::RangeBounds;
+use core::ops::{Range, RangeBounds};
 
 use uuid::Uuid;
 
@@ -22,7 +22,7 @@ pub struct Replica<M: Metric = ByteMetric> {
     // run_indexes: RunIdRegistry,
 
     /// TODO: docs
-    local_clock: LocalClock,
+    character_ts: CharacterTimestamp,
 
     /// TODO: docs
     lamport_clock: LamportClock,
@@ -75,7 +75,7 @@ impl<M: Metric> Clone for Replica<M> {
         Self {
             id: ReplicaId::new(),
             insertion_runs: self.insertion_runs.clone(),
-            local_clock: LocalClock::new(),
+            character_ts: 0,
             // run_indexes: self.run_indexes.clone(),
             lamport_clock,
             pending: self.pending.clone(),
@@ -103,38 +103,38 @@ impl<M: Metric> Replica<M> {
             return CrdtEdit::no_op();
         }
 
-        let delete_leaf = InsertionRun::delete;
+        //let delete_leaf = InsertionRun::delete;
 
-        let delete_from = InsertionRun::delete_from;
+        //let delete_from = InsertionRun::delete_from;
 
-        let delete_up_to = InsertionRun::delete_up_to;
+        //let delete_up_to = InsertionRun::delete_up_to;
 
-        let delete_range = InsertionRun::delete_range;
+        //let delete_range = InsertionRun::delete_range;
 
-        self.insertion_runs.delete_range(
-            start..end,
-            delete_leaf,
-            delete_from,
-            delete_up_to,
-            delete_range,
-        );
+        //self.insertion_runs.delete_range(
+        //    start..end,
+        //    delete_leaf,
+        //    delete_from,
+        //    delete_up_to,
+        //    delete_range,
+        //);
 
         CrdtEdit::no_op()
     }
 
     /// TODO: docs
     #[inline]
-    pub fn new(len: Length) -> Self {
+    pub fn new(len: u64) -> Self {
         let replica_id = ReplicaId::new();
-
-        let mut local_clock = LocalClock::new();
 
         let mut lamport_clock = LamportClock::new();
 
-        let insertion_id = InsertionId::new(replica_id, local_clock.next());
-
-        let origin_run =
-            InsertionRun::origin(insertion_id, lamport_clock.next(), len);
+        let origin_run = InsertionRun::new(
+            Anchor::origin(),
+            replica_id,
+            0..len,
+            lamport_clock.next(),
+        );
 
         // let run_pointers =
         //     RunIdRegistry::new(insertion_id, origin_run.run_id.clone(), len);
@@ -145,7 +145,7 @@ impl<M: Metric> Replica<M> {
             id: replica_id,
             insertion_runs,
             // run_indexes: run_pointers,
-            local_clock,
+            character_ts: len,
             lamport_clock,
             pending: VecDeque::new(),
             metric: PhantomData,
@@ -154,68 +154,87 @@ impl<M: Metric> Replica<M> {
 
     /// TODO: docs
     #[inline]
-    pub fn inserted<L, T>(&mut self, offset: L, text: T) -> CrdtEdit
-    where
-        L: Into<Length>,
-        T: Into<String>,
-    {
-        let offset = offset.into();
-
-        let text = text.into();
-
-        if text.is_empty() {
+    pub fn inserted(&mut self, offset: Length, len: Length) -> CrdtEdit {
+        if len == 0 {
             return CrdtEdit::no_op();
         }
 
-        let run_len = M::len(&text);
+        let len = len as u64;
 
         let mut edit = CrdtEdit::no_op();
 
-        let insert_with = |run: &mut InsertionRun, offset: Length| {
-            let (inserted_run, split_run) = run.bisect_by_local_run(
-                self.id,
-                run_len,
-                offset,
-                &mut self.local_clock,
-                &mut self.lamport_clock,
-            );
+        let insert_with = |run: &mut InsertionRun, offset: u64| {
+            if offset == run.len()
+                && self.id == run.replica_id()
+                && self.character_ts == run.end()
+            {
+                edit = CrdtEdit::insertion(
+                    Anchor::new(run.replica_id(), run.end()),
+                    self.id,
+                    len,
+                    run.lamport_ts(),
+                );
 
-            edit = if let Some(inserted) = inserted_run.as_ref() {
-                CrdtEdit::new_insertion(
-                    text,
-                    run_len,
-                    inserted.id(),
-                    inserted.anchor(),
-                    inserted.lamport_ts(),
-                )
+                run.extend(len);
+
+                return (None, None);
+            }
+
+            let range = self.character_ts..self.character_ts + len;
+
+            let lamport_ts = self.lamport_clock.next();
+
+            if offset == 0 {
+                let run = InsertionRun::new(
+                    Anchor::origin(),
+                    self.id,
+                    range,
+                    lamport_ts,
+                );
+
+                edit = CrdtEdit::insertion(
+                    Anchor::origin(),
+                    self.id,
+                    len,
+                    lamport_ts,
+                );
+
+                (Some(run), None)
             } else {
-                CrdtEdit::continuation(
-                    text,
-                    run_len,
-                    run.id(),
-                    run.range().end,
-                )
-            };
+                let split = run.split(offset);
 
-            (inserted_run, split_run)
+                let anchor = Anchor::new(run.replica_id(), run.end());
+
+                edit = CrdtEdit::insertion(
+                    anchor.clone(),
+                    self.id,
+                    len,
+                    lamport_ts,
+                );
+
+                let new_run =
+                    InsertionRun::new(anchor, self.id, range, lamport_ts);
+
+                (Some(new_run), split)
+            }
         };
 
-        self.insertion_runs.insert_at_offset(offset, insert_with);
+        self.insertion_runs.insert_at_offset(offset as u64, insert_with);
 
         edit
+    }
+
+    fn next_range(&mut self, inserted_len: u64) -> Range<CharacterTimestamp> {
+        let start = self.character_ts;
+        self.character_ts += inserted_len;
+        start..self.character_ts
     }
 
     /// TODO: docs
     #[allow(clippy::len_without_is_empty)]
     #[doc(hidden)]
     pub fn len(&self) -> Length {
-        self.insertion_runs.len()
-    }
-
-    /// TODO: docs
-    #[inline]
-    fn next_insertion_id(&mut self) -> InsertionId {
-        InsertionId::new(self.id, self.local_clock.next())
+        self.insertion_runs.summary() as _
     }
 
     /// TODO: docs
@@ -226,47 +245,48 @@ impl<M: Metric> Replica<M> {
     {
         let crdt_edit = crdt_edit.into();
 
-        match crdt_edit {
-            Cow::Owned(CrdtEdit {
-                kind:
-                    CrdtEditKind::Insertion {
-                        content,
-                        id,
-                        anchor,
-                        lamport_ts,
-                        len,
-                    },
-            }) => self.merge_insertion(
-                Cow::Owned(content),
-                id,
-                anchor,
-                lamport_ts,
-            ),
+        //match crdt_edit {
+        //    Cow::Owned(CrdtEdit {
+        //        kind:
+        //            CrdtEditKind::Insertion {
+        //                content,
+        //                id,
+        //                anchor,
+        //                lamport_ts,
+        //                len,
+        //            },
+        //    }) => self.merge_insertion(
+        //        Cow::Owned(content),
+        //        id,
+        //        anchor,
+        //        lamport_ts,
+        //    ),
 
-            Cow::Borrowed(CrdtEdit {
-                kind:
-                    CrdtEditKind::Insertion {
-                        content,
-                        id,
-                        anchor,
-                        lamport_ts,
-                        len,
-                    },
-            }) => self.merge_insertion(
-                Cow::Borrowed(content.as_str()),
-                id.clone(),
-                anchor.clone(),
-                *lamport_ts,
-            ),
+        //    Cow::Borrowed(CrdtEdit {
+        //        kind:
+        //            CrdtEditKind::Insertion {
+        //                content,
+        //                id,
+        //                anchor,
+        //                lamport_ts,
+        //                len,
+        //            },
+        //    }) => self.merge_insertion(
+        //        Cow::Borrowed(content.as_str()),
+        //        id.clone(),
+        //        anchor.clone(),
+        //        *lamport_ts,
+        //    ),
 
-            _ => None,
-        }
+        //    _ => None,
+        //}
+
+        todo!()
     }
 
     fn merge_insertion<'a>(
         &mut self,
         content: Cow<'a, str>,
-        id: InsertionId,
         anchor: Anchor,
         lamport_ts: LamportTimestamp,
     ) -> Option<TextEdit<'a>> {
@@ -336,34 +356,6 @@ impl Default for Replica {
     }
 }
 
-impl<M: Metric> From<&str> for Replica<M> {
-    #[inline]
-    fn from(s: &str) -> Self {
-        Self::new(M::len(s))
-    }
-}
-
-impl From<String> for Replica {
-    #[inline]
-    fn from(s: String) -> Self {
-        s.as_str().into()
-    }
-}
-
-impl From<alloc::borrow::Cow<'_, str>> for Replica {
-    #[inline]
-    fn from(moo: alloc::borrow::Cow<'_, str>) -> Self {
-        moo.as_ref().into()
-    }
-}
-
-impl<'a, M: Metric> FromIterator<&'a str> for Replica<M> {
-    #[inline]
-    fn from_iter<I: IntoIterator<Item = &'a str>>(iter: I) -> Self {
-        Self::new(iter.into_iter().map(M::len).sum::<Length>())
-    }
-}
-
 #[cfg(debug_assertions)]
 mod debug {
     use super::*;
@@ -376,7 +368,7 @@ mod debug {
                 .field("id", &self.0.id)
                 .field("edit_runs", &self.0.insertion_runs)
                 // .field("id_registry", &self.0.run_indexes)
-                .field("local", &self.0.local_clock)
+                .field("character", &self.0.character_ts)
                 .field("lamport", &self.0.lamport_clock)
                 .field("pending", &self.0.pending)
                 .finish()

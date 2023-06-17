@@ -8,37 +8,18 @@ pub struct CrdtEdit {
 
 impl CrdtEdit {
     #[inline]
-    pub(super) fn continuation(
-        content: String,
-        len: Length,
-        of_insertion: InsertionId,
-        old_len: Length,
-    ) -> Self {
-        Self {
-            kind: CrdtEditKind::Continuation {
-                content,
-                of_insertion,
-                old_len,
-                len,
-            },
-        }
-    }
-
-    #[inline]
-    pub(super) fn new_insertion(
-        content: String,
-        len: Length,
-        id: InsertionId,
+    pub(super) fn insertion(
         anchor: Anchor,
+        this_id: ReplicaId,
+        run_len: u64,
         lamport_ts: LamportTimestamp,
     ) -> Self {
         Self {
             kind: CrdtEditKind::Insertion {
-                content,
-                id,
                 anchor,
+                this_id,
+                run_len,
                 lamport_ts,
-                len,
             },
         }
     }
@@ -51,18 +32,10 @@ impl CrdtEdit {
 
 #[derive(Debug, Clone)]
 pub enum CrdtEditKind {
-    Continuation {
-        content: String,
-        len: Length,
-        of_insertion: InsertionId,
-        old_len: Length,
-    },
-
     Insertion {
-        content: String,
-        len: Length,
-        id: InsertionId,
         anchor: Anchor,
+        replica_id: ReplicaId,
+        run_len: u64,
         lamport_ts: LamportTimestamp,
     },
 

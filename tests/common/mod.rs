@@ -47,7 +47,7 @@ impl<B: Buffer> Replica<B> {
     ) -> CrdtEdit {
         let text = text.into();
         self.buffer.insert(byte_offset, text.as_str());
-        self.crdt.inserted(byte_offset, text)
+        self.crdt.inserted(byte_offset, text.len())
     }
 
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) {
@@ -60,21 +60,13 @@ impl<B: Buffer> Replica<B> {
 
     pub fn new<T: Into<B>>(text: T) -> Self {
         let buffer = text.into();
-        let crdt = buffer.chunks().collect();
+        let crdt = cola::Replica::new(buffer.measure());
         Self { buffer, crdt }
     }
 }
 
 pub trait Buffer {
-    type Chunks<'a>: Iterator<Item = &'a str>
-    where
-        Self: 'a;
-
-    fn chunks(&self) -> Self::Chunks<'_>;
-
-    fn from_chunks<'a, Chunks>(chunks: Chunks) -> Self
-    where
-        Chunks: Iterator<Item = &'a str>;
+    fn measure(&self) -> u64;
 
     fn insert(&mut self, byte_offset: usize, text: &str);
 
@@ -88,17 +80,8 @@ pub trait Buffer {
 }
 
 impl Buffer for String {
-    type Chunks<'a> = std::iter::Once<&'a str>;
-
-    fn chunks(&self) -> Self::Chunks<'_> {
-        std::iter::once(self)
-    }
-
-    fn from_chunks<'a, Chunks>(chunks: Chunks) -> Self
-    where
-        Chunks: Iterator<Item = &'a str>,
-    {
-        chunks.collect()
+    fn measure(&self) -> u64 {
+        self.len() as _
     }
 
     fn insert(&mut self, byte_offset: usize, text: &str) {
