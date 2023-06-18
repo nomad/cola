@@ -128,21 +128,40 @@ impl<M: Metric> Replica<M> {
             return CrdtEdit::no_op();
         }
 
-        //let delete_leaf = InsertionRun::delete;
+        let start = start as u64;
 
-        //let delete_from = InsertionRun::delete_from;
+        let end = start as u64;
 
-        //let delete_up_to = InsertionRun::delete_up_to;
+        let delete_from = InsertionRun::delete_from;
 
-        //let delete_range = InsertionRun::delete_range;
+        let delete_up_to = InsertionRun::delete_up_to;
 
-        //self.insertion_runs.delete_range(
-        //    start..end,
-        //    delete_leaf,
-        //    delete_from,
-        //    delete_up_to,
-        //    delete_range,
-        //);
+        let delete_range = InsertionRun::delete_range;
+
+        let (_, _) = self.insertion_runs.delete_range(
+            start..end,
+            delete_range,
+            delete_from,
+            delete_up_to,
+        );
+
+        //// if it lands within a single fragment we return (deleted_fragment,
+        //// split_fragment)
+        ////
+        //// if it lands on 2 separate fragments we return deleted_fragment,
+        //// split_fragment
+        ////a
+        //if single {
+
+        //self.ids.get_mut(replica_id).split_double(start..end, id_deleted, id_split);
+        //} else {
+        //    self.ids.get_mut(replica_start).split_run(start, id_deleted);
+        //    self.ids.get_mut(replica_end).split_run(end, id_split);
+        //}
+
+        //// but whatever the case may be we never need the id's that we land on.
+
+        //match
 
         CrdtEdit::no_op()
     }
@@ -188,7 +207,13 @@ impl<M: Metric> Replica<M> {
 
         let mut edit = CrdtEdit::no_op();
 
+        let mut inserted_at_id = self.id;
+        let mut inserted_at_offset = 0;
+
         let insert_with = |run: &mut InsertionRun, offset: u64| {
+            inserted_at_id = run.replica_id();
+            inserted_at_offset = run.start() + offset;
+
             if offset == run.len()
                 && self.id == run.replica_id()
                 && self.character_ts == run.end()
@@ -244,15 +269,26 @@ impl<M: Metric> Replica<M> {
             }
         };
 
-        self.insertion_runs.insert_at_offset(offset as u64, insert_with);
+        let (inserted_run, split_run) =
+            self.insertion_runs.insert_at_offset(offset as u64, insert_with);
+
+        //match (inserted_run, split_run) {
+        //    (Some(inserted_run), Some(split_run)) => {
+        //        self.ids
+        //            .get_mut(inserted_at_id)
+        //            .split_run(inserted_at_offset, split_run);
+
+        //        self.ids.get_mut(self.id).append_run(len, inserted_run);
+        //    },
+
+        //    (Some(inserted_run), None) => {
+        //        self.ids.get_mut(self.id).append_run(len, inserted_run);
+        //    },
+
+        //    _ => self.ids.get_mut(self.id).extend_last_run(len),
+        //}
 
         edit
-    }
-
-    fn next_range(&mut self, inserted_len: u64) -> Range<CharacterTimestamp> {
-        let start = self.character_ts;
-        self.character_ts += inserted_len;
-        start..self.character_ts
     }
 
     /// TODO: docs

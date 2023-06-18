@@ -81,63 +81,61 @@ impl InsertionRun {
     #[inline]
     pub fn delete_from(
         &mut self,
-        offset: Length,
+        offset: u64,
         //id_registry: &mut RunIdRegistry,
     ) -> Option<Self> {
-        todo!()
-        //if offset == 0 {
-        //    self.is_visible = false;
-        //    None
-        //} else if offset < self.len() {
-        //    let mut del = self.split(offset /* , id_registry */);
-        //    del.is_visible = false;
-        //    Some(del)
-        //} else {
-        //    None
-        //}
+        if offset == 0 {
+            self.is_deleted = true;
+            None
+        } else if offset < self.len() {
+            let mut del = self.split(offset /* , id_registry */)?;
+            del.is_deleted = true;
+            Some(del)
+        } else {
+            None
+        }
     }
 
     #[inline]
     pub fn delete_range(
         &mut self,
-        Range { start, end }: Range<Length>,
+        Range { start, end }: Range<u64>,
         //id_registry: &mut RunIdRegistry,
     ) -> (Option<Self>, Option<Self>) {
         debug_assert!(start <= end);
 
-        todo!();
-
-        //if start == end {
-        //    (None, None)
-        //} else if start == 0 {
-        //    (self.delete_up_to(end /* id_registry */), None)
-        //} else if end >= self.len() {
-        //    (self.delete_from(start /* id_registry */), None)
-        //} else {
-        //    let rest = self.split(end /* id_registry */);
-        //    let mut deleted = self.split(start /* id_registry */);
-        //    deleted.is_visible = false;
-        //    (Some(deleted), Some(rest))
-        //}
+        if start == end {
+            (None, None)
+        } else if start == 0 {
+            (self.delete_up_to(end /* id_registry */), None)
+        } else if end >= self.len() {
+            (self.delete_from(start /* id_registry */), None)
+        } else {
+            let rest = self.split(end /* id_registry */);
+            let deleted = self.split(start /* id_registry */).map(|mut d| {
+                d.is_deleted = true;
+                d
+            });
+            (deleted, rest)
+        }
     }
 
     #[inline]
     pub fn delete_up_to(
         &mut self,
-        offset: Length,
+        offset: u64,
         // id_registry: &mut RunIdRegistry,
     ) -> Option<Self> {
-        todo!()
-        //if offset == 0 {
-        //    None
-        //} else if offset < self.len() {
-        //    let rest = self.split(offset /* id_registry */);
-        //    self.is_visible = false;
-        //    Some(rest)
-        //} else {
-        //    self.is_visible = false;
-        //    None
-        //}
+        if offset == 0 {
+            None
+        } else if offset < self.len() {
+            let rest = self.split(offset /* id_registry */);
+            self.is_deleted = true;
+            rest
+        } else {
+            self.is_deleted = true;
+            None
+        }
     }
 
     #[inline(always)]
@@ -255,7 +253,7 @@ impl Summarize for InsertionRun {
     }
 }
 
-impl gtree2::Metric<u64> for u64 {
+impl gtree::Metric<u64> for u64 {
     #[inline]
     fn zero() -> Self {
         0
