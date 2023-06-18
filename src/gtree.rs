@@ -9,8 +9,13 @@ pub trait Summary:
     + AddAssign<Self>
     + Sub<Self, Output = Self>
     + SubAssign<Self>
+    + PartialEq<Self>
 {
     fn empty() -> Self;
+
+    fn is_empty(&self) -> bool {
+        self == &Self::empty()
+    }
 }
 
 /// TODO: docs
@@ -87,12 +92,20 @@ mod gtree {
     impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
         #[doc(hidden)]
         pub fn debug_as_btree(&self) -> DebugAsBtree<'_, ARITY, Leaf> {
-            DebugAsBtree(self)
+            self.debug_inode_as_btree(self.root_idx)
         }
 
         #[doc(hidden)]
         pub fn debug_as_self(&self) -> DebugAsSelf<'_, ARITY, Leaf> {
             DebugAsSelf(self)
+        }
+
+        #[doc(hidden)]
+        pub(super) fn debug_inode_as_btree(
+            &self,
+            inode_idx: InodeIdx,
+        ) -> DebugAsBtree<'_, ARITY, Leaf> {
+            DebugAsBtree { gtree: self, inode_idx }
         }
 
         /// TODO: docs
@@ -168,6 +181,16 @@ mod gtree {
             idxs
         }
 
+        #[inline]
+        fn is_inode_deleted(&self, inode_idx: InodeIdx) -> bool {
+            false
+        }
+
+        #[inline]
+        fn is_leaf_deleted(&self, leaf_idx: LeafIdx) -> bool {
+            false
+        }
+
         #[inline(always)]
         pub(super) fn leaf(&self, idx: LeafIdx) -> &Leaf {
             self.lnode(idx).value()
@@ -213,11 +236,12 @@ mod gtree {
         #[inline(always)]
         pub(super) fn push_inode(
             &mut self,
-            inode: Inode<ARITY, Leaf>,
+            mut inode: Inode<ARITY, Leaf>,
         ) -> InodeIdx {
             let idx = InodeIdx(self.inodes.len());
             assert!(!idx.is_dangling());
-            Inode::pushed(inode, self, idx);
+            inode.pushed(self, idx);
+            self.inodes.push(inode);
             idx
         }
 
@@ -273,6 +297,7 @@ mod gtree {
         }
 
         /// TODO: docs
+        #[inline]
         pub(super) fn with_internal_mut<F, R>(
             &mut self,
             inode_idx: InodeIdx,
@@ -282,6 +307,8 @@ mod gtree {
         where
             F: FnOnce(&mut Self) -> (R, Option<Inode<ARITY, Leaf>>),
         {
+            debug_assert!(inode_idx != self.root_idx);
+
             let (ret, maybe_split) = fun(self);
 
             let inode = self.inode(inode_idx);
@@ -296,7 +323,8 @@ mod gtree {
 
             parent.update_child_summary(idx_in_parent, new_summary);
 
-            let split = if let Some(split) = maybe_split {
+            let split = if let Some(mut split) = maybe_split {
+                split.set_parent(parent_idx);
                 let summary = split.summary();
                 let split_idx = self.push_inode(split);
                 let parent = self.inode_mut(parent_idx);
@@ -309,6 +337,7 @@ mod gtree {
         }
 
         /// TODO: docs
+        #[inline]
         pub(super) fn with_leaf_mut<F>(
             &mut self,
             leaf_idx: LeafIdx,
@@ -455,7 +484,10 @@ mod gtree {
         }
     }
 
-    pub struct DebugAsBtree<'a, const N: usize, L: Summarize>(&'a Gtree<N, L>);
+    pub struct DebugAsBtree<'a, const N: usize, L: Summarize> {
+        gtree: &'a Gtree<N, L>,
+        inode_idx: InodeIdx,
+    }
 
     impl<const N: usize, L: Summarize> Debug for DebugAsBtree<'_, N, L> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -471,9 +503,14 @@ mod gtree {
 
                 writeln!(
                     f,
-                    "{}{}{:?}",
+                    "{}{}{}{:?}",
                     &shifts[..shifts.len() - last_shift_byte_len],
                     ident,
+                    if gtree.is_inode_deleted(inode_idx) {
+                        "🪦 "
+                    } else {
+                        ""
+                    },
                     inode.summary()
                 )?;
 
@@ -516,8 +553,19 @@ mod gtree {
                     Either::Leaf(leaf_idxs) => {
                         for (i, &leaf_idx) in leaf_idxs.iter().enumerate() {
                             let ident = ident(i);
-                            let leaf = gtree.leaf(leaf_idx);
-                            writeln!(f, "{}{}{:#?}", &shifts, ident, &leaf)?;
+                            let lnode = gtree.lnode(leaf_idx);
+                            writeln!(
+                                f,
+                                "{}{}{}{:#?}",
+                                &shifts,
+                                ident,
+                                if gtree.is_leaf_deleted(leaf_idx) {
+                                    "🪦 "
+                                } else {
+                                    ""
+                                },
+                                &lnode.value()
+                            )?;
                         }
                     },
                 }
@@ -528,8 +576,8 @@ mod gtree {
             writeln!(f)?;
 
             print_inode_as_tree(
-                self.0,
-                self.0.root_idx,
+                self.gtree,
+                self.inode_idx,
                 &mut String::new(),
                 "",
                 0,
@@ -840,12 +888,12 @@ mod inode {
                 )
             }
 
-            debug_assert!(second_offset <= self.children.len());
+            debug_assert!(second_offset <= self.len());
 
-            if Self::max_children() - self.children.len() < 2 {
+            if Self::max_children() - self.len() < 2 {
                 let split_offset = self.len() - Self::min_children();
 
-                let children_after_b = self.len() - second_offset;
+                let children_after_second = self.len() - second_offset;
 
                 // Split so that the extra inode always has the minimum number
                 // of children.
@@ -853,7 +901,7 @@ mod inode {
                 // The logic to make this work is a bit annoying to reason
                 // about. We should probably add some unit tests to avoid
                 // possible regressions.
-                let rest = match children_after_b
+                let rest = match children_after_second
                     .cmp(&(Self::min_children() - 1))
                 {
                     Ordering::Greater => {
@@ -907,6 +955,7 @@ mod inode {
         }
 
         /// TODO: docs
+        #[inline]
         pub fn insert(
             &mut self,
             at_offset: usize,
@@ -941,6 +990,7 @@ mod inode {
                 self.child_summaries[at_offset] = child_summary;
 
                 self.summary += child_summary;
+                self.len += 1;
 
                 None
             }
@@ -974,7 +1024,7 @@ mod inode {
         /// TODO: docs
         #[inline]
         pub(super) fn pushed(
-            self,
+            &mut self,
             gtree: &mut Gtree<ARITY, Leaf>,
             to_idx: InodeIdx,
         ) {
@@ -1002,9 +1052,6 @@ mod inode {
 
         #[inline]
         fn split(&mut self, at_offset: usize) -> Self {
-            debug_assert!(at_offset > 0);
-            debug_assert!(at_offset < self.len());
-
             let len = self.len() - at_offset;
 
             let children = {
@@ -1023,8 +1070,8 @@ mod inode {
             };
 
             let summary = {
-                let mut s = child_summaries[0];
-                for &cs in &child_summaries[1..len] {
+                let mut s = Leaf::Summary::empty();
+                for &cs in &child_summaries {
                     s += cs;
                 }
                 s
@@ -1084,6 +1131,7 @@ mod inode {
             }
         }
     }
+
     pub(super) enum Either<I, L> {
         Internal(I),
         Leaf(L),
@@ -1268,6 +1316,8 @@ mod delete {
             offset += child_measure;
 
             if offset > range.start {
+                offset -= child_measure;
+
                 idx_start = child_idx;
 
                 match gtree.inode(idx).child(child_idx) {
@@ -1314,6 +1364,8 @@ mod delete {
                     },
                 }
 
+                offset += child_measure;
+
                 break;
             }
         }
@@ -1324,6 +1376,8 @@ mod delete {
             offset += child_measure;
 
             if offset >= range.end {
+                offset -= child_measure;
+
                 idx_end = child_idx;
 
                 match gtree.inode(idx).child(child_idx) {
@@ -1420,18 +1474,20 @@ mod delete {
         M: Metric<L::Summary>,
         DelFrom: FnOnce(&mut L, M) -> Option<L>,
     {
-        let mut idxs = 0..gtree.inode(idx).len();
+        let inode = gtree.inode_mut(idx);
 
         let mut offset = M::zero();
 
-        for child_idx in idxs.by_ref() {
-            let inode = gtree.inode(idx);
-
+        for child_idx in 0..inode.len() {
             let child_measure = inode.child_measure(child_idx);
 
             offset += child_measure;
 
             if offset > from {
+                for idx in child_idx + 1..inode.len() {
+                    inode.delete_child(idx);
+                }
+
                 offset -= child_measure;
 
                 from -= offset;
@@ -1453,12 +1509,6 @@ mod delete {
                     },
                 };
 
-                let inode = gtree.inode_mut(idx);
-
-                for idx in idxs {
-                    inode.delete_child(idx);
-                }
-
                 return ret;
             }
         }
@@ -1477,11 +1527,11 @@ mod delete {
         M: Metric<L::Summary>,
         DelUpTo: FnOnce(&mut L, M) -> Option<L>,
     {
+        let inode = gtree.inode_mut(idx);
+
         let mut offset = M::zero();
 
-        for child_idx in 0..gtree.inode(idx).len() {
-            let inode = gtree.inode_mut(idx);
-
+        for child_idx in 0..inode.len() {
             let child_measure = inode.child_measure(child_idx);
 
             offset += child_measure;

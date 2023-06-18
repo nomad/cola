@@ -177,6 +177,7 @@ impl InsertionRun {
     }
 
     /// TODO: docs
+    #[inline(always)]
     pub fn split(&mut self, at_offset: u64) -> Option<Self> {
         if at_offset == self.len() || at_offset == 0 {
             None

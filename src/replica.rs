@@ -130,7 +130,7 @@ impl<M: Metric> Replica<M> {
 
         let start = start as u64;
 
-        let end = start as u64;
+        let end = end as u64;
 
         let delete_from = InsertionRun::delete_from;
 
@@ -235,12 +235,14 @@ impl<M: Metric> Replica<M> {
             let lamport_ts = self.lamport_clock.next();
 
             if offset == 0 {
-                let run = InsertionRun::new(
+                let new_run = InsertionRun::new(
                     Anchor::origin(),
                     self.id,
                     range,
                     lamport_ts,
                 );
+
+                let run = core::mem::replace(run, new_run);
 
                 edit = CrdtEdit::insertion(
                     Anchor::origin(),
@@ -272,21 +274,25 @@ impl<M: Metric> Replica<M> {
         let (inserted_run, split_run) =
             self.insertion_runs.insert_at_offset(offset as u64, insert_with);
 
-        //match (inserted_run, split_run) {
-        //    (Some(inserted_run), Some(split_run)) => {
-        //        self.ids
-        //            .get_mut(inserted_at_id)
-        //            .split_run(inserted_at_offset, split_run);
+        match (inserted_run, split_run) {
+            (Some(inserted_run), Some(split_run)) => {
+                //self.ids
+                //    .get_mut(inserted_at_id)
+                //    .split_run(inserted_at_offset, split_run);
 
-        //        self.ids.get_mut(self.id).append_run(len, inserted_run);
-        //    },
+                //self.ids.get_mut(self.id).append_run(len, inserted_run);
+            },
 
-        //    (Some(inserted_run), None) => {
-        //        self.ids.get_mut(self.id).append_run(len, inserted_run);
-        //    },
+            (Some(inserted_run), None) => {
+                //self.ids.get_mut(self.id).append_run(len, inserted_run);
+            },
 
-        //    _ => self.ids.get_mut(self.id).extend_last_run(len),
-        //}
+            _ => {
+                //self.ids.get_mut(self.id).extend_last_run(len),
+            },
+        }
+
+        self.character_ts += len;
 
         edit
     }
