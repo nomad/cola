@@ -26,8 +26,8 @@ impl core::fmt::Debug for InsertionRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:?}.{:?} L({}) |@ {:?}{}",
-            self.inserted_by,
+            "{:x}.{:?} L({}) |@ {:?}{}",
+            self.inserted_by.as_u32(),
             self.character_range,
             self.lamport_ts.as_u64(),
             self.inserted_at,
@@ -211,7 +211,7 @@ impl core::fmt::Debug for Anchor {
         if self == &Self::origin() {
             write!(f, "origin")
         } else {
-            write!(f, "{:?}.{}", self.replica_id, self.offset)
+            write!(f, "{:x}.{}", self.replica_id.as_u32(), self.offset)
         }
     }
 }

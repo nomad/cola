@@ -17,7 +17,7 @@ impl CrdtEdit {
         Self {
             kind: CrdtEditKind::Insertion {
                 anchor,
-                this_id,
+                replica_id: this_id,
                 run_len,
                 lamport_ts,
             },

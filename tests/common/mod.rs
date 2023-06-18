@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::ops::Range;
 
 use cola::CrdtEdit;
@@ -13,7 +14,7 @@ impl<B: Buffer + Clone> Clone for Replica<B> {
     }
 }
 
-impl<B: Buffer + std::fmt::Debug> std::fmt::Debug for Replica<B> {
+impl<B: Buffer + Debug> Debug for Replica<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Replica")
             .field("buffer", &self.buffer)
@@ -65,6 +66,12 @@ impl<B: Buffer> Replica<B> {
     }
 }
 
+impl<B: Buffer + Debug> Replica<B> {
+    pub fn as_btree(&self) -> DebugAsBtree<'_, B> {
+        DebugAsBtree(self)
+    }
+}
+
 pub trait Buffer {
     fn measure(&self) -> u64;
 
@@ -94,5 +101,18 @@ impl Buffer for String {
 
     fn replace(&mut self, byte_range: Range<usize>, text: &str) {
         self.replace_range(byte_range, text);
+    }
+}
+
+pub struct DebugAsBtree<'a, B: Buffer + Debug>(&'a Replica<B>);
+
+impl<B: Buffer + Debug> Debug for DebugAsBtree<'_, B> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let replica = self.0;
+
+        f.debug_struct("Replica")
+            .field("buffer", &replica.buffer)
+            .field("crdt", &replica.crdt.debug_as_btree())
+            .finish()
     }
 }

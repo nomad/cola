@@ -505,6 +505,8 @@ mod gtree {
                 Ok(())
             }
 
+            writeln!(f)?;
+
             print_inode_as_tree(
                 self.0,
                 self.0.root_idx,

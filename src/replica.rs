@@ -33,6 +33,25 @@ pub struct Replica<M: Metric = ByteMetric> {
     metric: PhantomData<M>,
 }
 
+impl core::fmt::Debug for Replica {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        // In the public Debug we just print the ReplicaId to avoid leaking
+        // our internals.
+        //
+        // During development the `Replica::debug()` method (which is public
+        // but hidden from the API) can be used to obtain a more useful
+        // representation.
+        f.debug_tuple("Replica").field(&self.id.0).finish()
+    }
+}
+
+impl Default for Replica {
+    #[inline]
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
 /// TODO: docs
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReplicaId(Uuid);
@@ -89,6 +108,12 @@ impl<M: Metric> Replica<M> {
     #[doc(hidden)]
     pub fn debug(&self) -> debug::Debug<'_, M> {
         debug::Debug(self)
+    }
+
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub fn debug_as_btree(&self) -> debug::DebugAsBtree<'_, M> {
+        debug::DebugAsBtree(self)
     }
 
     /// TODO: docs
@@ -337,25 +362,6 @@ impl<M: Metric> Replica<M> {
     }
 }
 
-impl core::fmt::Debug for Replica {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        // In the public Debug we just print the ReplicaId to avoid leaking
-        // our internals.
-        //
-        // During development the `Replica::debug()` method (which is public
-        // but hidden from the API) can be used to obtain a more useful
-        // representation.
-        f.debug_tuple("Replica").field(&self.id.0).finish()
-    }
-}
-
-impl Default for Replica {
-    #[inline]
-    fn default() -> Self {
-        Self::new(0)
-    }
-}
-
 #[cfg(debug_assertions)]
 mod debug {
     use super::*;
@@ -367,6 +373,21 @@ mod debug {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
                 .field("edit_runs", &self.0.insertion_runs)
+                // .field("id_registry", &self.0.run_indexes)
+                .field("character", &self.0.character_ts)
+                .field("lamport", &self.0.lamport_clock)
+                .field("pending", &self.0.pending)
+                .finish()
+        }
+    }
+
+    pub struct DebugAsBtree<'a, M: Metric>(pub &'a Replica<M>);
+
+    impl<'a, M: Metric> core::fmt::Debug for DebugAsBtree<'a, M> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            f.debug_struct("Replica")
+                .field("id", &self.0.id)
+                .field("edit_runs", &self.0.insertion_runs.debug_as_btree())
                 // .field("id_registry", &self.0.run_indexes)
                 .field("character", &self.0.character_ts)
                 .field("lamport", &self.0.lamport_clock)
