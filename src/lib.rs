@@ -133,7 +133,6 @@ mod insertion_run;
 mod replica;
 // mod run_id_registry;
 mod text_edit;
-// mod upstream;
 
 #[cfg(feature = "serde")]
 mod serde;
