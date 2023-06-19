@@ -238,10 +238,35 @@ impl Anchor {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum Patch {
+    Addition(u64),
+    Subtraction(u64),
+}
+
 impl Summary for u64 {
+    type Patch = Patch;
+
     #[inline]
     fn empty() -> Self {
         0
+    }
+
+    #[inline]
+    fn patch(from: Self, to: Self) -> Patch {
+        if from < to {
+            Patch::Addition(to - from)
+        } else {
+            Patch::Subtraction(from - to)
+        }
+    }
+
+    #[inline]
+    fn apply_patch(&mut self, patch: Patch) {
+        match patch {
+            Patch::Addition(add) => *self += add,
+            Patch::Subtraction(sub) => *self -= sub,
+        }
     }
 }
 

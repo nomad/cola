@@ -11,7 +11,13 @@ pub trait Summary:
     + SubAssign<Self>
     + PartialEq<Self>
 {
+    type Patch: Copy;
+
     fn empty() -> Self;
+
+    fn patch(old_summary: Self, new_summary: Self) -> Self::Patch;
+
+    fn apply_patch(&mut self, patch: Self::Patch);
 
     fn is_empty(&self) -> bool {
         self == &Self::empty()
@@ -19,7 +25,7 @@ pub trait Summary:
 }
 
 /// TODO: docs
-pub trait Summarize: Debug {
+pub trait Summarize: Debug + Clone {
     type Summary: Summary;
 
     fn summarize(&self) -> Self::Summary;
@@ -57,6 +63,9 @@ mod gtree {
 
         /// TODO: docs
         root_idx: InodeIdx,
+
+        /// TODO: docs
+        pub last_insertion_cache: Option<(LeafIdx, Leaf::Summary)>,
     }
 
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -128,6 +137,8 @@ mod gtree {
             DelFrom: FnOnce(&mut Leaf, M) -> Option<Leaf>,
             DelUpTo: FnOnce(&mut Leaf, M) -> Option<Leaf>,
         {
+            self.last_insertion_cache = None;
+
             let (idxs, maybe_split) = delete::delete_range(
                 self,
                 self.root_idx,
@@ -167,9 +178,26 @@ mod gtree {
         where
             F: FnOnce(&mut Leaf, M) -> (Option<Leaf>, Option<Leaf>),
         {
+            if let Some((leaf_idx, leaf_offset)) = self.last_insertion_cache {
+                let m_offset = M::measure(&leaf_offset);
+
+                let leaf_measure =
+                    M::measure(&self.leaf(leaf_idx).summarize());
+
+                if offset > m_offset && offset <= m_offset + leaf_measure {
+                    return self.insert_at_leaf(
+                        leaf_idx,
+                        leaf_offset,
+                        offset,
+                        insert_with,
+                    );
+                }
+            }
+
             let (idxs, maybe_split) = insert::insert_at_offset(
                 self,
                 self.root_idx,
+                Leaf::Summary::empty(),
                 offset,
                 insert_with,
             );
@@ -179,6 +207,57 @@ mod gtree {
             }
 
             idxs
+        }
+
+        fn insert_at_leaf<M, F>(
+            &mut self,
+            leaf_idx: LeafIdx,
+            leaf_offset: Leaf::Summary,
+            provided_offset: M,
+            insert_with: F,
+        ) -> (Option<LeafIdx>, Option<LeafIdx>)
+        where
+            M: Metric<Leaf::Summary>,
+            F: FnOnce(&mut Leaf, M) -> (Option<Leaf>, Option<Leaf>),
+        {
+            let lnode = self.lnode_mut(leaf_idx);
+
+            let old_leaf = lnode.value().clone();
+
+            let old_summary = old_leaf.summarize();
+
+            let (first, second) = insert_with(
+                lnode.value_mut(),
+                provided_offset - M::measure(&leaf_offset),
+            );
+
+            if first.is_some() {
+                let new_leaf = core::mem::replace(lnode.value_mut(), old_leaf);
+
+                self.last_insertion_cache = None;
+
+                return self.insert_at_offset(
+                    provided_offset,
+                    |old_leaf, _| {
+                        *old_leaf = new_leaf;
+                        (first, second)
+                    },
+                );
+            }
+
+            let new_summary = lnode.value().summarize();
+
+            let summary_patch = Leaf::Summary::patch(old_summary, new_summary);
+
+            let mut parent = lnode.parent();
+
+            while !parent.is_dangling() {
+                let inode = self.inode_mut(parent);
+                inode.update_summary(summary_patch);
+                parent = inode.parent();
+            }
+
+            (None, None)
         }
 
         #[inline]
@@ -229,7 +308,7 @@ mod gtree {
             let lnode = Lnode::new(first_leaf, root_idx);
             lnodes.push(lnode);
 
-            Self { inodes, lnodes, root_idx }
+            Self { inodes, lnodes, root_idx, last_insertion_cache: None }
         }
 
         /// TODO: docs
@@ -653,19 +732,22 @@ mod inode {
 
         /// TODO: docs
         #[inline]
-        pub fn child_at_offset<M>(&self, at_offset: M) -> (usize, M)
+        pub fn child_at_offset<M>(
+            &self,
+            at_offset: M,
+        ) -> (usize, Leaf::Summary)
         where
             M: Metric<Leaf::Summary>,
         {
-            let mut offset = M::zero();
+            let mut offset = Leaf::Summary::empty();
 
-            for (idx, summary) in self.child_summaries().iter().enumerate() {
-                let child_measure = M::measure(summary);
+            for (idx, child_summary) in
+                self.child_summaries().iter().copied().enumerate()
+            {
+                offset += child_summary;
 
-                offset += child_measure;
-
-                if offset >= at_offset {
-                    return (idx, offset - child_measure);
+                if M::measure(&offset) >= at_offset {
+                    return (idx, offset - child_summary);
                 }
             }
 
@@ -1111,6 +1193,14 @@ mod inode {
 
             self.summary -= old_summary;
         }
+
+        #[inline]
+        pub fn update_summary(
+            &mut self,
+            patch: <Leaf::Summary as Summary>::Patch,
+        ) {
+            self.summary.apply_patch(patch);
+        }
     }
 
     impl<const ARITY: usize, Leaf: Summarize> Debug for Inode<ARITY, Leaf> {
@@ -1186,10 +1276,12 @@ mod insert {
 
     use super::*;
 
+    #[allow(clippy::type_complexity)]
     pub(super) fn insert_at_offset<const N: usize, L, F, M>(
         gtree: &mut Gtree<N, L>,
         in_inode: InodeIdx,
-        mut at_offset: M,
+        mut leaf_offset: L::Summary,
+        at_offset: M,
         insert_with: F,
     ) -> ((Option<LeafIdx>, Option<LeafIdx>), Option<Inode<N, L>>)
     where
@@ -1201,22 +1293,35 @@ mod insert {
 
         let (child_idx, offset) = inode.child_at_offset(at_offset);
 
-        at_offset -= offset;
+        leaf_offset += offset;
 
         match inode.child(child_idx) {
             Either::Internal(next_idx) => {
                 gtree.with_internal_mut(next_idx, child_idx, |gtree| {
-                    insert_at_offset(gtree, next_idx, at_offset, insert_with)
+                    insert_at_offset(
+                        gtree,
+                        next_idx,
+                        leaf_offset,
+                        at_offset,
+                        insert_with,
+                    )
                 })
             },
 
             Either::Leaf(leaf_idx) => {
-                let (first_idx, second_idx, split) =
+                let (inserted_idx, split_idx, split) =
                     gtree.with_leaf_mut(leaf_idx, child_idx, |leaf| {
-                        insert_with(leaf, at_offset)
+                        insert_with(leaf, M::measure(&leaf_offset) - at_offset)
                     });
 
-                ((first_idx, second_idx), split)
+                gtree.last_insertion_cache = if let Some(idx) = inserted_idx {
+                    let summary = gtree.leaf(idx).summarize();
+                    Some((idx, leaf_offset + summary))
+                } else {
+                    Some((leaf_idx, leaf_offset))
+                };
+
+                ((inserted_idx, split_idx), split)
             },
         }
     }
@@ -1227,6 +1332,7 @@ mod delete {
 
     use super::*;
 
+    #[allow(clippy::type_complexity)]
     pub(super) fn delete_range<
         const N: usize,
         L,
@@ -1286,6 +1392,7 @@ mod delete {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn delete_range_in_inode<const N: usize, L, M, DelFrom, DelUpTo>(
         gtree: &mut Gtree<N, L>,
         idx: InodeIdx,
@@ -1492,7 +1599,7 @@ mod delete {
 
                 from -= offset;
 
-                let ret = match inode.child(child_idx) {
+                return match inode.child(child_idx) {
                     Either::Internal(next_idx) => {
                         gtree.with_internal_mut(next_idx, child_idx, |gtree| {
                             delete_from(gtree, next_idx, from, del_from)
@@ -1508,8 +1615,6 @@ mod delete {
                         (idx, split)
                     },
                 };
-
-                return ret;
             }
         }
 
