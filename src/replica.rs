@@ -106,6 +106,12 @@ impl<M: Metric> Clone for Replica<M> {
 impl<M: Metric> Replica<M> {
     #[cfg(debug_assertions)]
     #[doc(hidden)]
+    pub fn assert_invariants(&self) {
+        self.insertion_runs.assert_invariants()
+    }
+
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
     pub fn debug(&self) -> debug::Debug<'_, M> {
         debug::Debug(self)
     }
@@ -272,7 +278,7 @@ impl<M: Metric> Replica<M> {
         };
 
         let (inserted_run, split_run) =
-            self.insertion_runs.insert_at_offset(offset as u64, insert_with);
+            self.insertion_runs.insert(offset as u64, insert_with);
 
         match (inserted_run, split_run) {
             (Some(inserted_run), Some(split_run)) => {

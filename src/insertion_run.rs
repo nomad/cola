@@ -195,6 +195,12 @@ impl InsertionRun {
     }
 }
 
+impl gtree::DeleteLeaf for InsertionRun {
+    fn delete(&mut self) {
+        self.is_deleted = true;
+    }
+}
+
 /// TODO: docs
 #[derive(Clone, PartialEq)]
 pub struct Anchor {

@@ -24,8 +24,12 @@ pub trait Summary:
     }
 }
 
+pub trait DeleteLeaf {
+    fn delete(&mut self);
+}
+
 /// TODO: docs
-pub trait Summarize: Debug + Clone {
+pub trait Summarize: DeleteLeaf + Debug + Clone {
     type Summary: Summary;
 
     fn summarize(&self) -> Self::Summary;
@@ -100,6 +104,41 @@ mod gtree {
 
     impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
         /// TODO: docs
+        pub fn assert_invariants(&self) {
+            if let Some((leaf_idx, cached_summary)) = self.last_insertion_cache
+            {
+                self.assert_summary_offset_of_leaf(leaf_idx, cached_summary);
+            }
+        }
+
+        /// TODO: docs
+        fn assert_summary_offset_of_leaf(
+            &self,
+            leaf_idx: LeafIdx,
+            offset_summary: Leaf::Summary,
+        ) {
+            let mut summary = Leaf::Summary::empty();
+
+            let mut parent_idx = self.lnode(leaf_idx).parent();
+
+            let parent = self.inode(parent_idx);
+            let child_idx = parent.idx_of_leaf_child(leaf_idx);
+            summary += self.summary_offset_of_child(parent_idx, child_idx);
+            let mut inode_idx = parent_idx;
+            parent_idx = parent.parent();
+
+            while !parent_idx.is_dangling() {
+                let parent = self.inode(parent_idx);
+                let child_idx = parent.idx_of_internal_child(inode_idx);
+                summary += self.summary_offset_of_child(parent_idx, child_idx);
+                inode_idx = parent_idx;
+                parent_idx = parent.parent();
+            }
+
+            assert_eq!(summary, offset_summary);
+        }
+
+        /// TODO: docs
         #[inline]
         pub(super) fn child_at_offset<M>(
             &self,
@@ -109,6 +148,10 @@ mod gtree {
         where
             M: Metric<Leaf::Summary>,
         {
+            debug_assert!(
+                at_offset <= M::measure(&self.inode(of_inode).summary())
+            );
+
             let mut offset = Leaf::Summary::empty();
 
             match self.inode(of_inode).children() {
@@ -232,7 +275,12 @@ mod gtree {
                         Leaf::Summary::empty(),
                     )
                 },
-                Either::Leaf(leaf_idx) => self.leaf_mut(leaf_idx).summarize(),
+                Either::Leaf(leaf_idx) => {
+                    let leaf = self.leaf_mut(leaf_idx);
+                    let old_summary = leaf.summarize();
+                    leaf.delete();
+                    old_summary
+                },
             };
 
             *self.inode_mut(of_inode).summary_mut() -= child_summary;
@@ -266,8 +314,6 @@ mod gtree {
             DelFrom: FnOnce(&mut Leaf, M) -> Option<Leaf>,
             DelUpTo: FnOnce(&mut Leaf, M) -> Option<Leaf>,
         {
-            self.last_insertion_cache = None;
-
             let (idxs, maybe_split) = delete::delete_range(
                 self,
                 self.root_idx,
@@ -280,6 +326,8 @@ mod gtree {
             if let Some(root_split) = maybe_split {
                 self.root_has_split(root_split);
             }
+
+            self.last_insertion_cache = None;
 
             idxs
         }
@@ -298,7 +346,7 @@ mod gtree {
         }
 
         /// TODO: docs
-        pub fn insert_at_offset<M: Metric<Leaf::Summary>, F>(
+        pub fn insert<M: Metric<Leaf::Summary>, F>(
             &mut self,
             offset: M,
             insert_with: F,
@@ -313,15 +361,29 @@ mod gtree {
                     M::measure(&self.leaf(leaf_idx).summarize());
 
                 if offset > m_offset && offset <= m_offset + leaf_measure {
-                    return self.insert_at_leaf(
+                    self.insert_at_leaf(
                         leaf_idx,
                         leaf_offset,
                         offset,
                         insert_with,
-                    );
+                    )
+                } else {
+                    self.insert_at_offset(offset, insert_with)
                 }
+            } else {
+                self.insert_at_offset(offset, insert_with)
             }
+        }
 
+        /// TODO: docs
+        pub fn insert_at_offset<M: Metric<Leaf::Summary>, F>(
+            &mut self,
+            offset: M,
+            insert_with: F,
+        ) -> (Option<LeafIdx>, Option<LeafIdx>)
+        where
+            F: FnOnce(&mut Leaf, M) -> (Option<Leaf>, Option<Leaf>),
+        {
             let (idxs, maybe_split) = insert::insert_at_offset(
                 self,
                 self.root_idx,
@@ -411,6 +473,7 @@ mod gtree {
                 // of children.
                 let rest = if at_offset <= min_children {
                     let rest = self.split_inode(idx, split_offset);
+
                     self.inode_mut(idx).insert(
                         at_offset,
                         child,
@@ -556,16 +619,6 @@ mod gtree {
             }
         }
 
-        #[inline]
-        fn is_inode_deleted(&self, inode_idx: InodeIdx) -> bool {
-            false
-        }
-
-        #[inline]
-        fn is_leaf_deleted(&self, leaf_idx: LeafIdx) -> bool {
-            false
-        }
-
         #[inline(always)]
         pub(super) fn leaf(&self, idx: LeafIdx) -> &Leaf {
             self.lnode(idx).value()
@@ -672,28 +725,38 @@ mod gtree {
             inode_idx: InodeIdx,
             at_offset: usize,
         ) -> Inode<ARITY, Leaf> {
-            let mut summary = Leaf::Summary::empty();
-
-            match self.inode(inode_idx).children() {
-                Either::Internal(inode_idxs) => {
-                    for &idx in &inode_idxs[..at_offset] {
-                        summary += self.inode(idx).summary();
-                    }
-                },
-
-                Either::Leaf(leaf_idxs) => {
-                    for &idx in &leaf_idxs[..at_offset] {
-                        summary += self.leaf(idx).summarize();
-                    }
-                },
-            };
-
+            let summary = self.summary_offset_of_child(inode_idx, at_offset);
             self.inode_mut(inode_idx).split(at_offset, summary)
         }
 
         #[inline]
         pub fn summary(&self) -> Leaf::Summary {
             self.root().summary()
+        }
+
+        #[inline]
+        fn summary_offset_of_child(
+            &self,
+            in_inode: InodeIdx,
+            child_offset: usize,
+        ) -> Leaf::Summary {
+            let mut summary = Leaf::Summary::empty();
+
+            match self.inode(in_inode).children() {
+                Either::Internal(inode_idxs) => {
+                    for &idx in &inode_idxs[..child_offset] {
+                        summary += self.inode(idx).summary();
+                    }
+                },
+
+                Either::Leaf(leaf_idxs) => {
+                    for &idx in &leaf_idxs[..child_offset] {
+                        summary += self.leaf(idx).summarize();
+                    }
+                },
+            }
+
+            summary
         }
 
         /// TODO: docs
@@ -912,14 +975,9 @@ mod gtree {
 
                 writeln!(
                     f,
-                    "{}{}{}{:?}",
+                    "{}{}{:?}",
                     &shifts[..shifts.len() - last_shift_byte_len],
                     ident,
-                    if gtree.is_inode_deleted(inode_idx) {
-                        "🪦 "
-                    } else {
-                        ""
-                    },
                     inode.summary()
                 )?;
 
@@ -965,14 +1023,9 @@ mod gtree {
                             let lnode = gtree.lnode(leaf_idx);
                             writeln!(
                                 f,
-                                "{}{}{}{:#?}",
+                                "{}{}{:#?}",
                                 &shifts,
                                 ident,
-                                if gtree.is_leaf_deleted(leaf_idx) {
-                                    "🪦 "
-                                } else {
-                                    ""
-                                },
                                 &lnode.value()
                             )?;
                         }
@@ -1114,6 +1167,30 @@ mod inode {
                 has_leaves: false,
                 len: 2,
             }
+        }
+
+        /// TODO: docs
+        pub fn idx_of_internal_child(&self, inode_idx: InodeIdx) -> usize {
+            let Either::Internal(idxs) = self.children() else {
+                panic!("this inode contains leaf nodes");
+            };
+
+            idxs.iter()
+                .enumerate()
+                .find_map(|(i, &idx)| (idx == inode_idx).then_some(i))
+                .expect("this inode does not contain the given inode idx")
+        }
+
+        /// TODO: docs
+        pub fn idx_of_leaf_child(&self, leaf_idx: LeafIdx) -> usize {
+            let Either::Leaf(idxs) = self.children() else {
+                panic!("this inode contains other inodes");
+            };
+
+            idxs.iter()
+                .enumerate()
+                .find_map(|(i, &idx)| (idx == leaf_idx).then_some(i))
+                .expect("this inode does not contain the given leaf idx")
         }
 
         #[inline]
@@ -1350,7 +1427,8 @@ mod insert {
         M: Metric<L::Summary>,
         F: FnOnce(&mut L, M) -> (Option<L>, Option<L>),
     {
-        let (child_idx, offset) = gtree.child_at_offset(in_inode, at_offset);
+        let (child_idx, offset) = gtree
+            .child_at_offset(in_inode, at_offset - M::measure(&leaf_offset));
 
         leaf_offset += offset;
 
@@ -1370,12 +1448,14 @@ mod insert {
             Either::Leaf(leaf_idx) => {
                 let (inserted_idx, split_idx, split) =
                     gtree.with_leaf_mut(leaf_idx, child_idx, |leaf| {
-                        insert_with(leaf, M::measure(&leaf_offset) - at_offset)
+                        insert_with(leaf, at_offset - M::measure(&leaf_offset))
                     });
 
-                gtree.last_insertion_cache = if let Some(idx) = inserted_idx {
-                    let summary = gtree.leaf(idx).summarize();
-                    Some((idx, leaf_offset + summary))
+                gtree.last_insertion_cache = if at_offset == M::zero() {
+                    None
+                } else if let Some(idx) = inserted_idx {
+                    let leaf_summary = gtree.leaf(leaf_idx).summarize();
+                    Some((idx, leaf_offset + leaf_summary))
                 } else {
                     Some((leaf_idx, leaf_offset))
                 };
