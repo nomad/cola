@@ -746,20 +746,15 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
 
     /// TODO: docs
     #[inline]
-    fn with_internal_mut<F, R>(
-        &mut self,
-        inode_idx: InodeIdx,
-        idx_in_parent: usize,
-        fun: F,
-    ) -> (R, Option<Inode<ARITY, Leaf>>)
+    fn with_internal_mut<F, R>(&mut self, inode_idx: InodeIdx, fun: F) -> R
     where
-        F: FnOnce(&mut Self) -> (R, Option<Inode<ARITY, Leaf>>),
+        F: FnOnce(&mut Self) -> R,
     {
         debug_assert!(inode_idx != self.root_idx);
 
         let old_summary = self.inode(inode_idx).summary();
 
-        let (ret, maybe_split) = fun(self);
+        let ret = fun(self);
 
         let inode = self.inode(inode_idx);
 
@@ -773,7 +768,24 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
         *parent.summary_mut() -= old_summary;
         *parent.summary_mut() += new_summary;
 
-        let split = if let Some(mut split) = maybe_split {
+        ret
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn with_internal_mut_handle_split<F, R>(
+        &mut self,
+        inode_idx: InodeIdx,
+        idx_in_parent: usize,
+        fun: F,
+    ) -> (R, Option<Inode<ARITY, Leaf>>)
+    where
+        F: FnOnce(&mut Self) -> (R, Option<Inode<ARITY, Leaf>>),
+    {
+        let (ret, maybe_split) = self.with_internal_mut(inode_idx, fun);
+
+        let split = maybe_split.and_then(|mut split| {
+            let parent_idx = self.inode(inode_idx).parent();
             *split.parent_mut() = parent_idx;
             let summary = split.summary();
             let split_idx = self.push_inode(split);
@@ -783,23 +795,16 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
                 NodeIdx::from_internal(split_idx),
                 summary,
             )
-        } else {
-            None
-        };
+        });
 
         (ret, split)
     }
 
     /// TODO: docs
     #[inline]
-    fn with_leaf_mut<F>(
-        &mut self,
-        leaf_idx: LeafIdx,
-        idx_in_parent: usize,
-        fun: F,
-    ) -> (Option<LeafIdx>, Option<LeafIdx>, Option<Inode<ARITY, Leaf>>)
+    fn with_leaf_mut<F, T>(&mut self, leaf_idx: LeafIdx, fun: F) -> T
     where
-        F: FnOnce(&mut Leaf) -> (Option<Leaf>, Option<Leaf>),
+        F: FnOnce(&mut Leaf) -> T,
     {
         let lnode = self.lnode_mut(leaf_idx);
 
@@ -807,7 +812,7 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
 
         let old_summary = leaf.summarize();
 
-        let (left, right) = fun(leaf);
+        let ret = fun(leaf);
 
         let new_summary = leaf.summarize();
 
@@ -817,15 +822,32 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
         *parent.summary_mut() -= old_summary;
         *parent.summary_mut() += new_summary;
 
+        ret
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn with_leaf_mut_handle_split<F>(
+        &mut self,
+        leaf_idx: LeafIdx,
+        idx_in_parent: usize,
+        fun: F,
+    ) -> (Option<LeafIdx>, Option<LeafIdx>, Option<Inode<ARITY, Leaf>>)
+    where
+        F: FnOnce(&mut Leaf) -> (Option<Leaf>, Option<Leaf>),
+    {
+        let parent_idx = self.lnode(leaf_idx).parent();
+
+        let (left, right) = self.with_leaf_mut(leaf_idx, fun);
+
         let insert_at = idx_in_parent + 1;
 
         match (left, right) {
             (Some(left), Some(right)) => {
                 let left_summary = left.summarize();
-                let right_summary = right.summarize();
-
                 let left_idx = self.push_leaf(left, parent_idx);
 
+                let right_summary = right.summarize();
                 let right_idx = self.push_leaf(right, parent_idx);
 
                 let split = self.insert_two_in_inode(
@@ -843,7 +865,6 @@ impl<const ARITY: usize, Leaf: Summarize> Gtree<ARITY, Leaf> {
 
             (Some(left), None) => {
                 let summary = left.summarize();
-
                 let left_idx = self.push_leaf(left, parent_idx);
 
                 let split = self.insert_in_inode(
@@ -1208,21 +1229,24 @@ mod insert {
         leaf_offset += offset;
 
         match gtree.inode(in_inode).child(child_idx) {
-            Either::Internal(next_idx) => {
-                gtree.with_internal_mut(next_idx, child_idx, |gtree| {
-                    insert_at_offset(
-                        gtree,
-                        next_idx,
-                        leaf_offset,
-                        at_offset,
-                        insert_with,
-                    )
-                })
-            },
+            Either::Internal(next_idx) => gtree
+                .with_internal_mut_handle_split(
+                    next_idx,
+                    child_idx,
+                    |gtree| {
+                        insert_at_offset(
+                            gtree,
+                            next_idx,
+                            leaf_offset,
+                            at_offset,
+                            insert_with,
+                        )
+                    },
+                ),
 
             Either::Leaf(leaf_idx) => {
-                let (inserted_idx, split_idx, split) =
-                    gtree.with_leaf_mut(leaf_idx, child_idx, |leaf| {
+                let (inserted_idx, split_idx, split) = gtree
+                    .with_leaf_mut_handle_split(leaf_idx, child_idx, |leaf| {
                         insert_with(leaf, at_offset - M::measure(&leaf_offset))
                     });
 
@@ -1285,17 +1309,21 @@ mod delete {
         range.end -= offset;
 
         match gtree.inode(in_inode).child(child_idx) {
-            Either::Internal(next_idx) => {
-                gtree.with_internal_mut(next_idx, child_idx, |gtree| {
-                    delete_range(
-                        gtree, next_idx, range, del_range, del_from, del_up_to,
-                    )
-                })
-            },
+            Either::Internal(next_idx) => gtree
+                .with_internal_mut_handle_split(
+                    next_idx,
+                    child_idx,
+                    |gtree| {
+                        delete_range(
+                            gtree, next_idx, range, del_range, del_from,
+                            del_up_to,
+                        )
+                    },
+                ),
 
             Either::Leaf(leaf_idx) => {
-                let (first_idx, second_idx, split) =
-                    gtree.with_leaf_mut(leaf_idx, child_idx, |leaf| {
+                let (first_idx, second_idx, split) = gtree
+                    .with_leaf_mut_handle_split(leaf_idx, child_idx, |leaf| {
                         del_range(leaf, range)
                     });
 
@@ -1341,21 +1369,17 @@ mod delete {
 
                 match gtree.inode(idx).child(child_idx) {
                     Either::Internal(inode_idx) => {
-                        let old_summary = gtree.inode(inode_idx).summary();
-
-                        let (leaf_idx, split) = delete_from(
-                            gtree,
-                            inode_idx,
-                            range.start - offset,
-                            del_from,
-                        );
+                        let (leaf_idx, split) =
+                            gtree.with_internal_mut(inode_idx, |gtree| {
+                                delete_from(
+                                    gtree,
+                                    inode_idx,
+                                    range.start - offset,
+                                    del_from,
+                                )
+                            });
 
                         leaf_idx_start = leaf_idx;
-
-                        let new_summary = gtree.inode(inode_idx).summary();
-                        let inode = gtree.inode_mut(idx);
-                        *inode.summary_mut() -= old_summary;
-                        *inode.summary_mut() += new_summary;
 
                         if let Some(mut extra) = split {
                             *extra.parent_mut() = idx;
@@ -1367,23 +1391,14 @@ mod delete {
                     },
 
                     Either::Leaf(leaf_idx) => {
-                        let leaf = gtree.leaf_mut(leaf_idx);
-
-                        let old_summary = leaf.summarize();
-
-                        let split = del_from(leaf, range.start - offset);
-
-                        let new_summary = leaf.summarize();
-                        let inode = gtree.inode_mut(idx);
-                        *inode.summary_mut() -= old_summary;
-                        *inode.summary_mut() += new_summary;
+                        let split = gtree.with_leaf_mut(leaf_idx, |leaf| {
+                            del_from(leaf, range.start - offset)
+                        });
 
                         if let Some(split) = split {
                             let summary = split.summarize();
                             let leaf_idx = gtree.push_leaf(split, idx);
-
                             leaf_idx_start = Some(leaf_idx);
-
                             let node_idx = NodeIdx::from_leaf(leaf_idx);
                             extra_from_start = Some((node_idx, summary));
                         }
@@ -1408,21 +1423,17 @@ mod delete {
 
                 match gtree.inode(idx).child(child_idx) {
                     Either::Internal(inode_idx) => {
-                        let old_summary = gtree.inode(inode_idx).summary();
-
-                        let (leaf_idx, split) = delete_up_to(
-                            gtree,
-                            inode_idx,
-                            range.end - offset,
-                            del_up_to,
-                        );
+                        let (leaf_idx, split) =
+                            gtree.with_internal_mut(inode_idx, |gtree| {
+                                delete_up_to(
+                                    gtree,
+                                    inode_idx,
+                                    range.end - offset,
+                                    del_up_to,
+                                )
+                            });
 
                         leaf_idx_end = leaf_idx;
-
-                        let new_summary = gtree.inode(inode_idx).summary();
-                        let inode = gtree.inode_mut(idx);
-                        *inode.summary_mut() -= old_summary;
-                        *inode.summary_mut() += new_summary;
 
                         if let Some(mut extra) = split {
                             *extra.parent_mut() = idx;
@@ -1434,16 +1445,9 @@ mod delete {
                     },
 
                     Either::Leaf(leaf_idx) => {
-                        let leaf = gtree.leaf_mut(leaf_idx);
-
-                        let old_summary = leaf.summarize();
-
-                        let split = del_up_to(leaf, range.end - offset);
-
-                        let new_summary = leaf.summarize();
-                        let inode = gtree.inode_mut(idx);
-                        *inode.summary_mut() -= old_summary;
-                        *inode.summary_mut() += new_summary;
+                        let split = gtree.with_leaf_mut(leaf_idx, |leaf| {
+                            del_up_to(leaf, range.end - offset)
+                        });
 
                         if let Some(split) = split {
                             let summary = split.summarize();
@@ -1523,17 +1527,22 @@ mod delete {
                 from -= offset;
 
                 return match gtree.inode(idx).child(child_idx) {
-                    Either::Internal(next_idx) => {
-                        gtree.with_internal_mut(next_idx, child_idx, |gtree| {
-                            delete_from(gtree, next_idx, from, del_from)
-                        })
-                    },
+                    Either::Internal(next_idx) => gtree
+                        .with_internal_mut_handle_split(
+                            next_idx,
+                            child_idx,
+                            |gtree| {
+                                delete_from(gtree, next_idx, from, del_from)
+                            },
+                        ),
 
                     Either::Leaf(leaf_idx) => {
-                        let (idx, _none, split) =
-                            gtree.with_leaf_mut(leaf_idx, child_idx, |leaf| {
-                                (del_from(leaf, from), None)
-                            });
+                        let (idx, _none, split) = gtree
+                            .with_leaf_mut_handle_split(
+                                leaf_idx,
+                                child_idx,
+                                |leaf| (del_from(leaf, from), None),
+                            );
 
                         (idx, split)
                     },
@@ -1568,17 +1577,22 @@ mod delete {
                 up_to -= offset;
 
                 return match gtree.inode(idx).child(child_idx) {
-                    Either::Internal(next_idx) => {
-                        gtree.with_internal_mut(next_idx, child_idx, |gtree| {
-                            delete_up_to(gtree, next_idx, up_to, del_up_to)
-                        })
-                    },
+                    Either::Internal(next_idx) => gtree
+                        .with_internal_mut_handle_split(
+                            next_idx,
+                            child_idx,
+                            |gtree| {
+                                delete_up_to(gtree, next_idx, up_to, del_up_to)
+                            },
+                        ),
 
                     Either::Leaf(leaf_idx) => {
-                        let (idx, _none, split) =
-                            gtree.with_leaf_mut(leaf_idx, child_idx, |leaf| {
-                                (del_up_to(leaf, up_to), None)
-                            });
+                        let (idx, _none, split) = gtree
+                            .with_leaf_mut_handle_split(
+                                leaf_idx,
+                                child_idx,
+                                |leaf| (del_up_to(leaf, up_to), None),
+                            );
 
                         (idx, split)
                     },
