@@ -141,58 +141,11 @@ mod serde;
 use clocks::{LamportClock, LamportTimestamp};
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
-use gtree::{Gtree, Summarize, Summary};
+use gtree::{Gtree, Leaf, Length, Summarize, Summary};
 use insertion_run::{Anchor, InsertionRun};
 pub use replica::Replica;
 use replica::ReplicaId;
 // use run_id_registry::RunIdRegistry;
 pub use text_edit::TextEdit;
 
-/// TODO: docs
-pub type Length = usize;
-
 type CharacterTimestamp = u64;
-
-/// TODO: docs
-pub trait Metric {
-    /// TODO: docs
-    fn len(s: &str) -> Length;
-}
-
-/// TODO: docs
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ByteMetric;
-
-impl Metric for ByteMetric {
-    #[inline]
-    fn len(s: &str) -> Length {
-        s.len()
-    }
-}
-
-#[inline]
-fn range_bounds_to_start_end<L, R>(
-    range: R,
-    lo: Length,
-    hi: Length,
-) -> (Length, Length)
-where
-    L: Into<Length> + Copy,
-    R: core::ops::RangeBounds<L>,
-{
-    use core::ops::Bound;
-
-    let start = match range.start_bound() {
-        Bound::Included(&n) => n.into(),
-        Bound::Excluded(&n) => n.into() + 1,
-        Bound::Unbounded => lo,
-    };
-
-    let end = match range.end_bound() {
-        Bound::Included(&n) => n.into() + 1,
-        Bound::Excluded(&n) => n.into(),
-        Bound::Unbounded => hi,
-    };
-
-    (start, end)
-}

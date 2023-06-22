@@ -52,10 +52,8 @@ impl<B: Buffer> Replica<B> {
     }
 
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) {
-        if let Some(edit) =
-            self.crdt.merge(std::borrow::Cow::Borrowed(crdt_edit))
-        {
-            self.buffer.replace(edit.range, &edit.content);
+        if let Some(edit) = self.crdt.merge(crdt_edit.clone()) {
+            self.buffer.replace(edit.range, "");
         }
     }
 

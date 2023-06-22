@@ -195,7 +195,7 @@ impl InsertionRun {
     }
 }
 
-impl gtree::DeleteLeaf for InsertionRun {
+impl gtree::Delete for InsertionRun {
     fn delete(&mut self) {
         self.is_deleted = true;
     }
@@ -285,16 +285,20 @@ impl Summarize for InsertionRun {
     }
 }
 
-impl gtree::Metric<u64> for u64 {
+impl gtree::Length<u64> for u64 {
     #[inline]
     fn zero() -> Self {
         0
     }
 
     #[inline]
-    fn measure(this: &Self) -> Self {
+    fn len(this: &Self) -> Self {
         *this
     }
+}
+
+impl Leaf for InsertionRun {
+    type Length = u64;
 }
 
 #[cfg(test)]

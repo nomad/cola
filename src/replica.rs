@@ -1,7 +1,5 @@
-use alloc::borrow::Cow;
 use alloc::collections::VecDeque;
-use core::marker::PhantomData;
-use core::ops::{Range, RangeBounds};
+use core::ops::RangeBounds;
 
 use uuid::Uuid;
 
@@ -11,7 +9,7 @@ use crate::*;
 const ARITY: usize = 32;
 
 /// TODO: docs
-pub struct Replica<M: Metric = ByteMetric> {
+pub struct Replica {
     /// TODO: docs
     id: ReplicaId,
 
@@ -29,8 +27,6 @@ pub struct Replica<M: Metric = ByteMetric> {
 
     /// TODO: docs
     pending: VecDeque<CrdtEdit>,
-
-    metric: PhantomData<M>,
 }
 
 impl core::fmt::Debug for Replica {
@@ -84,7 +80,7 @@ impl ReplicaId {
     }
 }
 
-impl<M: Metric> Clone for Replica<M> {
+impl Clone for Replica {
     #[inline(always)]
     fn clone(&self) -> Self {
         let mut lamport_clock = self.lamport_clock;
@@ -98,27 +94,23 @@ impl<M: Metric> Clone for Replica<M> {
             // run_indexes: self.run_indexes.clone(),
             lamport_clock,
             pending: self.pending.clone(),
-            metric: PhantomData,
         }
     }
 }
 
-impl<M: Metric> Replica<M> {
-    #[cfg(debug_assertions)]
+impl Replica {
     #[doc(hidden)]
     pub fn assert_invariants(&self) {
         self.insertion_runs.assert_invariants()
     }
 
-    #[cfg(debug_assertions)]
     #[doc(hidden)]
-    pub fn debug(&self) -> debug::Debug<'_, M> {
+    pub fn debug(&self) -> debug::Debug<'_> {
         debug::Debug(self)
     }
 
-    #[cfg(debug_assertions)]
     #[doc(hidden)]
-    pub fn debug_as_btree(&self) -> debug::DebugAsBtree<'_, M> {
+    pub fn debug_as_btree(&self) -> debug::DebugAsBtree<'_> {
         debug::DebugAsBtree(self)
     }
 
@@ -126,8 +118,34 @@ impl<M: Metric> Replica<M> {
     #[inline]
     pub fn deleted<R>(&mut self, range: R) -> CrdtEdit
     where
-        R: RangeBounds<Length>,
+        R: RangeBounds<usize>,
     {
+        #[inline(always)]
+        fn range_bounds_to_start_end<R>(
+            range: R,
+            lo: usize,
+            hi: usize,
+        ) -> (usize, usize)
+        where
+            R: RangeBounds<usize>,
+        {
+            use core::ops::Bound;
+
+            let start = match range.start_bound() {
+                Bound::Included(&n) => n,
+                Bound::Excluded(&n) => n + 1,
+                Bound::Unbounded => lo,
+            };
+
+            let end = match range.end_bound() {
+                Bound::Included(&n) => n + 1,
+                Bound::Excluded(&n) => n,
+                Bound::Unbounded => hi,
+            };
+
+            (start, end)
+        }
+
         let (start, end) = range_bounds_to_start_end(range, 0, self.len());
 
         if start == end {
@@ -198,13 +216,12 @@ impl<M: Metric> Replica<M> {
             character_ts: len,
             lamport_clock,
             pending: VecDeque::new(),
-            metric: PhantomData,
         }
     }
 
     /// TODO: docs
     #[inline]
-    pub fn inserted(&mut self, offset: Length, len: Length) -> CrdtEdit {
+    pub fn inserted(&mut self, offset: usize, len: usize) -> CrdtEdit {
         if len == 0 {
             return CrdtEdit::no_op();
         }
@@ -306,18 +323,13 @@ impl<M: Metric> Replica<M> {
     /// TODO: docs
     #[allow(clippy::len_without_is_empty)]
     #[doc(hidden)]
-    pub fn len(&self) -> Length {
+    pub fn len(&self) -> usize {
         self.insertion_runs.summary() as _
     }
 
     /// TODO: docs
     #[inline]
-    pub fn merge<'a, E>(&mut self, crdt_edit: E) -> Option<TextEdit<'a>>
-    where
-        E: Into<Cow<'a, CrdtEdit>>,
-    {
-        let crdt_edit = crdt_edit.into();
-
+    pub fn merge(&mut self, crdt_edit: CrdtEdit) -> Option<TextEdit> {
         //match crdt_edit {
         //    Cow::Owned(CrdtEdit {
         //        kind:
@@ -357,12 +369,11 @@ impl<M: Metric> Replica<M> {
         todo!()
     }
 
-    fn merge_insertion<'a>(
+    fn merge_insertion(
         &mut self,
-        content: Cow<'a, str>,
         anchor: Anchor,
         lamport_ts: LamportTimestamp,
-    ) -> Option<TextEdit<'a>> {
+    ) -> Option<TextEdit> {
         todo!();
 
         //let Some(run_id) = self.run_indexes.get_run_id(&anchor) else {
@@ -410,13 +421,12 @@ impl<M: Metric> Replica<M> {
     }
 }
 
-#[cfg(debug_assertions)]
 mod debug {
     use super::*;
 
-    pub struct Debug<'a, M: Metric>(pub &'a Replica<M>);
+    pub struct Debug<'a>(pub &'a Replica);
 
-    impl<'a, M: Metric> core::fmt::Debug for Debug<'a, M> {
+    impl<'a> core::fmt::Debug for Debug<'a> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
@@ -429,9 +439,9 @@ mod debug {
         }
     }
 
-    pub struct DebugAsBtree<'a, M: Metric>(pub &'a Replica<M>);
+    pub struct DebugAsBtree<'a>(pub &'a Replica);
 
-    impl<'a, M: Metric> core::fmt::Debug for DebugAsBtree<'a, M> {
+    impl<'a> core::fmt::Debug for DebugAsBtree<'a> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)

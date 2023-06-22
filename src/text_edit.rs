@@ -1,20 +1,14 @@
-use alloc::borrow::Cow;
 use core::ops::Range;
 
-use crate::Length;
-
 /// TODO: docs
-pub struct TextEdit<'a> {
+pub struct TextEdit {
     /// TODO: docs
-    pub range: Range<Length>,
-
-    /// TODO: docs
-    pub content: Cow<'a, str>,
+    pub range: Range<usize>,
 }
 
-impl<'a> TextEdit<'a> {
+impl TextEdit {
     #[inline]
-    pub(crate) fn new(content: Cow<'a, str>, range: Range<Length>) -> Self {
-        Self { content, range }
+    pub(crate) fn new(range: Range<usize>) -> Self {
+        Self { range }
     }
 }
