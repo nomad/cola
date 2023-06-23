@@ -80,7 +80,7 @@ pub struct Gtree<const ARITY: usize, L: Leaf> {
     root_idx: InodeIdx,
 
     /// TODO: docs
-    last_insertion_cache: Option<(LeafIdx, L::Summary)>,
+    cursor: Option<(LeafIdx, L::Summary)>,
 }
 
 /// An identifier for an internal node of the Gtree.
@@ -124,7 +124,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// If this method returns without panicking, then the Gtree is in a
     /// consistent state.
     pub fn assert_invariants(&self) {
-        if let Some((leaf_idx, cached_summary)) = self.last_insertion_cache {
+        if let Some((leaf_idx, cached_summary)) = self.cursor {
             self.assert_summary_offset_of_leaf(leaf_idx, cached_summary);
         }
     }
@@ -210,22 +210,22 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         &self,
         of_inode: InodeIdx,
         range: Range<L::Length>,
-    ) -> Option<(usize, L::Length)> {
+    ) -> Option<(usize, L::Summary)> {
         #[inline(always)]
         fn measure<L, I>(
             iter: I,
             range: Range<L::Length>,
-        ) -> Option<(usize, L::Length)>
+        ) -> Option<(usize, L::Summary)>
         where
             L: Leaf,
-            I: Iterator<Item = L::Length>,
+            I: Iterator<Item = L::Summary>,
         {
-            let mut offset = L::Length::zero();
-            for (idx, child_len) in iter.enumerate() {
-                offset += child_len;
-                if offset > range.start {
-                    return if offset >= range.end {
-                        Some((idx, offset - child_len))
+            let mut offset = L::Summary::empty();
+            for (idx, child_summary) in iter.enumerate() {
+                offset += child_summary;
+                if L::Length::len(&offset) > range.start {
+                    return if L::Length::len(&offset) >= range.end {
+                        Some((idx, offset - child_summary))
                     } else {
                         None
                     };
@@ -236,19 +236,19 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         match self.inode(of_inode).children() {
             Either::Internal(inode_idxs) => {
-                let iter = inode_idxs.iter().copied().map(|idx| {
-                    let inode = self.inode(idx);
-                    L::Length::len(&inode.summary())
-                });
+                let iter = inode_idxs
+                    .iter()
+                    .copied()
+                    .map(|idx| self.inode(idx).summary());
 
                 measure::<L, _>(iter, range)
             },
 
             Either::Leaf(leaf_idxs) => {
-                let iter = leaf_idxs.iter().copied().map(|idx| {
-                    let leaf = self.leaf(idx);
-                    L::Length::len(&leaf.summarize())
-                });
+                let iter = leaf_idxs
+                    .iter()
+                    .copied()
+                    .map(|idx| self.leaf(idx).summarize());
 
                 measure::<L, _>(iter, range)
             },
@@ -325,6 +325,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let (idxs, maybe_split) = delete::delete_range(
             self,
             self.root_idx,
+            L::Summary::empty(),
             range,
             delete_range,
             delete_from,
@@ -334,8 +335,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         if let Some(root_split) = maybe_split {
             self.root_has_split(root_split);
         }
-
-        self.last_insertion_cache = None;
 
         idxs
     }
@@ -359,7 +358,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     where
         F: FnOnce(&mut L, L::Length) -> (Option<L>, Option<L>),
     {
-        if let Some((leaf_idx, leaf_offset)) = self.last_insertion_cache {
+        if let Some((leaf_idx, leaf_offset)) = self.cursor {
             let m_offset = L::Length::len(&leaf_offset);
 
             let leaf_measure =
@@ -400,7 +399,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         if first.is_some() {
             let new_leaf = mem::replace(lnode.value_mut(), old_leaf);
 
-            self.last_insertion_cache = None;
+            self.cursor = None;
 
             return self.insert_at_offset(provided_offset, |old_leaf, _| {
                 *old_leaf = new_leaf;
@@ -649,7 +648,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let lnode = Lnode::new(first_leaf, root_idx);
         lnodes.push(lnode);
 
-        Self { inodes, lnodes, root_idx, last_insertion_cache: None }
+        Self { inodes, lnodes, root_idx, cursor: None }
     }
 
     /// Pushes an inode to the Gtree, returning its index.
@@ -1257,8 +1256,8 @@ mod insert {
                         )
                     });
 
-                gtree.last_insertion_cache = if at_offset == L::Length::zero()
-                {
+                gtree.cursor = if at_offset == L::Length::zero() {
+                    // TODO: why?
                     None
                 } else if let Some(idx) = inserted_idx {
                     let leaf_summary = gtree.leaf(leaf_idx).summarize();
@@ -1276,12 +1275,56 @@ mod insert {
 mod delete {
     //! TODO: docs.
 
+    // 2 cases
+    //
+    // 1: it lands inside a single leaf
+    //    3 cases
+    //        (None, None) means entire range was deleted
+    //
+    //        "aa" "bbbb" "cc" -> del 2..6
+    //        "aa" | "bbbb" "cc -> place cursor at the beginning of the
+    //        previous fragment
+    //
+    //        (Some, None) means
+    //
+    //        "aa" "bbbb" "cc" -> del 4..6
+    //        "aa" "bb" | "bb" "cc" -> place cursor at the beginning of the
+    //        fragment
+    //
+    //        "aa" "bbbb" "cc" -> del 2..4
+    //        "aa" | "bb" "bb" "cc" -> place cursor at beginning of previous
+    //        fragment
+    //
+    //        (Some, Some) ->
+    //
+    //        "aa" "bbbb" "cc" -> del 3..7
+    //        "aa" "b" | "bb" "b" "cc" -> place cursor beginning of fragment
+    //
+    //  2: it lands on 2 separate leaves
+    //
+    //      the end leaf doesn't matter, what matters is the start leaf
+    //      2 cases
+    //        (None) entire leaf was deleted
+    //
+    //        "aa" "bbbb" "cc" -> del 2..7
+    //        "aa" | "bbbb" "c" "c" -> place cursor at the beginning of the
+    //        previous fragment
+    //
+    //        (Some)
+    //
+    //        "aa" "bbbb" "cc" -> del 4..7
+    //        "aa" "bb" | "bb" "c" "c" -> place cursor at the beginning of the
+    //        fragment
+    //
+    //        now what re
+
     use super::*;
 
     #[allow(clippy::type_complexity)]
     pub(super) fn delete_range<const N: usize, L, DelRange, DelFrom, DelUpTo>(
         gtree: &mut Gtree<N, L>,
         in_inode: InodeIdx,
+        mut leaf_offset: L::Summary,
         mut range: Range<L::Length>,
         del_range: DelRange,
         del_from: DelFrom,
@@ -1298,15 +1341,18 @@ mod delete {
                 return delete_range_in_inode(
                     gtree,
                     in_inode,
+                    leaf_offset,
                     range,
                     del_from,
                     del_up_to,
                 );
             };
 
-        range.start -= offset;
+        leaf_offset += offset;
 
-        range.end -= offset;
+        range.start -= L::Length::len(&offset);
+
+        range.end -= L::Length::len(&offset);
 
         match gtree.inode(in_inode).child(child_idx) {
             Either::Internal(next_idx) => gtree
@@ -1315,7 +1361,12 @@ mod delete {
                     child_idx,
                     |gtree| {
                         delete_range(
-                            gtree, next_idx, range, del_range, del_from,
+                            gtree,
+                            next_idx,
+                            leaf_offset,
+                            range,
+                            del_range,
+                            del_from,
                             del_up_to,
                         )
                     },
@@ -1327,6 +1378,13 @@ mod delete {
                         del_range(leaf, range)
                     });
 
+                gtree.cursor =
+                    if let (Some(_), Some(_)) = (first_idx, second_idx) {
+                        Some((leaf_idx, leaf_offset))
+                    } else {
+                        None
+                    };
+
                 ((first_idx, second_idx), split)
             },
         }
@@ -1336,6 +1394,7 @@ mod delete {
     fn delete_range_in_inode<const N: usize, L, DelFrom, DelUpTo>(
         gtree: &mut Gtree<N, L>,
         idx: InodeIdx,
+        mut leaf_offset: L::Summary,
         range: Range<L::Length>,
         del_from: DelFrom,
         del_up_to: DelUpTo,
@@ -1345,6 +1404,8 @@ mod delete {
         DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
     {
+        gtree.cursor = None;
+
         let mut idx_start = 0;
         let mut leaf_idx_start = None;
         let mut extra_from_start = None;
