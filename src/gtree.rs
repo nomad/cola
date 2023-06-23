@@ -55,6 +55,11 @@ pub trait Delete {
 /// TODO: docs
 pub trait Leaf: Clone + Debug + Summarize + Delete {
     type Length: Length<Self::Summary>;
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        Self::Length::len(&self.summarize()) == Self::Length::zero()
+    }
 }
 
 /// Statically checks that `InodeIdx` and `LeafIdx` have the same size.
@@ -119,6 +124,22 @@ impl InodeIdx {
 pub struct LeafIdx(usize);
 
 impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
+    /// TODO: docs
+    #[inline]
+    fn apply_patch(
+        &mut self,
+        starting_from: InodeIdx,
+        patch: <L::Summary as Summary>::Patch,
+    ) {
+        let mut parent = starting_from;
+
+        while !parent.is_dangling() {
+            let inode = self.inode_mut(parent);
+            inode.summary_mut().apply_patch(patch);
+            parent = inode.parent();
+        }
+    }
+
     /// Asserts the invariants of the Gtree.
     ///
     /// If this method returns without panicking, then the Gtree is in a
@@ -310,6 +331,80 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
     /// TODO: docs
     #[inline]
+    fn delete_leaf_range<F>(
+        &mut self,
+        leaf_idx: LeafIdx,
+        leaf_offset: L::Summary,
+        range: Range<L::Length>,
+        delete_with: F,
+    ) -> (Option<LeafIdx>, Option<LeafIdx>)
+    where
+        F: FnOnce(&mut L, Range<L::Length>) -> (Option<L>, Option<L>),
+    {
+        debug_assert!(range.start < range.end);
+        debug_assert!(range.end - range.start <= self.leaf_len(leaf_idx));
+
+        let lnode = self.lnode_mut(leaf_idx);
+
+        let old_summary = lnode.value().summarize();
+
+        let (first, second) = delete_with(lnode.value_mut(), range);
+
+        let new_summary = lnode.value().summarize();
+        let patch = L::Summary::patch(old_summary, new_summary);
+        let parent_idx = lnode.parent();
+        self.apply_patch(parent_idx, patch);
+
+        match (first, second) {
+            (None, None) => {
+                self.cursor =
+                    self.previous_leaf(leaf_idx, 0).map(|leaf_idx| {
+                        let offset =
+                            leaf_offset - self.leaf(leaf_idx).summarize();
+                        (leaf_idx, offset)
+                    });
+                (None, None)
+            },
+
+            (Some(first), None) => {
+                if first.is_empty() {
+                    debug_assert!(!self.leaf(leaf_idx).is_empty());
+                    self.cursor = Some((leaf_idx, leaf_offset));
+                    // TODO: check if `first` can be joined w/ the following
+                    // fragment.
+                } else {
+                    // The range was of the form `..end`
+                    debug_assert!(self.leaf(leaf_idx).is_empty());
+                    self.cursor =
+                        self.previous_leaf(leaf_idx, 0).map(|leaf_idx| {
+                            let offset =
+                                leaf_offset - self.leaf(leaf_idx).summarize();
+                            (leaf_idx, offset)
+                        })
+                    // TODO: check if `first` can be joined w/ the following
+                    // fragment.
+                }
+
+                todo!()
+            },
+
+            (Some(first), Some(second)) => {
+                debug_assert!(!self.leaf(leaf_idx).is_empty());
+
+                self.cursor = Some((leaf_idx, leaf_offset));
+
+                let (first_idx, second_idx) =
+                    self.insert_two_leaves_after_leaf(leaf_idx, first, second);
+
+                (Some(first_idx), Some(second_idx))
+            },
+
+            _ => unreachable!(),
+        }
+    }
+
+    /// TODO: docs
+    #[inline]
     pub fn delete_range<DelRange, DelFrom, DelUpTo>(
         &mut self,
         range: Range<L::Length>,
@@ -322,6 +417,41 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
     {
+        if let Some((leaf_idx, leaf_offset)) = self.cursor {
+            let offset_len = L::Length::len(&leaf_offset);
+
+            let leaf_len = self.leaf_len(leaf_idx);
+
+            if range.start >= offset_len && range.end <= offset_len + leaf_len
+            {
+                let range = range.start - offset_len..range.end - offset_len;
+                return self.delete_leaf_range(
+                    leaf_idx,
+                    leaf_offset,
+                    range,
+                    delete_range,
+                );
+            } else if let Some(next_leaf) = self.next_leaf(leaf_idx, 0) {
+                let offset_len = offset_len + leaf_len;
+
+                let leaf_len = self.leaf_len(next_leaf);
+
+                if range.start >= offset_len
+                    && range.end <= offset_len + leaf_len
+                {
+                    let range =
+                        range.start - offset_len..range.end - offset_len;
+
+                    return self.delete_leaf_range(
+                        next_leaf,
+                        leaf_offset,
+                        range,
+                        delete_range,
+                    );
+                }
+            }
+        }
+
         let (idxs, maybe_split) = delete::delete_range(
             self,
             self.root_idx,
@@ -339,9 +469,33 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         idxs
     }
 
+    #[allow(dead_code)]
+    #[inline(always)]
+    fn depth(&self) -> usize {
+        self.inode_depth(self.root_idx)
+    }
+
     #[inline(always)]
     fn inode(&self, idx: InodeIdx) -> &Inode<ARITY, L> {
         &self.inodes[idx.0]
+    }
+
+    /// Returns the depth of the subtree rooted at `idx`.
+    #[inline(always)]
+    fn inode_depth(&self, mut idx: InodeIdx) -> usize {
+        let mut depth = 1;
+
+        while let Either::Internal(idxs) = self.inode(idx).children() {
+            idx = *idxs.first().unwrap();
+            depth += 1;
+        }
+
+        depth
+    }
+
+    #[inline(always)]
+    fn inode_len(&self, idx: InodeIdx) -> L::Length {
+        L::Length::len(&self.inode(idx).summary())
     }
 
     #[inline]
@@ -610,9 +764,89 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
+    /// TODO: docs
+    #[inline]
+    fn insert_two_leaves_after_leaf(
+        &mut self,
+        leaf_idx: LeafIdx,
+        first_leaf: L,
+        second_leaf: L,
+    ) -> (LeafIdx, LeafIdx) {
+        let first_summary = first_leaf.summarize();
+        let second_summary = second_leaf.summarize();
+
+        let mut parent_idx = self.lnode(leaf_idx).parent();
+
+        let first_idx = self.push_leaf(first_leaf, parent_idx);
+        let second_idx = self.push_leaf(second_leaf, parent_idx);
+
+        let parent = self.inode(parent_idx);
+        let mut old_summary = parent.summary();
+        let mut idx_in_parent = parent.idx_of_leaf_child(leaf_idx);
+
+        let mut maybe_split = self.insert_two_in_inode(
+            parent_idx,
+            idx_in_parent + 1,
+            NodeIdx::from_leaf(first_idx),
+            first_summary,
+            idx_in_parent + 1,
+            NodeIdx::from_leaf(second_idx),
+            second_summary,
+        );
+
+        let parent = self.inode(parent_idx);
+        let mut patch = L::Summary::patch(old_summary, parent.summary());
+        let mut inode_idx = parent_idx;
+        parent_idx = parent.parent();
+
+        loop {
+            if parent_idx.is_dangling() {
+                if let Some(split) = maybe_split {
+                    self.root_has_split(split);
+                }
+                break;
+            } else if let Some(split) = maybe_split {
+                let split_summary = split.summary();
+                let split_idx = self.push_inode(split, parent_idx);
+
+                let parent = self.inode(parent_idx);
+                old_summary = parent.summary();
+                idx_in_parent = parent.idx_of_internal_child(inode_idx);
+
+                maybe_split = self.insert_in_inode(
+                    parent_idx,
+                    idx_in_parent + 1,
+                    NodeIdx::from_internal(split_idx),
+                    split_summary,
+                );
+
+                let parent = self.inode(parent_idx);
+                patch = L::Summary::patch(old_summary, parent.summary());
+                inode_idx = parent_idx;
+                parent_idx = parent.parent();
+            } else {
+                self.apply_patch(parent_idx, patch);
+                break;
+            }
+        }
+
+        (first_idx, second_idx)
+    }
+
+    #[allow(dead_code)]
+    #[inline(always)]
+    fn len(&self) -> L::Length {
+        self.inode_len(self.root_idx)
+    }
+
     #[inline(always)]
     fn leaf(&self, idx: LeafIdx) -> &L {
         self.lnode(idx).value()
+    }
+
+    #[inline(always)]
+    fn leaf_len(&self, idx: LeafIdx) -> L::Length {
+        L::Length::len(&self.leaf(idx).summarize())
     }
 
     #[inline(always)]
@@ -651,12 +885,61 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         Self { inodes, lnodes, root_idx, cursor: None }
     }
 
+    /// TODO: docs
+    #[inline]
+    fn next_leaf(
+        &self,
+        leaf_idx: LeafIdx,
+        idx_in_parent: usize,
+    ) -> Option<LeafIdx> {
+        let parent = self.inode(self.lnode(leaf_idx).parent());
+
+        let Either::Leaf(leaf_idxs) = parent.children() else {
+            unreachable!()
+        };
+
+        for &leaf_idx in &leaf_idxs[idx_in_parent + 1..] {
+            if self.leaf_len(leaf_idx) > L::Length::zero() {
+                return Some(leaf_idx);
+            }
+        }
+
+        None
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn previous_leaf(
+        &self,
+        leaf_idx: LeafIdx,
+        idx_in_parent: usize,
+    ) -> Option<LeafIdx> {
+        let parent = self.inode(self.lnode(leaf_idx).parent());
+
+        let Either::Leaf(leaf_idxs) = parent.children() else {
+            unreachable!()
+        };
+
+        for &leaf_idx in leaf_idxs[..idx_in_parent].iter().rev() {
+            if self.leaf_len(leaf_idx) > L::Length::zero() {
+                return Some(leaf_idx);
+            }
+        }
+
+        None
+    }
+
     /// Pushes an inode to the Gtree, returning its index.
     ///
     /// Note that the `parent` field of the given inode should be updated
     /// before calling this method.
     #[inline(always)]
-    fn push_inode(&mut self, mut inode: Inode<ARITY, L>) -> InodeIdx {
+    fn push_inode(
+        &mut self,
+        mut inode: Inode<ARITY, L>,
+        parent: InodeIdx,
+    ) -> InodeIdx {
+        *inode.parent_mut() = parent;
         let idx = InodeIdx(self.inodes.len());
         assert!(!idx.is_dangling());
         inode.pushed(self, idx);
@@ -683,7 +966,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     fn root_has_split(&mut self, root_split: Inode<ARITY, L>) {
         let split_summary = root_split.summary();
 
-        let split_idx = self.push_inode(root_split);
+        let split_idx = self.push_inode(root_split, InodeIdx::dangling());
 
         let new_root = Inode::from_two_internals(
             self.root_idx,
@@ -693,7 +976,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             InodeIdx::dangling(),
         );
 
-        let new_root_idx = self.push_inode(new_root);
+        let new_root_idx = self.push_inode(new_root, InodeIdx::dangling());
 
         *self.root_mut().parent_mut() = new_root_idx;
         *self.inode_mut(split_idx).parent_mut() = new_root_idx;
@@ -786,11 +1069,10 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     {
         let (ret, maybe_split) = self.with_internal_mut(inode_idx, fun);
 
-        let split = maybe_split.and_then(|mut split| {
+        let split = maybe_split.and_then(|split| {
             let parent_idx = self.inode(inode_idx).parent();
-            *split.parent_mut() = parent_idx;
             let summary = split.summary();
-            let split_idx = self.push_inode(split);
+            let split_idx = self.push_inode(split, parent_idx);
             self.insert_in_inode(
                 parent_idx,
                 idx_in_parent + 1,
@@ -1441,10 +1723,9 @@ mod delete {
 
                         leaf_idx_start = leaf_idx;
 
-                        if let Some(mut extra) = split {
-                            *extra.parent_mut() = idx;
+                        if let Some(extra) = split {
                             let summary = extra.summary();
-                            let inode_idx = gtree.push_inode(extra);
+                            let inode_idx = gtree.push_inode(extra, idx);
                             let node_idx = NodeIdx::from_internal(inode_idx);
                             extra_from_start = Some((node_idx, summary));
                         }
@@ -1495,10 +1776,9 @@ mod delete {
 
                         leaf_idx_end = leaf_idx;
 
-                        if let Some(mut extra) = split {
-                            *extra.parent_mut() = idx;
+                        if let Some(extra) = split {
                             let summary = extra.summary();
-                            let inode_idx = gtree.push_inode(extra);
+                            let inode_idx = gtree.push_inode(extra, idx);
                             let node_idx = NodeIdx::from_internal(inode_idx);
                             extra_from_end = Some((node_idx, summary));
                         }
@@ -1882,5 +2162,126 @@ mod debug {
                 Either::Leaf(leaf_idxs) => dbg.entries(leaf_idxs).finish(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug)]
+    struct TestLeaf {
+        len: u64,
+        is_visible: bool,
+    }
+
+    impl Summarize for TestLeaf {
+        type Summary = u64;
+
+        fn summarize(&self) -> Self::Summary {
+            self.len * (self.is_visible as u64)
+        }
+    }
+
+    impl Delete for TestLeaf {
+        fn delete(&mut self) {
+            self.is_visible = false;
+        }
+    }
+
+    impl Leaf for TestLeaf {
+        type Length = u64;
+    }
+
+    impl TestLeaf {
+        fn insert_with_len(
+            len: u64,
+        ) -> impl FnOnce(&mut Self, u64) -> (Option<Self>, Option<Self>)
+        {
+            move |leaf, offset| {
+                debug_assert!(offset <= leaf.len);
+
+                if offset == 0 {
+                    let new_leaf = TestLeaf::new_with_len(len);
+                    (Some(mem::replace(leaf, new_leaf)), None)
+                } else if offset == leaf.len {
+                    (Some(TestLeaf::new_with_len(len)), None)
+                } else {
+                    let rest = leaf.split(offset);
+                    (Some(TestLeaf::new_with_len(len)), rest)
+                }
+            }
+        }
+
+        fn new_with_len(len: u64) -> Self {
+            Self { len, is_visible: true }
+        }
+
+        fn split(&mut self, at_offset: u64) -> Option<Self> {
+            if at_offset >= self.len {
+                None
+            } else {
+                let split = Self {
+                    len: self.len - at_offset,
+                    is_visible: self.is_visible,
+                };
+                self.len = at_offset;
+                Some(split)
+            }
+        }
+    }
+
+    type TestGtree<const ARITY: usize> = Gtree<ARITY, TestLeaf>;
+
+    #[test]
+    fn insert_two_leaves_after_leaf_0() {
+        let first_leaf = TestLeaf::new_with_len(1);
+
+        let mut gt = TestGtree::<4>::new(first_leaf);
+
+        let (Some(second_leaf_idx), _) =
+            gt.insert(1, TestLeaf::insert_with_len(2)) else { panic!() };
+
+        let third_leaf = TestLeaf::new_with_len(3);
+
+        let fourth_leaf = TestLeaf::new_with_len(4);
+
+        let _ = gt.insert_two_leaves_after_leaf(
+            second_leaf_idx,
+            third_leaf,
+            fourth_leaf,
+        );
+
+        assert_eq!(gt.len(), 1 + 2 + 3 + 4);
+
+        assert_eq!(gt.depth(), 1);
+
+        gt.assert_invariants();
+    }
+
+    #[test]
+    fn insert_two_leaves_after_leaf_1() {
+        let first_leaf = TestLeaf::new_with_len(2);
+
+        let mut gt = TestGtree::<4>::new(first_leaf);
+
+        let (Some(second_leaf_idx), _) =
+            gt.insert(1, TestLeaf::insert_with_len(3)) else { panic!() };
+
+        let third_leaf = TestLeaf::new_with_len(4);
+
+        let fourth_leaf = TestLeaf::new_with_len(5);
+
+        let _ = gt.insert_two_leaves_after_leaf(
+            second_leaf_idx,
+            third_leaf,
+            fourth_leaf,
+        );
+
+        assert_eq!(gt.len(), 2 + 3 + 4 + 5);
+
+        assert_eq!(gt.depth(), 2);
+
+        gt.assert_invariants();
     }
 }
