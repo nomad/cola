@@ -162,7 +162,7 @@ impl Replica {
 
         let delete_range = InsertionRun::delete_range;
 
-        let (_, _) = self.insertion_runs.delete_range(
+        let (_, _) = self.insertion_runs.delete(
             start..end,
             delete_range,
             delete_from,
