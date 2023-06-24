@@ -2057,6 +2057,25 @@ mod debug {
         }
     }
 
+    impl<const N: usize, L: Leaf> Debug for Inode<N, L> {
+        fn fmt(&self, f: &mut Formatter) -> FmtResult {
+            if !self.parent().is_dangling() {
+                write!(f, "{:?} <- ", self.parent())?;
+            }
+
+            write!(f, "{:?} @ ", self.summary())?;
+
+            let mut dbg = f.debug_list();
+
+            match self.children() {
+                Either::Internal(inode_idxs) => {
+                    dbg.entries(inode_idxs).finish()
+                },
+                Either::Leaf(leaf_idxs) => dbg.entries(leaf_idxs).finish(),
+            }
+        }
+    }
+
     impl<const ARITY: usize, L: Leaf> Debug for Gtree<ARITY, L> {
         fn fmt(&self, f: &mut Formatter) -> FmtResult {
             self.debug_as_self().fmt(f)
@@ -2204,6 +2223,16 @@ mod debug {
 
                     Either::Leaf(leaf_idxs) => {
                         for (i, &leaf_idx) in leaf_idxs.iter().enumerate() {
+                            if let Some((cursor_idx, offset)) = gtree.cursor {
+                                if cursor_idx == leaf_idx {
+                                    writeln!(
+                                        f,
+                                        "{}│\n{}│ -> cursor @ {offset:?}\n{}│",
+                                        shifts, shifts, shifts,
+                                    )?;
+                                }
+                            }
+
                             let ident = ident(i);
                             let lnode = gtree.lnode(leaf_idx);
                             writeln!(
@@ -2230,25 +2259,6 @@ mod debug {
                 0,
                 f,
             )
-        }
-    }
-
-    impl<const N: usize, L: Leaf> Debug for Inode<N, L> {
-        fn fmt(&self, f: &mut Formatter) -> FmtResult {
-            if !self.parent().is_dangling() {
-                write!(f, "{:?} <- ", self.parent())?;
-            }
-
-            write!(f, "{:?} @ ", self.summary())?;
-
-            let mut dbg = f.debug_list();
-
-            match self.children() {
-                Either::Internal(inode_idxs) => {
-                    dbg.entries(inode_idxs).finish()
-                },
-                Either::Leaf(leaf_idxs) => dbg.entries(leaf_idxs).finish(),
-            }
         }
     }
 }
