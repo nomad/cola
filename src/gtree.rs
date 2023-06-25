@@ -175,6 +175,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
             if range.start >= offset_len && range.end <= offset_len + leaf_len
             {
+                // println!("✅ fast deletion path");
+
                 return self.delete_leaf_range(
                     leaf_idx,
                     leaf_offset,
@@ -192,6 +194,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 if range.start >= offset_len
                     && range.end <= offset_len + leaf_len
                 {
+                    // println!("✅ fast deletion path");
+
                     return self.delete_leaf_range(
                         next_leaf,
                         leaf_offset + self.leaf(leaf_idx).summarize(),
@@ -201,7 +205,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                     );
                 }
             }
+
+            // print!("cursor was some but wrong spot -> ");
         }
+
+        // println!("slow deletion path {range:?}");
 
         let (idxs, maybe_split) = delete::delete_range(
             self,
@@ -1806,12 +1814,67 @@ mod delete {
                         del_range(leaf, range)
                     });
 
-                gtree.cursor =
-                    if let (Some(_), Some(_)) = (first_idx, second_idx) {
-                        Some((leaf_idx, leaf_offset))
-                    } else {
+                gtree.cursor = match (first_idx, second_idx) {
+                    (Some(_), Some(_)) => Some((leaf_idx, leaf_offset)),
+
+                    (Some(first), None) => {
+                        if gtree.leaf(first).is_empty() {
+                            Some((leaf_idx, leaf_offset))
+                        } else {
+                            None
+                            //let parent = gtree.inode(in_inode);
+
+                            //let idx_in_parent = if child_idx < parent.len() {
+                            //    child_idx
+                            //} else {
+                            //    child_idx - parent.len()
+                            //};
+
+                            //if let Some(previous_idx) = gtree
+                            //    .previous_non_empty_leaf(
+                            //        leaf_idx,
+                            //        idx_in_parent,
+                            //    )
+                            //{
+                            //    let previous_summary =
+                            //        gtree.leaf(previous_idx).summarize();
+
+                            //    Some((
+                            //        previous_idx,
+                            //        leaf_offset - previous_summary,
+                            //    ))
+                            //} else {
+                            //    None
+                            //}
+                        }
+                    },
+
+                    (None, None) => {
                         None
-                    };
+                        // let parent = gtree.inode(in_inode);
+                        //
+                        // let idx_in_parent = if child_idx < parent.len() {
+                        //     child_idx
+                        // } else {
+                        //     child_idx - parent.len()
+                        // };
+                        //
+                        // if let Some(previous_idx) = gtree
+                        //     .previous_non_empty_leaf(leaf_idx, idx_in_parent)
+                        // {
+                        //     let previous_summary =
+                        //         gtree.leaf(previous_idx).summarize();
+                        //     Some((
+                        //         previous_idx,
+                        //         leaf_offset - previous_summary,
+                        //     ))
+                        // } else {
+                        //     None
+                        // }
+                    },
+
+                    _ => unreachable!(),
+                };
 
                 ((first_idx, second_idx), split)
             },
