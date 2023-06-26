@@ -148,22 +148,31 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             }
         }
 
+        recursively_assert_inode_invariants(self, self.root_idx);
+
         if let Some((leaf_idx, cached_summary)) = self.cursor {
             self.assert_summary_offset_of_leaf(leaf_idx, cached_summary);
         }
+    }
 
-        recursively_assert_inode_invariants(self, self.root_idx);
+    /// Returns the average number of children per internal node.
+    ///
+    /// Just like a Btree, every internal node in the Gtree contains from a
+    /// minimum of `ARITY / 2` to a maximum of `ARITY` children, so the
+    /// returned value is always between those two numbers.
+    pub fn average_inode_occupancy(&self) -> f32 {
+        let total = self.inodes.iter().map(Inode::len).sum::<usize>();
+        (total as f32) / (self.inodes.len() as f32)
     }
 
     /// TODO: docs
-    pub fn average_inode_occupancy(&self) -> f32 {
-        let mut total = 0;
+    pub fn debug_as_btree(&self) -> debug::DebugAsBtree<'_, ARITY, L> {
+        self.debug_inode_as_btree(self.root_idx)
+    }
 
-        for inode in &self.inodes {
-            total += inode.len();
-        }
-
-        (total as f32) / (self.inodes.len() as f32)
+    /// TODO: docs
+    pub fn debug_as_self(&self) -> debug::DebugAsSelf<'_, ARITY, L> {
+        debug::DebugAsSelf(self)
     }
 
     /// TODO: docs
@@ -506,16 +515,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
-    #[doc(hidden)]
-    pub fn debug_as_btree(&self) -> debug::DebugAsBtree<'_, ARITY, L> {
-        self.debug_inode_as_btree(self.root_idx)
-    }
-
-    #[doc(hidden)]
-    pub fn debug_as_self(&self) -> debug::DebugAsSelf<'_, ARITY, L> {
-        debug::DebugAsSelf(self)
-    }
-
     fn debug_inode_as_btree(
         &self,
         inode_idx: InodeIdx,
@@ -687,6 +686,87 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
             _ => unreachable!(),
         }
+    }
+
+    #[inline]
+    fn delete_range<DelRange, DelFrom, DelUpTo>(
+        &mut self,
+        mut range: Range<L::Length>,
+        delete_range: DelRange,
+        delete_from: DelFrom,
+        delete_up_to: DelUpTo,
+    ) -> (Option<LeafIdx>, Option<LeafIdx>)
+    where
+        DelRange: FnOnce(&mut L, Range<L::Length>) -> (Option<L>, Option<L>),
+        DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
+        DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
+    {
+        // First, descend to the deepest node that fully contains the range.
+
+        let mut idx = self.root_idx;
+
+        let mut leaf_offset = L::Summary::empty();
+
+        loop {
+            match self.child_containing_range(idx, range.clone()) {
+                // A child of this inode fully contains the range..
+                Some((child_idx, offset)) => {
+                    leaf_offset += offset;
+                    range.start -= L::Length::len(&offset);
+                    range.end -= L::Length::len(&offset);
+
+                    match self.inode(idx).child(child_idx) {
+                        // ..and it's another inode, so we keep descending.
+                        Either::Internal(inode_idx) => {
+                            idx = inode_idx;
+                        },
+
+                        // ..and it's a leaf, so we can't descend anymore and
+                        // we delete the range in this leaf.
+                        Either::Leaf(leaf_idx) => {
+                            return self.delete_leaf_range(
+                                leaf_idx,
+                                leaf_offset,
+                                child_idx,
+                                range,
+                                delete_range,
+                            );
+                        },
+                    }
+                },
+
+                // No child of this inode fully contains the range, so we call
+                // `delete_inode_range` which deletes ranges that span multiple
+                // children.
+                None => {
+                    return self.delete_inode_range(
+                        idx,
+                        range,
+                        delete_from,
+                        delete_up_to,
+                    );
+                },
+            }
+        }
+    }
+
+    #[inline]
+    fn delete_inode_range<DelFrom, DelUpTo>(
+        &mut self,
+        idx: InodeIdx,
+        range: Range<L::Length>,
+        delete_from: DelFrom,
+        delete_up_to: DelUpTo,
+    ) -> (Option<LeafIdx>, Option<LeafIdx>)
+    where
+        DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
+        DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
+    {
+        debug_assert!(self
+            .child_containing_range(idx, range.clone())
+            .is_none());
+
+        todo!();
     }
 
     #[allow(dead_code)]
