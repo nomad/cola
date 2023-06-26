@@ -254,7 +254,7 @@ impl Anchor {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Patch {
     Addition(u64),
     Subtraction(u64),

@@ -12,7 +12,7 @@ pub trait Summary:
     + SubAssign<Self>
     + PartialEq<Self>
 {
-    type Patch: Copy;
+    type Patch: Debug + Copy;
 
     fn patch(old_summary: Self, new_summary: Self) -> Self::Patch;
 
@@ -236,21 +236,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         // println!("slow deletion path {range:?}");
 
-        let (idxs, maybe_split) = delete::delete_range(
-            self,
-            self.root_idx,
-            L::Summary::empty(),
-            range,
-            delete_range,
-            delete_from,
-            delete_up_to,
-        );
-
-        if let Some(root_split) = maybe_split {
-            self.root_has_split(root_split);
-        }
-
-        idxs
+        self.delete_range(range, delete_range, delete_from, delete_up_to)
     }
 
     /// TODO: docs
@@ -766,7 +752,65 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             .child_containing_range(idx, range.clone())
             .is_none());
 
-        todo!();
+        let mut old_summary = self.inode(idx).summary();
+
+        let ((first, second), mut maybe_split) = delete::delete_range_in_inode(
+            self,
+            idx,
+            L::Summary::empty(),
+            range,
+            delete_from,
+            delete_up_to,
+        );
+
+        let mut patch =
+            L::Summary::patch(old_summary, self.inode(idx).summary());
+
+        let leaf_patch = L::Summary::patch(
+            old_summary,
+            self.inode(idx).summary()
+                + maybe_split
+                    .as_ref()
+                    .map(Inode::summary)
+                    .unwrap_or(L::Summary::empty()),
+        );
+
+        let mut inode_idx = idx;
+        let mut parent_idx = self.inode(inode_idx).parent();
+
+        loop {
+            if parent_idx.is_dangling() {
+                if let Some(split) = maybe_split {
+                    self.root_has_split(split);
+                }
+                break;
+            } else if let Some(split) = maybe_split {
+                let split_summary = split.summary();
+                let split_idx = self.push_inode(split, parent_idx);
+
+                let parent = self.inode_mut(parent_idx);
+                old_summary = parent.summary();
+                parent.summary_mut().apply_patch(patch);
+                let idx_in_parent = parent.idx_of_internal_child(inode_idx);
+
+                maybe_split = self.insert_in_inode(
+                    parent_idx,
+                    idx_in_parent + 1,
+                    NodeIdx::from_internal(split_idx),
+                    split_summary,
+                );
+
+                let parent = self.inode(parent_idx);
+                patch = L::Summary::patch(old_summary, parent.summary());
+                inode_idx = parent_idx;
+                parent_idx = parent.parent();
+            } else {
+                self.apply_patch(parent_idx, leaf_patch);
+                break;
+            }
+        }
+
+        (first, second)
     }
 
     #[allow(dead_code)]
@@ -1896,178 +1940,10 @@ mod insert {
 mod delete {
     //! TODO: docs.
 
-    // 2 cases
-    //
-    // 1: it lands inside a single leaf
-    //    3 cases
-    //        (None, None) means entire range was deleted
-    //
-    //        "aa" "bbbb" "cc" -> del 2..6
-    //        "aa" | "bbbb" "cc -> place cursor at the beginning of the
-    //        previous fragment
-    //
-    //        (Some, None) means
-    //
-    //        "aa" "bbbb" "cc" -> del 4..6
-    //        "aa" "bb" | "bb" "cc" -> place cursor at the beginning of the
-    //        fragment
-    //
-    //        "aa" "bbbb" "cc" -> del 2..4
-    //        "aa" | "bb" "bb" "cc" -> place cursor at beginning of previous
-    //        fragment
-    //
-    //        (Some, Some) ->
-    //
-    //        "aa" "bbbb" "cc" -> del 3..7
-    //        "aa" "b" | "bb" "b" "cc" -> place cursor beginning of fragment
-    //
-    //  2: it lands on 2 separate leaves
-    //
-    //      the end leaf doesn't matter, what matters is the start leaf
-    //      2 cases
-    //        (None) entire leaf was deleted
-    //
-    //        "aa" "bbbb" "cc" -> del 2..7
-    //        "aa" | "bbbb" "c" "c" -> place cursor at the beginning of the
-    //        previous fragment
-    //
-    //        (Some)
-    //
-    //        "aa" "bbbb" "cc" -> del 4..7
-    //        "aa" "bb" | "bb" "c" "c" -> place cursor at the beginning of the
-    //        fragment
-    //
-    //        now what re
-
     use super::*;
 
     #[allow(clippy::type_complexity)]
-    pub(super) fn delete_range<const N: usize, L, DelRange, DelFrom, DelUpTo>(
-        gtree: &mut Gtree<N, L>,
-        in_inode: InodeIdx,
-        mut leaf_offset: L::Summary,
-        mut range: Range<L::Length>,
-        del_range: DelRange,
-        del_from: DelFrom,
-        del_up_to: DelUpTo,
-    ) -> ((Option<LeafIdx>, Option<LeafIdx>), Option<Inode<N, L>>)
-    where
-        L: Leaf,
-        DelRange: FnOnce(&mut L, Range<L::Length>) -> (Option<L>, Option<L>),
-        DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
-        DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
-    {
-        let Some((child_idx, offset)) =
-            gtree.child_containing_range(in_inode, range.clone()) else {
-                return delete_range_in_inode(
-                    gtree,
-                    in_inode,
-                    leaf_offset,
-                    range,
-                    del_from,
-                    del_up_to,
-                );
-            };
-
-        leaf_offset += offset;
-
-        range.start -= L::Length::len(&offset);
-
-        range.end -= L::Length::len(&offset);
-
-        match gtree.inode(in_inode).child(child_idx) {
-            Either::Internal(next_idx) => gtree
-                .with_internal_mut_handle_split(
-                    next_idx,
-                    child_idx,
-                    |gtree| {
-                        delete_range(
-                            gtree,
-                            next_idx,
-                            leaf_offset,
-                            range,
-                            del_range,
-                            del_from,
-                            del_up_to,
-                        )
-                    },
-                ),
-
-            Either::Leaf(leaf_idx) => {
-                let (first_idx, second_idx, split) = gtree
-                    .with_leaf_mut_handle_split(leaf_idx, child_idx, |leaf| {
-                        del_range(leaf, range)
-                    });
-
-                gtree.cursor = match (first_idx, second_idx) {
-                    (Some(_), Some(_)) => Some((leaf_idx, leaf_offset)),
-
-                    (Some(first), None) => {
-                        if gtree.leaf(first).is_empty() {
-                            Some((leaf_idx, leaf_offset))
-                        } else {
-                            None
-                            //let parent = gtree.inode(in_inode);
-
-                            //let idx_in_parent = if child_idx < parent.len() {
-                            //    child_idx
-                            //} else {
-                            //    child_idx - parent.len()
-                            //};
-
-                            //if let Some(previous_idx) = gtree
-                            //    .previous_non_empty_leaf(
-                            //        leaf_idx,
-                            //        idx_in_parent,
-                            //    )
-                            //{
-                            //    let previous_summary =
-                            //        gtree.leaf(previous_idx).summarize();
-
-                            //    Some((
-                            //        previous_idx,
-                            //        leaf_offset - previous_summary,
-                            //    ))
-                            //} else {
-                            //    None
-                            //}
-                        }
-                    },
-
-                    (None, None) => {
-                        None
-                        // let parent = gtree.inode(in_inode);
-                        //
-                        // let idx_in_parent = if child_idx < parent.len() {
-                        //     child_idx
-                        // } else {
-                        //     child_idx - parent.len()
-                        // };
-                        //
-                        // if let Some(previous_idx) = gtree
-                        //     .previous_non_empty_leaf(leaf_idx, idx_in_parent)
-                        // {
-                        //     let previous_summary =
-                        //         gtree.leaf(previous_idx).summarize();
-                        //     Some((
-                        //         previous_idx,
-                        //         leaf_offset - previous_summary,
-                        //     ))
-                        // } else {
-                        //     None
-                        // }
-                    },
-
-                    _ => unreachable!(),
-                };
-
-                ((first_idx, second_idx), split)
-            },
-        }
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn delete_range_in_inode<const N: usize, L, DelFrom, DelUpTo>(
+    pub(super) fn delete_range_in_inode<const N: usize, L, DelFrom, DelUpTo>(
         gtree: &mut Gtree<N, L>,
         idx: InodeIdx,
         mut leaf_offset: L::Summary,
@@ -2590,6 +2466,12 @@ mod tests {
     impl Delete for TestLeaf {
         fn delete(&mut self) {
             self.is_visible = false;
+        }
+    }
+
+    impl Joinable for TestLeaf {
+        fn prepend(&mut self, other: Self) -> Option<Self> {
+            Some(other)
         }
     }
 
