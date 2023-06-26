@@ -53,7 +53,12 @@ pub trait Delete {
 }
 
 /// TODO: docs
-pub trait Leaf: Clone + Debug + Summarize + Delete {
+pub trait Joinable: Sized {
+    fn prepend(&mut self, other: Self) -> Option<Self>;
+}
+
+/// TODO: docs
+pub trait Leaf: Clone + Debug + Summarize + Delete + Joinable {
     type Length: Length<Self::Summary>;
 
     #[inline]
@@ -151,6 +156,17 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// TODO: docs
+    pub fn average_inode_occupancy(&self) -> f32 {
+        let mut total = 0;
+
+        for inode in &self.inodes {
+            total += inode.len();
+        }
+
+        (total as f32) / (self.inodes.len() as f32)
+    }
+
+    /// TODO: docs
     #[inline]
     pub fn delete<DelRange, DelFrom, DelUpTo>(
         &mut self,
@@ -226,6 +242,18 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
 
         idxs
+    }
+
+    /// TODO: docs
+    pub fn empty_leaves(&self) -> (usize, usize) {
+        let empty_leaves = self
+            .lnodes
+            .iter()
+            .map(Lnode::value)
+            .filter(|leaf| leaf.is_empty())
+            .count();
+
+        (empty_leaves, self.lnodes.len())
     }
 
     /// TODO: docs
@@ -559,9 +587,68 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             },
 
             (Some(first), None) => {
-                self.cursor = if first.is_empty() {
-                    Some((leaf_idx, leaf_offset))
-                } else if let Some(previous_idx) =
+                // - If first is not empty
+                //
+                // a|bcdefghi
+                //
+                // del 1..2 ->
+                //
+                // |a - b - cdefghi
+                //
+                // del 1..2 ->
+                //
+                // |a - b - c - defghi
+                //
+                // if a, b, c and defghi are all on the same inode we can
+                // join the b and the c
+                //
+                // |a - bc - defghi
+                //
+                // -> del 1..2
+                //
+                // a - bc - d - efghi
+                //
+                // |a - bcd - efghi
+                //
+                //
+                // if the returned fragment is non empty it means the leaf
+                // itself was the deleted part, which means we should see if we
+                // can join the leaf with the previous (empty or non empty)
+                // leaf.
+                //
+                // If we can we can just insert `first` in its place, if we
+                // can't we have to insert `first` like we're doing now/
+                //
+                // - If `first` is empty
+                //
+                // If the returned fragment is empty it means we deleted from
+                // the end of the leaf and we should try to add `first` to the
+                // `next` fragment, empty or not.
+                //
+                // If we can we're done, if we can't we have to do what we're
+                // doing now.
+
+                if first.is_empty() {
+                    self.cursor = Some((leaf_idx, leaf_offset));
+
+                    if let Some(next_idx) =
+                        self.next_leaf(leaf_idx, idx_in_parent)
+                    {
+                        let leaf = self.leaf_mut(next_idx);
+
+                        let inserted_idx = leaf.prepend(first).map(|first| {
+                            self.insert_leaf_after_leaf(
+                                leaf_idx,
+                                Some(idx_in_parent),
+                                first,
+                            )
+                        });
+
+                        return (inserted_idx, None);
+                    }
+                }
+
+                self.cursor = if let Some(previous_idx) =
                     self.previous_non_empty_leaf(leaf_idx, idx_in_parent)
                 {
                     let previous_summary = self.leaf(previous_idx).summarize();
@@ -1045,6 +1132,24 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     #[inline]
     fn lnode_mut(&mut self, idx: LeafIdx) -> &mut Lnode<L> {
         &mut self.lnodes[idx.0]
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn next_leaf(
+        &self,
+        leaf_idx: LeafIdx,
+        idx_in_parent: usize,
+    ) -> Option<LeafIdx> {
+        let parent = self.inode(self.lnode(leaf_idx).parent());
+
+        if idx_in_parent + 1 == parent.len() {
+            None
+        } else if let Either::Leaf(next) = parent.child(idx_in_parent + 1) {
+            Some(next)
+        } else {
+            unreachable!()
+        }
     }
 
     /// TODO: docs

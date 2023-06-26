@@ -105,6 +105,11 @@ impl Replica {
     }
 
     #[doc(hidden)]
+    pub fn average_gtree_inode_occupancy(&self) -> f32 {
+        self.insertion_runs.average_inode_occupancy()
+    }
+
+    #[doc(hidden)]
     pub fn debug(&self) -> debug::Debug<'_> {
         debug::Debug(self)
     }
@@ -188,6 +193,11 @@ impl Replica {
         //match
 
         CrdtEdit::no_op()
+    }
+
+    #[doc(hidden)]
+    pub fn empty_leaves(&self) -> (usize, usize) {
+        self.insertion_runs.empty_leaves()
     }
 
     /// TODO: docs

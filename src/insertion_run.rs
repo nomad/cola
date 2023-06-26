@@ -172,6 +172,11 @@ impl InsertionRun {
     }
 
     #[inline(always)]
+    pub fn range_mut(&mut self) -> &mut Range<CharacterTimestamp> {
+        &mut self.character_range
+    }
+
+    #[inline(always)]
     pub fn replica_id(&self) -> ReplicaId {
         self.inserted_by
     }
@@ -192,6 +197,11 @@ impl InsertionRun {
     #[inline(always)]
     pub fn start(&self) -> CharacterTimestamp {
         self.range().start
+    }
+
+    #[inline(always)]
+    pub fn start_mut(&mut self) -> &mut CharacterTimestamp {
+        &mut self.range_mut().start
     }
 }
 
@@ -294,6 +304,21 @@ impl gtree::Length<u64> for u64 {
     #[inline]
     fn len(this: &Self) -> Self {
         *this
+    }
+}
+
+impl gtree::Joinable for InsertionRun {
+    #[inline]
+    fn prepend(&mut self, other: Self) -> Option<Self> {
+        if self.is_deleted == other.is_deleted
+            && self.replica_id() == other.replica_id()
+            && other.end() == self.start()
+        {
+            *self.start_mut() = other.start();
+            None
+        } else {
+            Some(other)
+        }
     }
 }
 
