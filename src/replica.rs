@@ -168,7 +168,7 @@ impl Replica {
         let delete_range = InsertionRun::delete_range;
 
         let (_, _) = self.insertion_runs.delete(
-            start..end,
+            Range { start, end },
             delete_range,
             delete_from,
             delete_up_to,
@@ -197,7 +197,7 @@ impl Replica {
 
     #[doc(hidden)]
     pub fn empty_leaves(&self) -> (usize, usize) {
-        self.insertion_runs.empty_leaves()
+        self.insertion_runs.count_empty_leaves()
     }
 
     /// TODO: docs
@@ -210,7 +210,7 @@ impl Replica {
         let origin_run = InsertionRun::new(
             Anchor::origin(),
             replica_id,
-            0..len,
+            (0..len).into(),
             lamport_clock.next(),
         );
 
@@ -263,7 +263,7 @@ impl Replica {
                 return (None, None);
             }
 
-            let range = self.character_ts..self.character_ts + len;
+            let range = (self.character_ts..self.character_ts + len).into();
 
             let lamport_ts = self.lamport_clock.next();
 

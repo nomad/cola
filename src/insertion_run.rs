@@ -1,5 +1,4 @@
 use core::cmp::Ordering;
-use core::ops::Range;
 
 use crate::*;
 
@@ -66,6 +65,11 @@ impl InsertionRun {
     #[inline(always)]
     pub fn end(&self) -> CharacterTimestamp {
         self.range().end
+    }
+
+    #[inline(always)]
+    pub fn end_mut(&mut self) -> &mut CharacterTimestamp {
+        &mut self.range_mut().end
     }
 
     #[inline(always)]
@@ -308,6 +312,19 @@ impl gtree::Length<u64> for u64 {
 }
 
 impl gtree::Joinable for InsertionRun {
+    #[inline]
+    fn append(&mut self, other: Self) -> Option<Self> {
+        if self.is_deleted == other.is_deleted
+            && self.replica_id() == other.replica_id()
+            && self.end() == other.start()
+        {
+            *self.end_mut() = other.end();
+            None
+        } else {
+            Some(other)
+        }
+    }
+
     #[inline]
     fn prepend(&mut self, other: Self) -> Option<Self> {
         if self.is_deleted == other.is_deleted

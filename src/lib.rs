@@ -149,3 +149,59 @@ use replica::ReplicaId;
 pub use text_edit::TextEdit;
 
 type CharacterTimestamp = u64;
+
+use range::{Range, RangeExt};
+
+mod range {
+    use core::cmp::Ord;
+    use core::fmt::{Debug, Formatter, Result as FmtResult};
+    use core::ops::{Add, Range as StdRange, Sub};
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    pub struct Range<T> {
+        pub start: T,
+        pub end: T,
+    }
+
+    impl<T: Debug> Debug for Range<T> {
+        fn fmt(&self, f: &mut Formatter) -> FmtResult {
+            write!(f, "{:?}..{:?}", self.start, self.end)
+        }
+    }
+
+    impl<T> From<StdRange<T>> for Range<T> {
+        #[inline]
+        fn from(range: StdRange<T>) -> Self {
+            Range { start: range.start, end: range.end }
+        }
+    }
+
+    impl<T: Sub<T, Output = T> + Copy> Sub<T> for Range<T> {
+        type Output = Range<T>;
+
+        #[inline]
+        fn sub(self, value: T) -> Self::Output {
+            Range { start: self.start - value, end: self.end - value }
+        }
+    }
+
+    impl<T: Add<T, Output = T> + Copy> Add<T> for Range<T> {
+        type Output = Range<T>;
+
+        #[inline]
+        fn add(self, value: T) -> Self::Output {
+            Range { start: self.start + value, end: self.end + value }
+        }
+    }
+
+    pub trait RangeExt<T> {
+        fn contains_range(&self, range: Range<T>) -> bool;
+    }
+
+    impl<T: Ord> RangeExt<T> for StdRange<T> {
+        #[inline]
+        fn contains_range(&self, other: Range<T>) -> bool {
+            self.start <= other.start && self.end >= other.end
+        }
+    }
+}
