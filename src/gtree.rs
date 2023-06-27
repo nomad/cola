@@ -167,7 +167,7 @@ impl<L: Leaf> Cursor<L> {
 }
 
 /// TODO: docs
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ChildIdx(usize);
 
 // Public API.
@@ -194,6 +194,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         if let Some(cursor) = self.cursor {
             self.assert_offset_of_leaf(cursor.leaf_idx, cursor.offset);
+            self.assert_child_idx_of_leaf(cursor.leaf_idx, cursor.child_idx);
         }
     }
 
@@ -247,7 +248,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             let cursor_end = cursor.offset + self.leaf_len(cursor.leaf_idx);
 
             if (cursor.offset..cursor_end).contains_range(range) {
-                // println!("✅ fast deletion path");
+                // println!("✅ fast deletion path A");
 
                 return self.delete_range_in_leaf(
                     cursor.leaf_idx,
@@ -264,11 +265,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 let next_len = self.leaf_len(leaf_idx);
 
                 if (cursor_end..cursor_end + next_len).contains_range(range) {
-                    // println!("✅ fast deletion path");
+                    // println!("✅ fast deletion path B");
 
                     return self.delete_range_in_leaf(
                         leaf_idx,
-                        cursor.offset + next_len,
+                        cursor_end,
                         child_idx,
                         range - cursor_end,
                         delete_range,
@@ -352,6 +353,16 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             inode.summary_mut().apply_patch(patch);
             parent = inode.parent();
         }
+    }
+
+    /// TODO: docs
+    fn assert_child_idx_of_leaf(
+        &self,
+        leaf_idx: LeafIdx,
+        child_idx: ChildIdx,
+    ) {
+        let parent = self.inode(self.lnode(leaf_idx).parent());
+        assert_eq!(child_idx.0, parent.idx_of_leaf_child(leaf_idx));
     }
 
     /// TODO: docs
@@ -575,6 +586,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     {
         debug_assert!(range.start < range.end);
         debug_assert!(range.end - range.start <= self.leaf_len(leaf_idx));
+        debug_assert_eq!(idx_in_parent, self.idx_in_parent_of_leaf(leaf_idx));
 
         let lnode = self.lnode_mut(leaf_idx);
 
@@ -600,7 +612,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
                 let idx_in_parent = self
                     .update_child_idx_after_inserting_after(
-                        leaf_idx,
+                        parent_idx,
                         idx_in_parent,
                     );
 
@@ -613,19 +625,16 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             (Some(deleted), None) if deleted.is_empty() => {
                 let inserted_idx =
                     match self.next_leaf(leaf_idx, idx_in_parent) {
-                        Some(next_idx) => {
-                            if let Some(deleted) =
-                                self.leaf_mut(next_idx).prepend(deleted)
-                            {
-                                Some(self.insert_leaf_after_leaf(
+                        Some(next_idx) => self
+                            .leaf_mut(next_idx)
+                            .prepend(deleted)
+                            .map(|deleted| {
+                                self.insert_leaf_after_leaf(
                                     leaf_idx,
                                     idx_in_parent,
                                     deleted,
-                                ))
-                            } else {
-                                None
-                            }
-                        },
+                                )
+                            }),
 
                         _ => Some(self.insert_leaf_after_leaf(
                             leaf_idx,
@@ -636,7 +645,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
                 let idx_in_parent = self
                     .update_child_idx_after_inserting_after(
-                        leaf_idx,
+                        parent_idx,
                         idx_in_parent,
                     );
 
@@ -653,6 +662,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                     .previous_leaf(leaf_idx, idx_in_parent)
                 {
                     Some(prev_idx) => {
+                        let patch = L::Summary::patch(
+                            L::Summary::empty(),
+                            rest.summarize(),
+                        );
+
                         let deleted =
                             core::mem::replace(self.leaf_mut(leaf_idx), rest);
 
@@ -670,6 +684,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                                 rest,
                             ))
                         } else {
+                            self.apply_patch(parent_idx, patch);
                             None
                         }
                     },
@@ -683,7 +698,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
                 let idx_in_parent = self
                     .update_child_idx_after_inserting_after(
-                        leaf_idx,
+                        parent_idx,
                         idx_in_parent,
                     );
 
@@ -742,7 +757,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let mut leaf_offset = L::Length::zero();
 
         loop {
-            match self.child_containing_range(idx, range.clone()) {
+            match self.child_containing_range(idx, range) {
                 // A child of this inode fully contains the range..
                 Some((child_idx, offset)) => {
                     leaf_offset += offset;
@@ -865,6 +880,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     #[inline(always)]
     fn depth(&self) -> usize {
         self.inode_depth(self.root_idx)
+    }
+
+    #[inline(always)]
+    fn idx_in_parent_of_leaf(&self, leaf_idx: LeafIdx) -> ChildIdx {
+        let parent = self.inode(self.lnode(leaf_idx).parent());
+        ChildIdx(parent.idx_of_leaf_child(leaf_idx))
     }
 
     #[inline(always)]
@@ -1482,10 +1503,10 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     #[inline]
     fn update_child_idx_after_inserting_after(
         &self,
-        leaf_idx: LeafIdx,
+        old_parent: InodeIdx,
         ChildIdx(old_idx): ChildIdx,
     ) -> ChildIdx {
-        let parent = self.inode(self.lnode(leaf_idx).parent());
+        let parent = self.inode(old_parent);
 
         ChildIdx(if parent.len() > old_idx {
             old_idx
@@ -2011,7 +2032,7 @@ mod insert {
 
                     let idx_in_parent = gtree
                         .update_child_idx_after_inserting_after(
-                            leaf_idx,
+                            in_inode,
                             ChildIdx(child_idx + 1),
                         );
 
@@ -2023,7 +2044,7 @@ mod insert {
                 } else {
                     let idx_in_parent = gtree
                         .update_child_idx_after_inserting_after(
-                            leaf_idx,
+                            in_inode,
                             ChildIdx(child_idx),
                         );
 
