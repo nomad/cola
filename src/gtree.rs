@@ -70,12 +70,9 @@ pub trait Leaf: Clone + Debug + Summarize + Delete + Joinable {
     }
 }
 
-// 3: extract bubbling function into its own method
 // 4: refactor Gtree::insert_at_leaf to not Clone and to use the new bubbling
 //    function
 // 5: add optional path argument to bubbling function
-// 6: in delete_leaf_range, try to join the leaf to the previous leaf if the
-//    returned `first` is empty
 // 7: refactor insert_at_offset to use the new bubbling function
 // 8: refactor logic around insertion in inodes w/ overflows to see if the
 //    occupancy rate increases
@@ -435,6 +432,50 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         assert_eq!(summary, leaf_offset);
     }
 
+    /// TODO: docs
+    #[inline]
+    fn bubble(
+        &mut self,
+        mut inode_idx: InodeIdx,
+        mut maybe_split: Option<Inode<ARITY, L>>,
+        mut patch: <L::Summary as Summary>::Patch,
+        leaf_patch: <L::Summary as Summary>::Patch,
+    ) {
+        let mut parent_idx = self.inode(inode_idx).parent();
+
+        loop {
+            if parent_idx.is_dangling() {
+                if let Some(split) = maybe_split {
+                    self.root_has_split(split);
+                }
+                break;
+            } else if let Some(split) = maybe_split {
+                let split_summary = split.summary();
+                let split_idx = self.push_inode(split, parent_idx);
+
+                let parent = self.inode_mut(parent_idx);
+                let old_summary = parent.summary();
+                parent.summary_mut().apply_patch(patch);
+                let idx_in_parent = parent.idx_of_internal_child(inode_idx);
+
+                maybe_split = self.insert_in_inode(
+                    parent_idx,
+                    idx_in_parent + 1,
+                    NodeIdx::from_internal(split_idx),
+                    split_summary,
+                );
+
+                let parent = self.inode(parent_idx);
+                patch = L::Summary::patch(old_summary, parent.summary());
+                inode_idx = parent_idx;
+                parent_idx = parent.parent();
+            } else {
+                self.apply_patch(parent_idx, leaf_patch);
+                break;
+            }
+        }
+    }
+
     /// Returns the index and summary offsets of the inode's child at the given
     /// length offset.
     ///
@@ -788,7 +829,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 // `delete_inode_range` which deletes ranges that span multiple
                 // children.
                 None => {
-                    return self.delete_inode_range(
+                    return self.delete_range_in_inode(
                         idx,
                         range,
                         delete_from,
@@ -800,7 +841,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     #[inline]
-    fn delete_inode_range<DelFrom, DelUpTo>(
+    fn delete_range_in_inode<DelFrom, DelUpTo>(
         &mut self,
         idx: InodeIdx,
         range: Range<L::Length>,
@@ -811,13 +852,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
     {
-        debug_assert!(self
-            .child_containing_range(idx, range.clone())
-            .is_none());
+        debug_assert!(self.child_containing_range(idx, range).is_none());
 
-        let mut old_summary = self.inode(idx).summary();
+        let old_summary = self.inode(idx).summary();
 
-        let ((first, second), mut maybe_split) = delete::delete_range_in_inode(
+        let ((first, second), maybe_split) = delete::delete_range_in_inode(
             self,
             idx,
             L::Summary::empty(),
@@ -826,8 +865,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             delete_up_to,
         );
 
-        let mut patch =
-            L::Summary::patch(old_summary, self.inode(idx).summary());
+        let patch = L::Summary::patch(old_summary, self.inode(idx).summary());
 
         let leaf_patch = L::Summary::patch(
             old_summary,
@@ -838,40 +876,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                     .unwrap_or(L::Summary::empty()),
         );
 
-        let mut inode_idx = idx;
-        let mut parent_idx = self.inode(inode_idx).parent();
-
-        loop {
-            if parent_idx.is_dangling() {
-                if let Some(split) = maybe_split {
-                    self.root_has_split(split);
-                }
-                break;
-            } else if let Some(split) = maybe_split {
-                let split_summary = split.summary();
-                let split_idx = self.push_inode(split, parent_idx);
-
-                let parent = self.inode_mut(parent_idx);
-                old_summary = parent.summary();
-                parent.summary_mut().apply_patch(patch);
-                let idx_in_parent = parent.idx_of_internal_child(inode_idx);
-
-                maybe_split = self.insert_in_inode(
-                    parent_idx,
-                    idx_in_parent + 1,
-                    NodeIdx::from_internal(split_idx),
-                    split_summary,
-                );
-
-                let parent = self.inode(parent_idx);
-                patch = L::Summary::patch(old_summary, parent.summary());
-                inode_idx = parent_idx;
-                parent_idx = parent.parent();
-            } else {
-                self.apply_patch(parent_idx, leaf_patch);
-                break;
-            }
-        }
+        self.bubble(idx, maybe_split, patch, leaf_patch);
 
         (first, second)
     }
@@ -1041,15 +1046,15 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         let leaf_patch = L::Summary::patch(L::Summary::empty(), leaf_summary);
 
-        let mut parent_idx = self.lnode(leaf_idx).parent();
+        let parent_idx = self.lnode(leaf_idx).parent();
 
         let inserted_idx = self.push_leaf(leaf, parent_idx);
 
         let parent = self.inode(parent_idx);
-        let mut old_summary = parent.summary();
-        let mut idx_in_parent = idx_in_parent;
+        let old_summary = parent.summary();
+        let idx_in_parent = idx_in_parent;
 
-        let mut maybe_split = self.insert_in_inode(
+        let maybe_split = self.insert_in_inode(
             parent_idx,
             idx_in_parent + 1,
             NodeIdx::from_leaf(inserted_idx),
@@ -1057,41 +1062,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         );
 
         let parent = self.inode(parent_idx);
-        let mut patch = L::Summary::patch(old_summary, parent.summary());
-        let mut inode_idx = parent_idx;
-        parent_idx = parent.parent();
+        let patch = L::Summary::patch(old_summary, parent.summary());
 
-        loop {
-            if parent_idx.is_dangling() {
-                if let Some(split) = maybe_split {
-                    self.root_has_split(split);
-                }
-                break;
-            } else if let Some(split) = maybe_split {
-                let split_summary = split.summary();
-                let split_idx = self.push_inode(split, parent_idx);
-
-                let parent = self.inode_mut(parent_idx);
-                old_summary = parent.summary();
-                parent.summary_mut().apply_patch(patch);
-                idx_in_parent = parent.idx_of_internal_child(inode_idx);
-
-                maybe_split = self.insert_in_inode(
-                    parent_idx,
-                    idx_in_parent + 1,
-                    NodeIdx::from_internal(split_idx),
-                    split_summary,
-                );
-
-                let parent = self.inode(parent_idx);
-                patch = L::Summary::patch(old_summary, parent.summary());
-                inode_idx = parent_idx;
-                parent_idx = parent.parent();
-            } else {
-                self.apply_patch(parent_idx, leaf_patch);
-                break;
-            }
-        }
+        self.bubble(parent_idx, maybe_split, patch, leaf_patch);
 
         inserted_idx
     }
@@ -1233,16 +1206,16 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             first_summary + second_summary,
         );
 
-        let mut parent_idx = self.lnode(leaf_idx).parent();
+        let parent_idx = self.lnode(leaf_idx).parent();
 
         let first_idx = self.push_leaf(first_leaf, parent_idx);
         let second_idx = self.push_leaf(second_leaf, parent_idx);
 
         let parent = self.inode(parent_idx);
-        let mut old_summary = parent.summary();
-        let mut idx_in_parent = idx_in_parent;
+        let old_summary = parent.summary();
+        let idx_in_parent = idx_in_parent;
 
-        let mut maybe_split = self.insert_two_in_inode(
+        let maybe_split = self.insert_two_in_inode(
             parent_idx,
             idx_in_parent + 1,
             NodeIdx::from_leaf(first_idx),
@@ -1253,41 +1226,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         );
 
         let parent = self.inode(parent_idx);
-        let mut patch = L::Summary::patch(old_summary, parent.summary());
-        let mut inode_idx = parent_idx;
-        parent_idx = parent.parent();
+        let patch = L::Summary::patch(old_summary, parent.summary());
 
-        loop {
-            if parent_idx.is_dangling() {
-                if let Some(split) = maybe_split {
-                    self.root_has_split(split);
-                }
-                break;
-            } else if let Some(split) = maybe_split {
-                let split_summary = split.summary();
-                let split_idx = self.push_inode(split, parent_idx);
-
-                let parent = self.inode_mut(parent_idx);
-                old_summary = parent.summary();
-                parent.summary_mut().apply_patch(patch);
-                idx_in_parent = parent.idx_of_internal_child(inode_idx);
-
-                maybe_split = self.insert_in_inode(
-                    parent_idx,
-                    idx_in_parent + 1,
-                    NodeIdx::from_internal(split_idx),
-                    split_summary,
-                );
-
-                let parent = self.inode(parent_idx);
-                patch = L::Summary::patch(old_summary, parent.summary());
-                inode_idx = parent_idx;
-                parent_idx = parent.parent();
-            } else {
-                self.apply_patch(parent_idx, leaf_patch);
-                break;
-            }
-        }
+        self.bubble(parent_idx, maybe_split, patch, leaf_patch);
 
         (first_idx, second_idx)
     }
