@@ -61,7 +61,7 @@ pub trait Joinable: Sized {
 }
 
 /// TODO: docs
-pub trait Leaf: Clone + Debug + Summarize + Delete + Joinable {
+pub trait Leaf: Debug + Summarize + Delete + Joinable {
     type Length: Length<Self::Summary>;
 
     #[inline]
@@ -70,10 +70,8 @@ pub trait Leaf: Clone + Debug + Summarize + Delete + Joinable {
     }
 }
 
-// 4: refactor Gtree::insert_at_leaf to not Clone and to use the new bubbling
-//    function
-// 5: add optional path argument to bubbling function
 // 7: refactor insert_at_offset to use the new bubbling function
+// 5: add optional path argument to bubbling function
 // 8: refactor logic around insertion in inodes w/ overflows to see if the
 //    occupancy rate increases
 // 9: refactor delete_range_in_inode, save cursor in delete_from
@@ -148,7 +146,7 @@ impl InodeIdx {
 pub struct LeafIdx(usize);
 
 /// TODO: docs.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 struct Cursor<L: Leaf> {
     /// TODO: docs
     leaf_idx: LeafIdx,
@@ -158,6 +156,13 @@ struct Cursor<L: Leaf> {
 
     /// TODO: docs
     child_idx: ChildIdx,
+}
+
+impl<L: Leaf> Clone for Cursor<L> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 impl<L: Leaf> Copy for Cursor<L> {}
@@ -304,7 +309,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 return self.insert_at_leaf(
                     cursor.leaf_idx,
                     cursor.offset,
-                    offset,
+                    cursor.child_idx,
+                    offset - cursor.offset,
                     insert_with,
                 );
             }
@@ -928,11 +934,13 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// TODO: docs
+    #[inline]
     fn insert_at_leaf<F>(
         &mut self,
         leaf_idx: LeafIdx,
         leaf_offset: L::Length,
-        provided_offset: L::Length,
+        idx_in_parent: ChildIdx,
+        insert_at_offset: L::Length,
         insert_with: F,
     ) -> (Option<LeafIdx>, Option<LeafIdx>)
     where
@@ -940,37 +948,65 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     {
         let lnode = self.lnode_mut(leaf_idx);
 
-        let old_leaf = lnode.value().clone();
+        let old_summary = lnode.value().summarize();
 
-        let old_summary = old_leaf.summarize();
+        let (first, second) = insert_with(lnode.value_mut(), insert_at_offset);
 
-        let (first, second) =
-            insert_with(lnode.value_mut(), provided_offset - leaf_offset);
+        let patch = L::Summary::patch(old_summary, lnode.value().summarize());
 
-        if first.is_some() {
-            let new_leaf = mem::replace(lnode.value_mut(), old_leaf);
+        let parent_idx = lnode.parent();
 
-            self.cursor = None;
+        self.apply_patch(parent_idx, patch);
 
-            return self.insert_at_offset(provided_offset, |old_leaf, _| {
-                *old_leaf = new_leaf;
-                (first, second)
-            });
-        }
+        let (first_idx, second_idx) = match (first, second) {
+            (None, None) => (None, None),
 
-        let new_summary = lnode.value().summarize();
+            (Some(first), Some(second)) => {
+                let (first_idx, second_idx) = self
+                    .insert_two_leaves_after_leaf(
+                        leaf_idx,
+                        idx_in_parent,
+                        first,
+                        second,
+                    );
 
-        let summary_patch = L::Summary::patch(old_summary, new_summary);
+                (Some(first_idx), Some(second_idx))
+            },
 
-        let mut parent = lnode.parent();
+            (Some(first), None) => {
+                let first_idx = self.insert_leaf_after_leaf(
+                    leaf_idx,
+                    idx_in_parent,
+                    first,
+                );
 
-        while !parent.is_dangling() {
-            let inode = self.inode_mut(parent);
-            inode.summary_mut().apply_patch(summary_patch);
-            parent = inode.parent();
-        }
+                (Some(first_idx), None)
+            },
 
-        (None, None)
+            _ => unreachable!(),
+        };
+
+        self.cursor = if insert_at_offset == L::Length::zero() {
+            None
+        } else if let Some(first_idx) = first_idx {
+            let len = self.leaf_len(first_idx);
+
+            let idx_in_parent = self.update_child_idx_after_inserting_after(
+                parent_idx,
+                ChildIdx(idx_in_parent.0 + 1),
+            );
+
+            Some(Cursor::new(first_idx, leaf_offset + len, idx_in_parent))
+        } else {
+            let idx_in_parent = self.update_child_idx_after_inserting_after(
+                parent_idx,
+                idx_in_parent,
+            );
+
+            Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent))
+        };
+
+        (first_idx, second_idx)
     }
 
     /// TODO: docs
