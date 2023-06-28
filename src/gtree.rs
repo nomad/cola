@@ -80,12 +80,18 @@ pub trait Leaf: Clone + Debug + Summarize + Delete + Joinable {
 // 9: try a bunch of micro-optimizations
 // 10: refactor, document, make it beautiful
 
-/// Statically checks that `InodeIdx` and `LeafIdx` have the same size.
+/// Statically checks that `InodeIdx` and `LeafIdx` have identical size and
+/// alignment.
 ///
 /// This invariant is required by [`Inode::children()`] to safely transmute
 /// `NodeIdx` slices into `InodeIdx` and `LeafIdx` slices.
-const _NODE_IDX_LAYOUT_CHECK: usize =
-    (mem::size_of::<InodeIdx>() == mem::size_of::<LeafIdx>()) as usize - 1;
+const _NODE_IDX_LAYOUT_CHECK: usize = {
+    use core::alloc::Layout;
+    let i_idx = Layout::new::<InodeIdx>();
+    let l_idx = Layout::new::<LeafIdx>();
+    (i_idx.size() == l_idx.size() && i_idx.align() == l_idx.align()) as usize
+        - 1
+};
 
 /// A grow-only, self-balancing tree.
 ///
