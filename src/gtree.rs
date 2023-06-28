@@ -70,13 +70,10 @@ pub trait Leaf: Debug + Summarize + Delete + Joinable {
     }
 }
 
-// 7: refactor insert_at_offset to use the new bubbling function
-// 5: add optional path argument to bubbling function
-// 8: refactor logic around insertion in inodes w/ overflows to see if the
-//    occupancy rate increases
-// 9: refactor delete_range_in_inode, save cursor in delete_from
-// 9: try a bunch of micro-optimizations
-// 10: refactor, document, make it beautiful
+// 1: check if it's even worth it to store the idx_in_parent in the cursor
+// 2: refactor delete_range_in_inode, save cursor in delete_from
+// 3: try a bunch of micro-optimizations
+// 4: refactor, document, make it beautiful
 
 /// Statically checks that `InodeIdx` and `LeafIdx` have identical size and
 /// alignment.
@@ -330,11 +327,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         let dangling = InodeIdx::dangling();
 
-        let mut inodes = Vec::with_capacity(256);
+        let mut inodes = Vec::with_capacity(128);
         let inode = Inode::from_leaf(leaf_idx, summary, dangling);
         inodes.push(inode);
 
-        let mut lnodes = Vec::with_capacity(256);
+        let mut lnodes = Vec::with_capacity(1024);
         let lnode = Lnode::new(first_leaf, root_idx);
         lnodes.push(lnode);
 
