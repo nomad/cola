@@ -294,6 +294,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// TODO: docs
+    #[inline]
     pub fn insert<F>(
         &mut self,
         offset: L::Length,
@@ -1008,6 +1009,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// TODO: docs
+    #[inline]
     fn insert_at_offset<F>(
         &mut self,
         offset: L::Length,
@@ -1760,6 +1762,7 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     ///
     /// Panics if this inode contains leaf nodes or if it doesn't contain the
     /// given `InodeIdx`.
+    #[inline]
     fn idx_of_internal_child(&self, inode_idx: InodeIdx) -> ChildIdx {
         let Either::Internal(idxs) = self.children() else {
             panic!("this inode contains leaf nodes");
@@ -1775,6 +1778,7 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     ///
     /// Panics if this inode contains inodes or if it doesn't contain the given
     /// `LeafIdx`.
+    #[inline]
     fn idx_of_leaf_child(&self, leaf_idx: LeafIdx) -> ChildIdx {
         let Either::Leaf(idxs) = self.children() else {
                 panic!("this inode contains other inodes");
@@ -1963,6 +1967,7 @@ mod insert {
     use super::*;
 
     #[allow(clippy::type_complexity)]
+    #[inline]
     pub(super) fn insert_at_offset<const N: usize, L, F>(
         gtree: &mut Gtree<N, L>,
         in_inode: InodeIdx,
