@@ -259,13 +259,13 @@ impl Anchor {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Patch {
-    Addition(u64),
-    Subtraction(u64),
+pub enum Diff {
+    Add(u64),
+    Subtract(u64),
 }
 
 impl Summary for u64 {
-    type Patch = Patch;
+    type Diff = Diff;
 
     #[inline]
     fn empty() -> Self {
@@ -273,19 +273,19 @@ impl Summary for u64 {
     }
 
     #[inline]
-    fn patch(from: Self, to: Self) -> Patch {
+    fn diff(from: Self, to: Self) -> Diff {
         if from < to {
-            Patch::Addition(to - from)
+            Diff::Add(to - from)
         } else {
-            Patch::Subtraction(from - to)
+            Diff::Subtract(from - to)
         }
     }
 
     #[inline]
-    fn apply_patch(&mut self, patch: Patch) {
+    fn apply_diff(&mut self, patch: Diff) {
         match patch {
-            Patch::Addition(add) => *self += add,
-            Patch::Subtraction(sub) => *self -= sub,
+            Diff::Add(add) => *self += add,
+            Diff::Subtract(sub) => *self -= sub,
         }
     }
 }
@@ -311,7 +311,7 @@ impl gtree::Length<u64> for u64 {
     }
 }
 
-impl gtree::Joinable for InsertionRun {
+impl gtree::Join for InsertionRun {
     #[inline]
     fn append(&mut self, other: Self) -> Option<Self> {
         if self.is_deleted == other.is_deleted
