@@ -631,7 +631,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     {
         debug_assert!(range.start < range.end);
         debug_assert!(range.end - range.start <= self.leaf_len(leaf_idx));
-        debug_assert_eq!(idx_in_parent, self.idx_in_parent_of_leaf(leaf_idx));
+        debug_assert_eq!(idx_in_parent, self.idx_of_leaf_in_parent(leaf_idx));
 
         let lnode = self.lnode_mut(leaf_idx);
 
@@ -892,7 +892,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     #[inline(always)]
-    fn idx_in_parent_of_leaf(&self, leaf_idx: LeafIdx) -> ChildIdx {
+    fn idx_of_leaf_in_parent(&self, leaf_idx: LeafIdx) -> ChildIdx {
         let parent = self.inode(self.lnode(leaf_idx).parent());
         parent.idx_of_leaf_child(leaf_idx)
     }
