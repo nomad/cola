@@ -562,16 +562,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         match self.inode(of_inode).children() {
             Either::Internal(inode_idxs) => {
-                let iter =
-                    inode_idxs.iter().copied().map(|idx| self.inode_len(idx));
-
+                let iter = inode_idxs.iter().map(|&idx| self.inode_len(idx));
                 measure::<L, _>(iter, range)
             },
 
             Either::Leaf(leaf_idxs) => {
-                let iter =
-                    leaf_idxs.iter().copied().map(|idx| self.leaf_len(idx));
-
+                let iter = leaf_idxs.iter().map(|&idx| self.leaf_len(idx));
                 measure::<L, _>(iter, range)
             },
         }
