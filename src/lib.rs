@@ -124,7 +124,6 @@
 
 extern crate alloc;
 
-// mod btree;
 mod clocks;
 mod crdt_edit;
 // mod downstream;
@@ -138,7 +137,6 @@ mod text_edit;
 #[cfg(feature = "serde")]
 mod serde;
 
-// use btree::{Btree, Inode, Node};
 use clocks::{LamportClock, LamportTimestamp};
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
