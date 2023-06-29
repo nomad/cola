@@ -131,7 +131,8 @@ mod crdt_edit;
 mod gtree;
 mod insertion_run;
 mod replica;
-// mod run_id_registry;
+mod run_indices;
+mod run_tree;
 mod text_edit;
 
 #[cfg(feature = "serde")]
@@ -142,10 +143,11 @@ use clocks::{LamportClock, LamportTimestamp};
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
 use gtree::{Gtree, Leaf, Length, Summarize, Summary};
-use insertion_run::{Anchor, InsertionRun};
+use insertion_run::{Anchor, EditRun};
 pub use replica::Replica;
 use replica::ReplicaId;
-// use run_id_registry::RunIdRegistry;
+use run_indices::RunIndices;
+use run_tree::RunTree;
 pub use text_edit::TextEdit;
 
 type CharacterTimestamp = u64;

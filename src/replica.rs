@@ -6,18 +6,15 @@ use uuid::Uuid;
 use crate::*;
 
 /// TODO: docs
-const ARITY: usize = 32;
-
-/// TODO: docs
 pub struct Replica {
     /// TODO: docs
     id: ReplicaId,
 
     /// TODO: docs
-    insertion_runs: Gtree<ARITY, InsertionRun>,
+    run_tree: RunTree,
 
     /// TODO: docs
-    // run_indexes: RunIdRegistry,
+    run_indices: RunIndices,
 
     /// TODO: docs
     character_ts: CharacterTimestamp,
@@ -49,7 +46,7 @@ impl Default for Replica {
 }
 
 /// TODO: docs
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ReplicaId(Uuid);
 
 impl core::fmt::Debug for ReplicaId {
@@ -89,8 +86,9 @@ impl Clone for Replica {
 
         Self {
             id: ReplicaId::new(),
-            insertion_runs: self.insertion_runs.clone(),
+            run_tree: self.run_tree.clone(),
             character_ts: 0,
+            run_indices: self.run_indices.clone(),
             // run_indexes: self.run_indexes.clone(),
             lamport_clock,
             pending: self.pending.clone(),
@@ -101,12 +99,12 @@ impl Clone for Replica {
 impl Replica {
     #[doc(hidden)]
     pub fn assert_invariants(&self) {
-        self.insertion_runs.assert_invariants()
+        self.run_tree.assert_invariants()
     }
 
     #[doc(hidden)]
     pub fn average_gtree_inode_occupancy(&self) -> f32 {
-        self.insertion_runs.average_inode_occupancy()
+        self.run_tree.average_inode_occupancy()
     }
 
     #[doc(hidden)]
@@ -161,18 +159,7 @@ impl Replica {
 
         let end = end as u64;
 
-        let delete_from = InsertionRun::delete_from;
-
-        let delete_up_to = InsertionRun::delete_up_to;
-
-        let delete_range = InsertionRun::delete_range;
-
-        let (_, _) = self.insertion_runs.delete(
-            Range { start, end },
-            delete_range,
-            delete_from,
-            delete_up_to,
-        );
+        let (_, _) = self.run_tree.delete(Range { start, end });
 
         //// if it lands within a single fragment we return (deleted_fragment,
         //// split_fragment)
@@ -197,7 +184,7 @@ impl Replica {
 
     #[doc(hidden)]
     pub fn empty_leaves(&self) -> (usize, usize) {
-        self.insertion_runs.count_empty_leaves()
+        self.run_tree.count_empty_leaves()
     }
 
     /// TODO: docs
@@ -207,22 +194,21 @@ impl Replica {
 
         let mut lamport_clock = LamportClock::new();
 
-        let origin_run = InsertionRun::new(
+        let origin_run = EditRun::new(
             Anchor::origin(),
             replica_id,
             (0..len).into(),
             lamport_clock.next(),
         );
 
-        // let run_pointers =
-        //     RunIdRegistry::new(insertion_id, origin_run.run_id.clone(), len);
+        let (run_tree, origin_idx) = RunTree::new(origin_run);
 
-        let insertion_runs = Gtree::new(origin_run);
+        let run_indices = RunIndices::new(replica_id, origin_idx, len);
 
         Self {
             id: replica_id,
-            insertion_runs,
-            // run_indexes: run_pointers,
+            run_tree,
+            run_indices,
             character_ts: len,
             lamport_clock,
             pending: VecDeque::new(),
@@ -243,7 +229,7 @@ impl Replica {
         let mut inserted_at_id = self.id;
         let mut inserted_at_offset = 0;
 
-        let insert_with = |run: &mut InsertionRun, offset: u64| {
+        let insert_with = |run: &mut EditRun, offset: u64| {
             inserted_at_id = run.replica_id();
             inserted_at_offset = run.start() + offset;
 
@@ -268,12 +254,8 @@ impl Replica {
             let lamport_ts = self.lamport_clock.next();
 
             if offset == 0 {
-                let new_run = InsertionRun::new(
-                    Anchor::origin(),
-                    self.id,
-                    range,
-                    lamport_ts,
-                );
+                let new_run =
+                    EditRun::new(Anchor::origin(), self.id, range, lamport_ts);
 
                 let run = core::mem::replace(run, new_run);
 
@@ -297,32 +279,29 @@ impl Replica {
                     lamport_ts,
                 );
 
-                let new_run =
-                    InsertionRun::new(anchor, self.id, range, lamport_ts);
+                let new_run = EditRun::new(anchor, self.id, range, lamport_ts);
 
                 (Some(new_run), split)
             }
         };
 
         let (inserted_run, split_run) =
-            self.insertion_runs.insert(offset as u64, insert_with);
+            self.run_tree.gtree.insert(offset as u64, insert_with);
 
         match (inserted_run, split_run) {
             (Some(inserted_run), Some(split_run)) => {
-                //self.ids
-                //    .get_mut(inserted_at_id)
-                //    .split_run(inserted_at_offset, split_run);
+                self.run_indices
+                    .get_mut(inserted_at_id)
+                    .split(inserted_at_offset, split_run);
 
-                //self.ids.get_mut(self.id).append_run(len, inserted_run);
+                self.run_indices.get_mut(self.id).append(len, inserted_run);
             },
 
             (Some(inserted_run), None) => {
-                //self.ids.get_mut(self.id).append_run(len, inserted_run);
+                self.run_indices.get_mut(self.id).append(len, inserted_run);
             },
 
-            _ => {
-                //self.ids.get_mut(self.id).extend_last_run(len),
-            },
+            _ => self.run_indices.get_mut(self.id).extend_last(len),
         }
 
         self.character_ts += len;
@@ -334,7 +313,7 @@ impl Replica {
     #[allow(clippy::len_without_is_empty)]
     #[doc(hidden)]
     pub fn len(&self) -> usize {
-        self.insertion_runs.summary() as _
+        self.run_tree.len() as _
     }
 
     /// TODO: docs
@@ -440,7 +419,7 @@ mod debug {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
-                .field("edit_runs", &self.0.insertion_runs)
+                .field("edit_runs", &self.0.run_tree)
                 // .field("id_registry", &self.0.run_indexes)
                 .field("character", &self.0.character_ts)
                 .field("lamport", &self.0.lamport_clock)
@@ -455,7 +434,7 @@ mod debug {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
-                .field("edit_runs", &self.0.insertion_runs.debug_as_btree())
+                .field("edit_runs", &self.0.run_tree.gtree.debug_as_btree())
                 // .field("id_registry", &self.0.run_indexes)
                 .field("character", &self.0.character_ts)
                 .field("lamport", &self.0.lamport_clock)

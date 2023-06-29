@@ -4,7 +4,7 @@ use crate::*;
 
 /// TODO: docs
 #[derive(Clone, PartialEq)]
-pub struct InsertionRun {
+pub struct EditRun {
     /// TODO: docs
     inserted_at: Anchor,
 
@@ -21,7 +21,7 @@ pub struct InsertionRun {
     is_deleted: bool,
 }
 
-impl core::fmt::Debug for InsertionRun {
+impl core::fmt::Debug for EditRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
@@ -36,7 +36,7 @@ impl core::fmt::Debug for InsertionRun {
 }
 
 /// This implementation is guaranteed to never return `Some(Ordering::Equal)`.
-impl PartialOrd for InsertionRun {
+impl PartialOrd for EditRun {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // If the two runs were inserted at different positions they're totally
@@ -56,7 +56,7 @@ impl PartialOrd for InsertionRun {
     }
 }
 
-impl InsertionRun {
+impl EditRun {
     #[inline(always)]
     pub fn anchor(&self) -> Anchor {
         self.inserted_at.clone()
@@ -209,7 +209,7 @@ impl InsertionRun {
     }
 }
 
-impl gtree::Delete for InsertionRun {
+impl gtree::Delete for EditRun {
     fn delete(&mut self) {
         self.is_deleted = true;
     }
@@ -290,7 +290,7 @@ impl Summary for u64 {
     }
 }
 
-impl Summarize for InsertionRun {
+impl Summarize for EditRun {
     type Summary = u64;
 
     #[inline]
@@ -311,7 +311,7 @@ impl gtree::Length<u64> for u64 {
     }
 }
 
-impl gtree::Join for InsertionRun {
+impl gtree::Join for EditRun {
     #[inline]
     fn append(&mut self, other: Self) -> Option<Self> {
         if self.is_deleted == other.is_deleted
@@ -339,7 +339,7 @@ impl gtree::Join for InsertionRun {
     }
 }
 
-impl Leaf for InsertionRun {
+impl Leaf for EditRun {
     type Length = u64;
 }
 
