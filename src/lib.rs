@@ -126,9 +126,7 @@ extern crate alloc;
 
 mod clocks;
 mod crdt_edit;
-// mod downstream;
 mod gtree;
-mod insertion_run;
 mod replica;
 mod run_indices;
 mod run_tree;
@@ -140,13 +138,15 @@ mod serde;
 use clocks::{LamportClock, LamportTimestamp};
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
-use gtree::{Gtree, Leaf, Length, Summarize, Summary};
-use insertion_run::{Anchor, EditRun};
+use gtree::Gtree;
 pub use replica::Replica;
 use replica::ReplicaId;
 use run_indices::RunIndices;
-use run_tree::RunTree;
+use run_tree::{Anchor, EditRun, RunTree};
 pub use text_edit::TextEdit;
+
+/// TODO: docs
+pub type Length = u64;
 
 type CharacterTimestamp = u64;
 
