@@ -6,9 +6,15 @@ use crate::*;
 const RUN_INDICES_ARITY: usize = 32;
 
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RunIndices {
     map: HashMap<ReplicaId, ReplicaRunIndices>,
+}
+
+impl core::fmt::Debug for RunIndices {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        self.map.fmt(f)
+    }
 }
 
 impl RunIndices {
@@ -75,7 +81,7 @@ impl ReplicaRunIndices {
 }
 
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct EditRunIndex {
     /// TODO: docs
     idx_in_run_tree: LeafIdx<EditRun>,
@@ -96,6 +102,12 @@ impl EditRunIndex {
         let right_len = self.len - at_offset;
         self.len = at_offset;
         Self { idx_in_run_tree: right_idx, len: right_len }
+    }
+}
+
+impl core::fmt::Debug for EditRunIndex {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{} @ {:?}", self.len, self.idx_in_run_tree)
     }
 }
 

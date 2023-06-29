@@ -2778,7 +2778,7 @@ mod tests {
     fn insert_two_leaves_after_leaf_0() {
         let first_leaf = TestLeaf::new_with_len(1);
 
-        let mut gt = TestGtree::<4>::new(first_leaf);
+        let (mut gt, _) = TestGtree::<4>::new(first_leaf);
 
         let (Some(second_leaf_idx), _) =
             gt.insert(1, TestLeaf::insert_with_len(2)) else { panic!() };
@@ -2805,7 +2805,7 @@ mod tests {
     fn insert_two_leaves_after_leaf_1() {
         let first_leaf = TestLeaf::new_with_len(2);
 
-        let mut gt = TestGtree::<4>::new(first_leaf);
+        let (mut gt, _) = TestGtree::<4>::new(first_leaf);
 
         let (Some(second_leaf_idx), _) =
             gt.insert(1, TestLeaf::insert_with_len(3)) else { panic!() };
