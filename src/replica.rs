@@ -17,83 +17,13 @@ pub struct Replica {
     run_indices: RunIndices,
 
     /// TODO: docs
-    character_ts: CharacterTimestamp,
+    character_clock: Length,
 
     /// TODO: docs
     lamport_clock: LamportClock,
 
     /// TODO: docs
     pending: VecDeque<CrdtEdit>,
-}
-
-impl core::fmt::Debug for Replica {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        // In the public Debug we just print the ReplicaId to avoid leaking
-        // our internals.
-        //
-        // During development the `Replica::debug()` method (which is public
-        // but hidden from the API) can be used to obtain a more useful
-        // representation.
-        f.debug_tuple("Replica").field(&self.id.0).finish()
-    }
-}
-
-impl Default for Replica {
-    #[inline]
-    fn default() -> Self {
-        Self::new(0)
-    }
-}
-
-/// TODO: docs
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ReplicaId(Uuid);
-
-impl core::fmt::Debug for ReplicaId {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "ReplicaId({:x})", self.as_u32())
-    }
-}
-
-impl ReplicaId {
-    /// TODO: docs
-    pub fn as_u32(&self) -> u32 {
-        self.0.as_fields().0
-    }
-
-    /// Creates a new, randomly generated [`ReplicaId`].
-    #[inline(always)]
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-
-    /// Returns the "nil" id, i.e. the id whose bytes are all zeros.
-    ///
-    /// This is used to form the [`EditId`] of the first edit run and should
-    /// never be used in any of the following user-generated insertion.
-    #[inline(always)]
-    pub const fn zero() -> Self {
-        Self(Uuid::nil())
-    }
-}
-
-impl Clone for Replica {
-    #[inline(always)]
-    fn clone(&self) -> Self {
-        let mut lamport_clock = self.lamport_clock;
-
-        lamport_clock.next();
-
-        Self {
-            id: ReplicaId::new(),
-            run_tree: self.run_tree.clone(),
-            character_ts: 0,
-            run_indices: self.run_indices.clone(),
-            // run_indexes: self.run_indexes.clone(),
-            lamport_clock,
-            pending: self.pending.clone(),
-        }
-    }
 }
 
 impl Replica {
@@ -209,7 +139,7 @@ impl Replica {
             id: replica_id,
             run_tree,
             run_indices,
-            character_ts: len,
+            character_clock: len,
             lamport_clock,
             pending: VecDeque::new(),
         }
@@ -235,7 +165,7 @@ impl Replica {
 
             if offset == run.len()
                 && self.id == run.replica_id()
-                && self.character_ts == run.end()
+                && self.character_clock == run.end()
             {
                 edit = CrdtEdit::insertion(
                     Anchor::new(run.replica_id(), run.end()),
@@ -249,7 +179,8 @@ impl Replica {
                 return (None, None);
             }
 
-            let range = (self.character_ts..self.character_ts + len).into();
+            let range =
+                (self.character_clock..self.character_clock + len).into();
 
             let lamport_ts = self.lamport_clock.next();
 
@@ -304,7 +235,7 @@ impl Replica {
             _ => self.run_indices.get_mut(self.id).extend_last(len),
         }
 
-        self.character_ts += len;
+        self.character_clock += len;
 
         edit
     }
@@ -410,6 +341,112 @@ impl Replica {
     }
 }
 
+impl core::fmt::Debug for Replica {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        // In the public Debug we just print the ReplicaId to avoid leaking
+        // our internals.
+        //
+        // During development the `Replica::debug()` method (which is public
+        // but hidden from the API) can be used to obtain a more useful
+        // representation.
+        f.debug_tuple("Replica").field(&self.id.0).finish()
+    }
+}
+
+impl Default for Replica {
+    #[inline]
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl Clone for Replica {
+    #[inline(always)]
+    fn clone(&self) -> Self {
+        let mut lamport_clock = self.lamport_clock;
+
+        lamport_clock.next();
+
+        Self {
+            id: ReplicaId::new(),
+            run_tree: self.run_tree.clone(),
+            character_clock: 0,
+            run_indices: self.run_indices.clone(),
+            // run_indexes: self.run_indexes.clone(),
+            lamport_clock,
+            pending: self.pending.clone(),
+        }
+    }
+}
+
+/// TODO: docs
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ReplicaId(Uuid);
+
+impl core::fmt::Debug for ReplicaId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "ReplicaId({:x})", self.as_u32())
+    }
+}
+
+impl ReplicaId {
+    /// TODO: docs
+    #[inline]
+    pub fn as_u32(&self) -> u32 {
+        self.0.as_fields().0
+    }
+
+    /// Creates a new, randomly generated [`ReplicaId`].
+    #[inline]
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    /// Returns the "nil" id, i.e. the id whose bytes are all zeros.
+    ///
+    /// This is used to form the [`EditId`] of the first edit run and should
+    /// never be used in any of the following user-generated insertion.
+    #[inline]
+    pub const fn zero() -> Self {
+        Self(Uuid::nil())
+    }
+}
+
+/// TODO: docs
+#[derive(Copy, Clone, Default)]
+pub struct LamportClock(u64);
+
+impl core::fmt::Debug for LamportClock {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "LamportClock({})", self.0)
+    }
+}
+
+impl LamportClock {
+    #[inline]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn next(&mut self) -> LamportTimestamp {
+        let next = self.0;
+        self.0 += 1;
+        next
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn update(&mut self, other: LamportTimestamp) -> LamportTimestamp {
+        self.0 = self.0.max(other) + 1;
+        self.0
+    }
+}
+
+/// TODO: docs
+pub type LamportTimestamp = u64;
+
 mod debug {
     use super::*;
 
@@ -419,10 +456,10 @@ mod debug {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
-                .field("edit_runs", &self.0.run_tree)
-                // .field("id_registry", &self.0.run_indexes)
-                .field("character", &self.0.character_ts)
-                .field("lamport", &self.0.lamport_clock)
+                .field("run_tree", &self.0.run_tree)
+                .field("run_indices", &self.0.run_indices)
+                .field("character_clock", &self.0.character_clock)
+                .field("lamport_clock", &self.0.lamport_clock)
                 .field("pending", &self.0.pending)
                 .finish()
         }
@@ -434,10 +471,10 @@ mod debug {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             f.debug_struct("Replica")
                 .field("id", &self.0.id)
-                .field("edit_runs", &self.0.run_tree.gtree.debug_as_btree())
-                // .field("id_registry", &self.0.run_indexes)
-                .field("character", &self.0.character_ts)
-                .field("lamport", &self.0.lamport_clock)
+                .field("run_tree", &self.0.run_tree.gtree.debug_as_btree())
+                .field("run_indices", &self.0.run_indices)
+                .field("character_clock", &self.0.character_clock)
+                .field("lamport_clock", &self.0.lamport_clock)
                 .field("pending", &self.0.pending)
                 .finish()
         }

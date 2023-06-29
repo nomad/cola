@@ -60,7 +60,7 @@ pub struct EditRun {
     inserted_by: ReplicaId,
 
     /// TODO: docs
-    character_range: Range<CharacterTimestamp>,
+    character_range: Range<Length>,
 
     /// TODO: docs
     lamport_ts: LamportTimestamp,
@@ -76,7 +76,7 @@ impl core::fmt::Debug for EditRun {
             "{:x}.{:?} L({}) |@ {:?}{}",
             self.inserted_by.as_u32(),
             self.character_range,
-            self.lamport_ts.as_u64(),
+            self.lamport_ts,
             self.inserted_at,
             if self.is_deleted { " 🪦" } else { "" },
         )
@@ -111,12 +111,12 @@ impl EditRun {
     }
 
     #[inline(always)]
-    pub fn end(&self) -> CharacterTimestamp {
+    pub fn end(&self) -> Length {
         self.range().end
     }
 
     #[inline(always)]
-    fn end_mut(&mut self) -> &mut CharacterTimestamp {
+    fn end_mut(&mut self) -> &mut Length {
         &mut self.range_mut().end
     }
 
@@ -192,7 +192,7 @@ impl EditRun {
     pub fn new(
         inserted_at: Anchor,
         inserted_by: ReplicaId,
-        character_range: Range<CharacterTimestamp>,
+        character_range: Range<Length>,
         lamport_ts: LamportTimestamp,
     ) -> Self {
         Self {
@@ -205,12 +205,12 @@ impl EditRun {
     }
 
     #[inline(always)]
-    fn range(&self) -> &Range<CharacterTimestamp> {
+    fn range(&self) -> &Range<Length> {
         &self.character_range
     }
 
     #[inline(always)]
-    fn range_mut(&mut self) -> &mut Range<CharacterTimestamp> {
+    fn range_mut(&mut self) -> &mut Range<Length> {
         &mut self.character_range
     }
 
@@ -233,12 +233,12 @@ impl EditRun {
     }
 
     #[inline(always)]
-    pub fn start(&self) -> CharacterTimestamp {
+    pub fn start(&self) -> Length {
         self.range().start
     }
 
     #[inline(always)]
-    fn start_mut(&mut self) -> &mut CharacterTimestamp {
+    fn start_mut(&mut self) -> &mut Length {
         &mut self.range_mut().start
     }
 }
@@ -250,7 +250,7 @@ pub struct Anchor {
     replica_id: ReplicaId,
 
     /// TODO: docs
-    offset: CharacterTimestamp,
+    offset: Length,
 }
 
 impl core::fmt::Debug for Anchor {
@@ -265,7 +265,7 @@ impl core::fmt::Debug for Anchor {
 
 impl Anchor {
     #[inline(always)]
-    pub fn new(replica_id: ReplicaId, offset: CharacterTimestamp) -> Self {
+    pub fn new(replica_id: ReplicaId, offset: Length) -> Self {
         Self { replica_id, offset }
     }
 

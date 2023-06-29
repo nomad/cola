@@ -7,7 +7,7 @@ use crate::{EditRun, Gtree, ReplicaId};
 const RUN_INDICES_ARITY: usize = 32;
 
 /// TODO: docs
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RunIndices {
     map: HashMap<ReplicaId, ReplicaRunIndices>,
 }
@@ -27,7 +27,7 @@ impl RunIndices {
 }
 
 /// TODO: docs
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ReplicaRunIndices {
     /// TODO: docs
     indices: Gtree<RUN_INDICES_ARITY, EditRunIndex>,
