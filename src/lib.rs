@@ -136,7 +136,7 @@ mod serde;
 
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
-use gtree::Gtree;
+use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
 use replica::{LamportTimestamp, ReplicaId};
 use run_indices::RunIndices;

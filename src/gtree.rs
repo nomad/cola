@@ -2512,7 +2512,7 @@ mod debug {
 
     impl<const ARITY: usize, L: Leaf> Debug for Gtree<ARITY, L> {
         fn fmt(&self, f: &mut Formatter) -> FmtResult {
-            self.debug_as_self().fmt(f)
+            self.debug_as_btree().fmt(f)
         }
     }
 

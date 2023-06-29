@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use crate::gtree::{Join, Leaf, LeafIdx, Summarize};
-use crate::{EditRun, Gtree, ReplicaId};
+use crate::*;
 
 /// TODO: docs
 const RUN_INDICES_ARITY: usize = 32;
@@ -27,13 +26,19 @@ impl RunIndices {
 }
 
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ReplicaRunIndices {
     /// TODO: docs
     indices: Gtree<RUN_INDICES_ARITY, EditRunIndex>,
 
     /// TODO: docs
     last_run_idx: LeafIdx<EditRunIndex>,
+}
+
+impl core::fmt::Debug for ReplicaRunIndices {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        self.indices.fmt(f)
+    }
 }
 
 impl ReplicaRunIndices {
@@ -94,7 +99,7 @@ impl EditRunIndex {
     }
 }
 
-impl Summarize for EditRunIndex {
+impl gtree::Summarize for EditRunIndex {
     type Summary = u64;
 
     #[inline]
@@ -103,8 +108,8 @@ impl Summarize for EditRunIndex {
     }
 }
 
-impl Join for EditRunIndex {}
+impl gtree::Join for EditRunIndex {}
 
-impl Leaf for EditRunIndex {
+impl gtree::Leaf for EditRunIndex {
     type Length = u64;
 }
