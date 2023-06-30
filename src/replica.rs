@@ -53,61 +53,45 @@ impl Replica {
     where
         R: RangeBounds<usize>,
     {
-        #[inline(always)]
-        fn range_bounds_to_start_end<R>(
-            range: R,
-            lo: usize,
-            hi: usize,
-        ) -> (usize, usize)
-        where
-            R: RangeBounds<usize>,
-        {
-            use core::ops::Bound;
-
-            let start = match range.start_bound() {
-                Bound::Included(&n) => n,
-                Bound::Excluded(&n) => n + 1,
-                Bound::Unbounded => lo,
-            };
-
-            let end = match range.end_bound() {
-                Bound::Included(&n) => n + 1,
-                Bound::Excluded(&n) => n,
-                Bound::Unbounded => hi,
-            };
-
-            (start, end)
-        }
-
         let (start, end) = range_bounds_to_start_end(range, 0, self.len());
 
         if start == end {
             return CrdtEdit::no_op();
         }
 
-        let start = start as u64;
+        let deleted_range = Range { start: start as u64, end: end as u64 };
 
-        let end = end as u64;
+        let outcome = self.run_tree.delete(deleted_range);
 
-        let (_, _) = self.run_tree.delete(Range { start, end });
+        match outcome {
+            DeletionOutcome::DeletedAcrossRuns { split_start, split_end } => {
+                if let Some((replica_id, offset, idx)) = split_start {
+                    self.run_indices.get_mut(replica_id).split(offset, idx);
+                }
+                if let Some((replica_id, offset, idx)) = split_end {
+                    self.run_indices.get_mut(replica_id).split(offset, idx);
+                }
+            },
 
-        //// if it lands within a single fragment we return (deleted_fragment,
-        //// split_fragment)
-        ////
-        //// if it lands on 2 separate fragments we return deleted_fragment,
-        //// split_fragment
-        ////a
-        //if single {
+            DeletionOutcome::DeletedInMiddleOfSingleRun {
+                replica_id,
+                range,
+                idx_of_deleted,
+                idx_of_split,
+            } => {
+                let indices = self.run_indices.get_mut(replica_id);
+                indices.split(range.start, idx_of_deleted);
+                indices.split(range.end, idx_of_split);
+            },
 
-        //self.ids.get_mut(replica_id).split_double(start..end, id_deleted, id_split);
-        //} else {
-        //    self.ids.get_mut(replica_start).split_run(start, id_deleted);
-        //    self.ids.get_mut(replica_end).split_run(end, id_split);
-        //}
+            DeletionOutcome::DeletionSplitSingleRun {
+                replica_id,
+                offset,
+                idx,
+            } => self.run_indices.get_mut(replica_id).split(offset, idx),
 
-        //// but whatever the case may be we never need the id's that we land on.
-
-        //match
+            _ => {},
+        }
 
         CrdtEdit::no_op()
     }
@@ -157,6 +141,7 @@ impl Replica {
         let mut edit = CrdtEdit::no_op();
 
         let mut inserted_at_id = self.id;
+
         let mut inserted_at_offset = 0;
 
         let insert_with = |run: &mut EditRun, offset: u64| {
@@ -446,6 +431,32 @@ impl LamportClock {
 
 /// TODO: docs
 pub type LamportTimestamp = u64;
+
+#[inline(always)]
+fn range_bounds_to_start_end<R>(
+    range: R,
+    lo: usize,
+    hi: usize,
+) -> (usize, usize)
+where
+    R: RangeBounds<usize>,
+{
+    use core::ops::Bound;
+
+    let start = match range.start_bound() {
+        Bound::Included(&n) => n,
+        Bound::Excluded(&n) => n + 1,
+        Bound::Unbounded => lo,
+    };
+
+    let end = match range.end_bound() {
+        Bound::Included(&n) => n + 1,
+        Bound::Excluded(&n) => n,
+        Bound::Unbounded => hi,
+    };
+
+    (start, end)
+}
 
 mod debug {
     use super::*;

@@ -23,14 +23,79 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn delete(
-        &mut self,
-        range: Range<u64>,
-    ) -> (Option<LeafIdx<EditRun>>, Option<LeafIdx<EditRun>>) {
-        let delete_from = EditRun::delete_from;
-        let delete_up_to = EditRun::delete_up_to;
-        let delete_range = EditRun::delete_range;
-        self.gtree.delete(range, delete_range, delete_from, delete_up_to)
+    pub fn delete(&mut self, range: Range<u64>) -> DeletionOutcome {
+        let mut id_start = ReplicaId::zero();
+        let mut offset_start = 0;
+
+        let mut id_end = ReplicaId::zero();
+        let mut offset_end = 0;
+
+        let mut split_across_runs = false;
+
+        let delete_from = |run: &mut EditRun, offset: Length| {
+            split_across_runs = true;
+            id_start = run.replica_id();
+            offset_start = run.start() + offset;
+            run.delete_from(offset)
+        };
+
+        let delete_up_to = |run: &mut EditRun, offset: Length| {
+            id_end = run.replica_id();
+            offset_end = run.start() + offset;
+            run.delete_up_to(offset)
+        };
+
+        let mut id_range = ReplicaId::zero();
+        let mut deleted_range = Range { start: 0, end: 0 };
+        let mut deleted_left_part = 0;
+        let mut deleted_right_part = 0;
+
+        let delete_range = |run: &mut EditRun, range: Range<Length>| {
+            id_range = run.replica_id();
+            if range.start == 0 {
+                deleted_left_part = run.start() + range.end;
+            } else if range.end == run.len() {
+                deleted_right_part = run.start() + range.start;
+            } else {
+                deleted_range.start = run.start() + range.start;
+                deleted_range.end = run.start() + range.end;
+            }
+            run.delete_range(range)
+        };
+
+        let (first_idx, second_idx) =
+            self.gtree.delete(range, delete_range, delete_from, delete_up_to);
+
+        if split_across_runs {
+            let split_start =
+                first_idx.map(|idx| (id_start, offset_start, idx));
+
+            let split_end = second_idx.map(|idx| (id_end, offset_end, idx));
+
+            DeletionOutcome::DeletedAcrossRuns { split_start, split_end }
+        } else {
+            match (first_idx, second_idx) {
+                (Some(first), Some(second)) => {
+                    DeletionOutcome::DeletedInMiddleOfSingleRun {
+                        replica_id: id_range,
+                        range: deleted_range,
+                        idx_of_deleted: first,
+                        idx_of_split: second,
+                    }
+                },
+
+                (Some(first), _) => DeletionOutcome::DeletionSplitSingleRun {
+                    replica_id: id_range,
+                    offset: core::cmp::max(
+                        deleted_left_part,
+                        deleted_right_part,
+                    ),
+                    idx: first,
+                },
+
+                _ => DeletionOutcome::Wip,
+            }
+        }
     }
 
     #[inline]
@@ -48,6 +113,32 @@ impl RunTree {
         let (gtree, idx) = Gtree::new(first_run);
         (Self { gtree }, idx)
     }
+}
+
+/// TODO: docs
+pub enum DeletionOutcome {
+    /// TODO: docs
+    DeletedAcrossRuns {
+        split_start: Option<(ReplicaId, Length, LeafIdx<EditRun>)>,
+        split_end: Option<(ReplicaId, Length, LeafIdx<EditRun>)>,
+    },
+
+    /// TODO: docs
+    DeletedInMiddleOfSingleRun {
+        replica_id: ReplicaId,
+        range: Range<Length>,
+        idx_of_deleted: LeafIdx<EditRun>,
+        idx_of_split: LeafIdx<EditRun>,
+    },
+
+    /// TODO: docs
+    DeletionSplitSingleRun {
+        replica_id: ReplicaId,
+        offset: Length,
+        idx: LeafIdx<EditRun>,
+    },
+
+    Wip,
 }
 
 /// TODO: docs

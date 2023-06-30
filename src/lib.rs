@@ -140,7 +140,7 @@ use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
 use replica::{LamportTimestamp, ReplicaId};
 use run_indices::RunIndices;
-use run_tree::{Anchor, EditRun, RunTree};
+use run_tree::{Anchor, DeletionOutcome, EditRun, RunTree};
 pub use text_edit::TextEdit;
 
 /// TODO: docs
