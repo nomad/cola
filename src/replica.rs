@@ -41,13 +41,13 @@ impl Replica {
     }
 
     #[doc(hidden)]
-    pub fn debug(&self) -> debug::Debug<'_> {
-        debug::Debug(self)
+    pub fn debug(&self) -> debug::DebugAsSelf<'_> {
+        self.into()
     }
 
     #[doc(hidden)]
     pub fn debug_as_btree(&self) -> debug::DebugAsBtree<'_> {
-        debug::DebugAsBtree(self)
+        self.into()
     }
 
     /// TODO: docs
@@ -476,34 +476,66 @@ where
 }
 
 mod debug {
+    use core::fmt::Debug;
+
     use super::*;
 
-    pub struct Debug<'a>(pub &'a Replica);
+    pub struct DebugAsSelf<'a>(BaseDebug<'a, run_tree::DebugAsSelf<'a>>);
 
-    impl<'a> core::fmt::Debug for Debug<'a> {
-        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            f.debug_struct("Replica")
-                .field("id", &self.0.id)
-                .field("run_tree", &self.0.run_tree)
-                .field("run_indices", &self.0.run_indices)
-                .field("character_clock", &self.0.character_clock)
-                .field("lamport_clock", &self.0.lamport_clock)
-                .field("pending", &self.0.pending)
-                .finish()
+    impl<'a> From<&'a Replica> for DebugAsSelf<'a> {
+        #[inline]
+        fn from(replica: &'a Replica) -> DebugAsSelf<'a> {
+            let base = BaseDebug {
+                replica,
+                debug_run_tree: replica.run_tree.debug_as_self(),
+            };
+
+            Self(base)
         }
     }
 
-    pub struct DebugAsBtree<'a>(pub &'a Replica);
+    impl<'a> core::fmt::Debug for DebugAsSelf<'a> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+
+    pub struct DebugAsBtree<'a>(BaseDebug<'a, run_tree::DebugAsBtree<'a>>);
+
+    impl<'a> From<&'a Replica> for DebugAsBtree<'a> {
+        #[inline]
+        fn from(replica: &'a Replica) -> DebugAsBtree<'a> {
+            let base = BaseDebug {
+                replica,
+                debug_run_tree: replica.run_tree.debug_as_btree(),
+            };
+
+            Self(base)
+        }
+    }
 
     impl<'a> core::fmt::Debug for DebugAsBtree<'a> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+
+    struct BaseDebug<'a, T: Debug> {
+        replica: &'a Replica,
+        debug_run_tree: T,
+    }
+
+    impl<'a, T: Debug> Debug for BaseDebug<'a, T> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let replica = &self.replica;
+
             f.debug_struct("Replica")
-                .field("id", &self.0.id)
-                .field("run_tree", &self.0.run_tree.gtree.debug_as_btree())
-                .field("run_indices", &self.0.run_indices)
-                .field("character_clock", &self.0.character_clock)
-                .field("lamport_clock", &self.0.lamport_clock)
-                .field("pending", &self.0.pending)
+                .field("id", &replica.id)
+                .field("run_tree", &self.debug_run_tree)
+                .field("run_indices", &replica.run_indices)
+                .field("character_clock", &replica.character_clock)
+                .field("lamport_clock", &replica.lamport_clock)
+                .field("pending", &replica.pending)
                 .finish()
         }
     }

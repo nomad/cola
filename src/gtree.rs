@@ -76,6 +76,7 @@ pub trait Join: Sized {
     ///
     /// The method returns `None` if the join operation succeeded and
     /// `Some(other)` if it failed.
+    #[allow(unused_variables)]
     fn append(&mut self, other: Self) -> Option<Self> {
         None
     }
@@ -84,6 +85,7 @@ pub trait Join: Sized {
     ///
     /// The method returns `None` if the join operation succeeded and
     /// `Some(other)` if it failed.
+    #[allow(unused_variables)]
     fn prepend(&mut self, other: Self) -> Option<Self> {
         None
     }
@@ -1720,6 +1722,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// TODO: docs
+    #[allow(clippy::type_complexity)]
     #[inline]
     fn with_leaf_mut_handle_split<F>(
         &mut self,
@@ -2464,6 +2467,8 @@ mod delete {
         unreachable!();
     }
 }
+
+pub use debug::{DebugAsBtree, DebugAsSelf};
 
 mod debug {
     //! Debug implementations for types in the outer module.

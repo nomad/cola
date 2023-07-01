@@ -9,7 +9,7 @@ const RUN_TREE_ARITY: usize = 32;
 #[derive(Clone, Debug)]
 pub struct RunTree {
     /// TODO: docs
-    pub gtree: Gtree<RUN_TREE_ARITY, EditRun>,
+    gtree: Gtree<RUN_TREE_ARITY, EditRun>,
 
     /// TODO: docs
     this_id: ReplicaId,
@@ -29,6 +29,16 @@ impl RunTree {
     #[inline]
     pub fn count_empty_leaves(&self) -> (usize, usize) {
         self.gtree.count_empty_leaves()
+    }
+
+    #[inline]
+    pub fn debug_as_self(&self) -> DebugAsSelf<'_> {
+        self.gtree.debug_as_self()
+    }
+
+    #[inline]
+    pub fn debug_as_btree(&self) -> DebugAsBtree<'_> {
+        self.gtree.debug_as_btree()
     }
 
     #[inline]
@@ -225,6 +235,7 @@ impl RunTree {
 }
 
 /// TODO: docs
+#[allow(clippy::enum_variant_names)]
 pub enum InsertionOutcome {
     /// TODO: docs
     ExtendedLastRun,
@@ -332,11 +343,6 @@ impl PartialOrd for EditRun {
 
 impl EditRun {
     #[inline(always)]
-    fn anchor(&self) -> Anchor {
-        self.inserted_at.clone()
-    }
-
-    #[inline(always)]
     pub fn end(&self) -> Length {
         self.range().end
     }
@@ -403,13 +409,8 @@ impl EditRun {
     }
 
     #[inline(always)]
-    pub fn insertion_ts(&self) -> InsertionTimestamp {
+    fn insertion_ts(&self) -> InsertionTimestamp {
         self.insertion_ts
-    }
-
-    #[inline(always)]
-    pub fn lamport_ts(&self) -> LamportTimestamp {
-        self.lamport_ts
     }
 
     /// TODO: docs
@@ -454,12 +455,12 @@ impl EditRun {
 
     /// TODO: docs
     #[inline(always)]
-    pub fn split(&mut self, at_offset: u64) -> Option<Self> {
+    pub fn split(&mut self, at_offset: Length) -> Option<Self> {
         if at_offset == self.len() || at_offset == 0 {
             None
         } else {
             let mut split = self.clone();
-            split.character_range.start += at_offset as u64;
+            split.character_range.start += at_offset;
             self.character_range.end = split.character_range.start;
             Some(split)
         }
@@ -502,20 +503,10 @@ impl Anchor {
         Self { replica_id, offset }
     }
 
-    #[inline(always)]
-    pub fn offset(&self) -> u64 {
-        self.offset
-    }
-
     /// A special value used to create an anchor at the start of the document.
     #[inline]
     pub const fn origin() -> Self {
         Self { replica_id: ReplicaId::zero(), offset: 0 }
-    }
-
-    #[inline(always)]
-    pub fn replica_id(&self) -> ReplicaId {
-        self.replica_id
     }
 }
 
@@ -609,3 +600,7 @@ impl gtree::Delete for EditRun {
 impl gtree::Leaf for EditRun {
     type Length = u64;
 }
+
+pub type DebugAsBtree<'a> = gtree::DebugAsBtree<'a, RUN_TREE_ARITY, EditRun>;
+
+pub type DebugAsSelf<'a> = gtree::DebugAsSelf<'a, RUN_TREE_ARITY, EditRun>;
