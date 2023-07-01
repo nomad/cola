@@ -113,6 +113,7 @@ impl RunTree {
         offset: Length,
         run_len: Length,
         character_ts: Length,
+        insertion_clock: &mut InsertionClock,
         lamport_clock: &mut LamportClock,
     ) -> (Anchor, InsertionOutcome) {
         debug_assert!(run_len > 0);
@@ -138,6 +139,8 @@ impl RunTree {
 
             let range = (character_ts..character_ts + run_len).into();
 
+            let insertion_ts = insertion_clock.next();
+
             let lamport_ts = lamport_clock.next();
 
             if offset == 0 {
@@ -145,6 +148,7 @@ impl RunTree {
                     anchor.clone(),
                     self.this_id,
                     range,
+                    insertion_ts,
                     lamport_ts,
                 );
 
@@ -160,6 +164,7 @@ impl RunTree {
                     anchor.clone(),
                     self.this_id,
                     range,
+                    insertion_ts,
                     lamport_ts,
                 );
 
@@ -260,6 +265,9 @@ pub struct EditRun {
 
     /// TODO: docs
     character_range: Range<Length>,
+
+    /// TODO: docs
+    insertion_ts: InsertionTimestamp,
 
     /// TODO: docs
     lamport_ts: LamportTimestamp,
@@ -392,12 +400,14 @@ impl EditRun {
         inserted_at: Anchor,
         inserted_by: ReplicaId,
         character_range: Range<Length>,
+        insertion_ts: InsertionTimestamp,
         lamport_ts: LamportTimestamp,
     ) -> Self {
         Self {
             inserted_at,
             inserted_by,
             character_range,
+            insertion_ts,
             lamport_ts,
             is_deleted: false,
         }

@@ -20,6 +20,9 @@ pub struct Replica {
     character_clock: Length,
 
     /// TODO: docs
+    insertion_clock: InsertionClock,
+
+    /// TODO: docs
     lamport_clock: LamportClock,
 
     /// TODO: docs
@@ -106,12 +109,15 @@ impl Replica {
     pub fn new(len: u64) -> Self {
         let replica_id = ReplicaId::new();
 
+        let mut insertion_clock = InsertionClock::new();
+
         let mut lamport_clock = LamportClock::new();
 
         let origin_run = EditRun::new(
             Anchor::origin(),
             replica_id,
             (0..len).into(),
+            insertion_clock.next(),
             lamport_clock.next(),
         );
 
@@ -124,6 +130,7 @@ impl Replica {
             run_tree,
             run_indices,
             character_clock: len,
+            insertion_clock,
             lamport_clock,
             pending: VecDeque::new(),
         }
@@ -142,6 +149,7 @@ impl Replica {
             offset as Length,
             run_len,
             self.character_clock,
+            &mut self.insertion_clock,
             &mut self.lamport_clock,
         );
 
@@ -312,7 +320,7 @@ impl Clone for Replica {
             run_tree: self.run_tree.clone(),
             character_clock: 0,
             run_indices: self.run_indices.clone(),
-            // run_indexes: self.run_indexes.clone(),
+            insertion_clock: InsertionClock::new(),
             lamport_clock,
             pending: self.pending.clone(),
         }
@@ -391,6 +399,34 @@ impl LamportClock {
 
 /// TODO: docs
 pub type LamportTimestamp = u64;
+
+/// TODO: docs
+#[derive(Copy, Clone, Default)]
+pub struct InsertionClock(u64);
+
+impl core::fmt::Debug for InsertionClock {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "InsertionClock({})", self.0)
+    }
+}
+
+impl InsertionClock {
+    #[inline]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn next(&mut self) -> InsertionTimestamp {
+        let next = self.0;
+        self.0 += 1;
+        next
+    }
+}
+
+/// TODO: docs
+pub type InsertionTimestamp = u64;
 
 #[inline(always)]
 fn range_bounds_to_start_end<R>(
