@@ -68,30 +68,48 @@ impl Replica {
 
         match outcome {
             DeletionOutcome::DeletedAcrossRuns { split_start, split_end } => {
-                if let Some((replica_id, offset, idx)) = split_start {
-                    self.run_indices.get_mut(replica_id).split(offset, idx);
+                if let Some((replica_id, insertion_ts, offset, idx)) =
+                    split_start
+                {
+                    self.run_indices.get_mut(replica_id).split(
+                        insertion_ts,
+                        offset,
+                        idx,
+                    );
                 }
-                if let Some((replica_id, offset, idx)) = split_end {
-                    self.run_indices.get_mut(replica_id).split(offset, idx);
+                if let Some((replica_id, insertion_ts, offset, idx)) =
+                    split_end
+                {
+                    self.run_indices.get_mut(replica_id).split(
+                        insertion_ts,
+                        offset,
+                        idx,
+                    );
                 }
             },
 
             DeletionOutcome::DeletedInMiddleOfSingleRun {
                 replica_id,
+                insertion_ts,
                 range,
                 idx_of_deleted,
                 idx_of_split,
             } => {
                 let indices = self.run_indices.get_mut(replica_id);
-                indices.split(range.start, idx_of_deleted);
-                indices.split(range.end, idx_of_split);
+                indices.split(insertion_ts, range.start, idx_of_deleted);
+                indices.split(insertion_ts, range.end, idx_of_split);
             },
 
             DeletionOutcome::DeletionSplitSingleRun {
                 replica_id,
+                insertion_ts,
                 offset,
                 idx,
-            } => self.run_indices.get_mut(replica_id).split(offset, idx),
+            } => self.run_indices.get_mut(replica_id).split(
+                insertion_ts,
+                offset,
+                idx,
+            ),
 
             _ => {},
         }
@@ -162,13 +180,16 @@ impl Replica {
 
             InsertionOutcome::SplitRun {
                 split_id,
+                split_insertion,
                 split_at_offset,
                 split_idx,
                 inserted_idx,
             } => {
-                self.run_indices
-                    .get_mut(split_id)
-                    .split(split_at_offset, split_idx);
+                self.run_indices.get_mut(split_id).split(
+                    split_insertion,
+                    split_at_offset,
+                    split_idx,
+                );
 
                 self.run_indices
                     .get_mut(self.id)

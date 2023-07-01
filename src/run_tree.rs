@@ -34,9 +34,11 @@ impl RunTree {
     #[inline]
     pub fn delete(&mut self, range: Range<Length>) -> DeletionOutcome {
         let mut id_start = ReplicaId::zero();
+        let mut insertion_ts_start = 0;
         let mut offset_start = 0;
 
         let mut id_end = ReplicaId::zero();
+        let mut insertion_ts_end = 0;
         let mut offset_end = 0;
 
         let mut split_across_runs = false;
@@ -44,23 +46,27 @@ impl RunTree {
         let delete_from = |run: &mut EditRun, offset: Length| {
             split_across_runs = true;
             id_start = run.replica_id();
+            insertion_ts_start = run.insertion_ts();
             offset_start = run.start() + offset;
             run.delete_from(offset)
         };
 
         let delete_up_to = |run: &mut EditRun, offset: Length| {
             id_end = run.replica_id();
+            insertion_ts_end = run.insertion_ts();
             offset_end = run.start() + offset;
             run.delete_up_to(offset)
         };
 
         let mut id_range = ReplicaId::zero();
+        let mut insertion_ts_range = 0;
         let mut deleted_range = Range { start: 0, end: 0 };
         let mut deleted_left_part = 0;
         let mut deleted_right_part = 0;
 
         let delete_range = |run: &mut EditRun, range: Range<Length>| {
             id_range = run.replica_id();
+            insertion_ts_range = run.insertion_ts();
             if range.start == 0 {
                 deleted_left_part = run.start() + range.end;
             } else if range.end == run.len() {
@@ -76,10 +82,11 @@ impl RunTree {
             self.gtree.delete(range, delete_range, delete_from, delete_up_to);
 
         if split_across_runs {
-            let split_start =
-                first_idx.map(|idx| (id_start, offset_start, idx));
+            let split_start = first_idx
+                .map(|idx| (id_start, insertion_ts_start, offset_start, idx));
 
-            let split_end = second_idx.map(|idx| (id_end, offset_end, idx));
+            let split_end = second_idx
+                .map(|idx| (id_end, insertion_ts_start, offset_end, idx));
 
             DeletionOutcome::DeletedAcrossRuns { split_start, split_end }
         } else {
@@ -87,6 +94,7 @@ impl RunTree {
                 (Some(first), Some(second)) => {
                     DeletionOutcome::DeletedInMiddleOfSingleRun {
                         replica_id: id_range,
+                        insertion_ts: insertion_ts_range,
                         range: deleted_range,
                         idx_of_deleted: first,
                         idx_of_split: second,
@@ -95,6 +103,7 @@ impl RunTree {
 
                 (Some(first), _) => DeletionOutcome::DeletionSplitSingleRun {
                     replica_id: id_range,
+                    insertion_ts: insertion_ts_range,
                     offset: core::cmp::max(
                         deleted_left_part,
                         deleted_right_part,
@@ -120,12 +129,15 @@ impl RunTree {
 
         let mut split_id = self.this_id;
 
+        let mut split_insertion = 0;
+
         let mut split_at_offset = 0;
 
         let mut anchor = Anchor::origin();
 
         let insert_with = |run: &mut EditRun, offset: u64| {
             split_id = run.replica_id();
+            split_insertion = run.insertion_ts();
             split_at_offset = run.start() + offset;
 
             if run.len() == offset
@@ -180,6 +192,7 @@ impl RunTree {
             (Some(inserted_idx), Some(split_idx)) => {
                 InsertionOutcome::SplitRun {
                     split_id,
+                    split_insertion,
                     split_at_offset,
                     split_idx,
                     inserted_idx,
@@ -222,6 +235,7 @@ pub enum InsertionOutcome {
     /// TODO: docs
     SplitRun {
         split_id: ReplicaId,
+        split_insertion: InsertionTimestamp,
         split_at_offset: Length,
         split_idx: LeafIdx<EditRun>,
         inserted_idx: LeafIdx<EditRun>,
@@ -232,13 +246,17 @@ pub enum InsertionOutcome {
 pub enum DeletionOutcome {
     /// TODO: docs
     DeletedAcrossRuns {
-        split_start: Option<(ReplicaId, Length, LeafIdx<EditRun>)>,
-        split_end: Option<(ReplicaId, Length, LeafIdx<EditRun>)>,
+        split_start:
+            Option<(ReplicaId, InsertionTimestamp, Length, LeafIdx<EditRun>)>,
+
+        split_end:
+            Option<(ReplicaId, InsertionTimestamp, Length, LeafIdx<EditRun>)>,
     },
 
     /// TODO: docs
     DeletedInMiddleOfSingleRun {
         replica_id: ReplicaId,
+        insertion_ts: InsertionTimestamp,
         range: Range<Length>,
         idx_of_deleted: LeafIdx<EditRun>,
         idx_of_split: LeafIdx<EditRun>,
@@ -247,6 +265,7 @@ pub enum DeletionOutcome {
     /// TODO: docs
     DeletionSplitSingleRun {
         replica_id: ReplicaId,
+        insertion_ts: InsertionTimestamp,
         offset: Length,
         idx: LeafIdx<EditRun>,
     },
@@ -381,6 +400,11 @@ impl EditRun {
             self.is_deleted = true;
             None
         }
+    }
+
+    #[inline(always)]
+    pub fn insertion_ts(&self) -> InsertionTimestamp {
+        self.insertion_ts
     }
 
     #[inline(always)]

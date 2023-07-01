@@ -8,7 +8,7 @@ const RUN_INDICES_ARITY: usize = 32;
 /// TODO: docs
 #[derive(Clone)]
 pub struct RunIndices {
-    map: HashMap<ReplicaId, ReplicaRunIndices>,
+    map: HashMap<ReplicaId, ReplicaIndices>,
 }
 
 impl core::fmt::Debug for RunIndices {
@@ -19,81 +19,119 @@ impl core::fmt::Debug for RunIndices {
 
 impl RunIndices {
     #[inline]
-    pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaRunIndices {
+    pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
         self.map.get_mut(&id).unwrap()
     }
 
     #[inline]
     pub fn new(id: ReplicaId, idx: LeafIdx<EditRun>, len: u64) -> Self {
         let mut map = HashMap::new();
-        map.insert(id, ReplicaRunIndices::new(idx, len));
+        map.insert(id, ReplicaIndices::new(idx, len));
         Self { map }
     }
 }
 
 /// TODO: docs
 #[derive(Clone)]
-pub struct ReplicaRunIndices {
+pub struct ReplicaIndices {
     /// TODO: docs
-    indices: Gtree<RUN_INDICES_ARITY, EditRunIndex>,
+    insertion_runs: Gtree<RUN_INDICES_ARITY, RunSplits>,
 
     /// TODO: docs
-    last_run_idx: LeafIdx<EditRunIndex>,
+    run_idxs: Vec<LeafIdx<RunSplits>>,
+
+    /// TODO: docs
+    last_run: RunSplit,
 }
 
-impl core::fmt::Debug for ReplicaRunIndices {
+impl core::fmt::Debug for ReplicaIndices {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        self.indices.fmt(f)
+        self.insertion_runs.fmt(f)
     }
 }
 
-impl ReplicaRunIndices {
+impl ReplicaIndices {
     #[inline]
-    pub fn append(&mut self, len: u64, idx: LeafIdx<EditRun>) {
-        let run = EditRunIndex::new(idx, len);
-        let last_run_idx = self.indices.split_leaf(self.last_run_idx, |_| run);
-        self.last_run_idx = last_run_idx;
+    pub fn append(&mut self, len: Length, idx: LeafIdx<EditRun>) {
+        let new_last = RunSplit::new(len, idx);
+
+        let old_last = core::mem::replace(&mut self.last_run, new_last);
+
+        let (splits, _) = Gtree::new(old_last);
+
+        let (last_idx, _) = self
+            .insertion_runs
+            .insert(self.insertion_runs.len(), |_, _| (Some(splits), None));
+
+        self.run_idxs.push(last_idx.unwrap());
     }
 
     #[inline]
-    pub fn extend_last(&mut self, extend_by: u64) {
-        self.indices.get_leaf_mut(self.last_run_idx, |run| {
-            run.len += extend_by;
-        });
+    pub fn extend_last(&mut self, extend_by: Length) {
+        self.last_run.len += extend_by;
     }
 
     #[inline]
-    pub fn new(first_idx: LeafIdx<EditRun>, len: u64) -> Self {
-        let (indices, last_run_idx) =
-            Gtree::new(EditRunIndex::new(first_idx, len));
+    pub fn new(first_idx: LeafIdx<EditRun>, len: Length) -> Self {
+        let last_run = RunSplit::new(len, first_idx);
 
-        Self { indices, last_run_idx }
+        let mut run_idxs = Vec::with_capacity(128);
+
+        Self { insertion_runs: todo!(), run_idxs, last_run }
     }
 
     #[inline]
-    pub fn split(&mut self, at_offset: u64, right_idx: LeafIdx<EditRun>) {
-        let (leaf, leaf_offset) = self.indices.leaf_at_offset(at_offset);
+    pub fn split(
+        &mut self,
+        insertion_ts: InsertionTimestamp,
+        at_offset: Length,
+        right_idx: LeafIdx<EditRun>,
+    ) {
+        let leaf_idx = self.run_idxs[insertion_ts as usize];
 
-        self.indices.split_leaf(leaf, |run| {
-            run.split(at_offset - leaf_offset, right_idx)
+        self.insertion_runs.get_leaf_mut(leaf_idx, |splits| {
+            // TODO: at_offset is wrong.
+            let (split_idx, split_offset) = splits.leaf_at_offset(at_offset);
+
+            splits.split_leaf(split_idx, |split| {
+                split.split(at_offset - split_offset, right_idx)
+            });
         });
     }
 }
 
 /// TODO: docs
-#[derive(Clone)]
-struct EditRunIndex {
-    /// TODO: docs
-    idx_in_run_tree: LeafIdx<EditRun>,
+type RunSplits = Gtree<RUN_INDICES_ARITY, RunSplit>;
 
-    /// TODO: docs
-    len: u64,
+impl gtree::Join for RunSplits {}
+
+impl gtree::Leaf for RunSplits {
+    type Length = Length;
 }
 
-impl EditRunIndex {
+impl gtree::Summarize for RunSplits {
+    type Summary = Length;
+
     #[inline]
-    fn new(idx: LeafIdx<EditRun>, run_len: u64) -> Self {
-        Self { idx_in_run_tree: idx, len: run_len }
+    fn summarize(&self) -> Self::Summary {
+        self.summary()
+    }
+}
+
+/// TODO: docs
+#[derive(Clone, Debug)]
+struct RunSplit {
+    /// TODO: docs
+    len: Length,
+
+    /// TODO: docs
+    idx_in_run_tree: LeafIdx<EditRun>,
+}
+
+impl RunSplit {
+    #[inline]
+    fn new(len: Length, idx: LeafIdx<EditRun>) -> Self {
+        Self { idx_in_run_tree: idx, len }
     }
 
     #[inline]
@@ -105,14 +143,8 @@ impl EditRunIndex {
     }
 }
 
-impl core::fmt::Debug for EditRunIndex {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{} @ {:?}", self.len, self.idx_in_run_tree)
-    }
-}
-
-impl gtree::Summarize for EditRunIndex {
-    type Summary = u64;
+impl gtree::Summarize for RunSplit {
+    type Summary = Length;
 
     #[inline]
     fn summarize(&self) -> Self::Summary {
@@ -120,8 +152,8 @@ impl gtree::Summarize for EditRunIndex {
     }
 }
 
-impl gtree::Join for EditRunIndex {}
+impl gtree::Join for RunSplit {}
 
-impl gtree::Leaf for EditRunIndex {
-    type Length = u64;
+impl gtree::Leaf for RunSplit {
+    type Length = Length;
 }

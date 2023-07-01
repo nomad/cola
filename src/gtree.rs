@@ -440,6 +440,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
+    #[inline(always)]
+    pub fn len(&self) -> L::Length {
+        self.inode_len(self.root_idx)
+    }
+
     /// Creates a new Gtree with the given leaf as its first leaf.
     #[inline]
     pub fn new(first_leaf: L) -> (Self, LeafIdx<L>) {
@@ -1419,12 +1424,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.bubble(parent_idx, maybe_split, patch, leaf_patch);
 
         (first_idx, second_idx)
-    }
-
-    #[allow(dead_code)]
-    #[inline(always)]
-    fn len(&self) -> L::Length {
-        self.inode_len(self.root_idx)
     }
 
     #[inline(always)]
