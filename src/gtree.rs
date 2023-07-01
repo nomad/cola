@@ -355,6 +355,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
     /// TODO: docs
     #[inline]
+    pub fn get_leaf(&mut self, leaf_idx: LeafIdx<L>) -> &L {
+        self.leaf(leaf_idx)
+    }
+
+    /// TODO: docs
+    #[inline]
     pub fn get_leaf_mut<F>(&mut self, leaf_idx: LeafIdx<L>, with_leaf: F)
     where
         F: FnOnce(&mut L),
@@ -405,6 +411,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
 
         self.insert_at_offset(offset, insert_with)
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn is_initialized(&self) -> bool {
+        !self.inodes.is_empty()
     }
 
     /// TODO: docs

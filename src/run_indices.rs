@@ -38,10 +38,10 @@ pub struct ReplicaIndices {
     insertion_runs: Gtree<RUN_INDICES_ARITY, RunSplits>,
 
     /// TODO: docs
-    run_idxs: Vec<LeafIdx<RunSplits>>,
+    run_idxs: Vec<(LeafIdx<RunSplits>, Length)>,
 
     /// TODO: docs
-    last_run: RunSplit,
+    last_run: Option<RunSplit>,
 }
 
 impl core::fmt::Debug for ReplicaIndices {
@@ -55,42 +55,84 @@ impl ReplicaIndices {
     pub fn append(&mut self, len: Length, idx: LeafIdx<EditRun>) {
         let new_last = RunSplit::new(len, idx);
 
-        let old_last = core::mem::replace(&mut self.last_run, new_last);
+        let old_last = self.last_run.replace(new_last);
 
-        let (splits, _) = Gtree::new(old_last);
+        if let Some(old_last) = old_last {
+            self.append_split(old_last)
+        }
+    }
 
-        let (last_idx, _) = self
-            .insertion_runs
-            .insert(self.insertion_runs.len(), |_, _| (Some(splits), None));
+    #[inline]
+    fn append_split(&mut self, split: RunSplit) {
+        let (splits, _) = Gtree::new(split);
 
-        self.run_idxs.push(last_idx.unwrap());
+        let last_idx = if self.insertion_runs.is_initialized() {
+            let (last_idx, _) = self
+                .insertion_runs
+                .insert(self.insertion_runs.len(), |_, _| {
+                    (Some(splits), None)
+                });
+
+            last_idx.unwrap()
+        } else {
+            self.insertion_runs.initialize(splits)
+        };
+
+        let (last_offset, last_len) = self
+            .run_idxs
+            .last()
+            .map(|&(idx, offset)| {
+                let len = self.insertion_runs.get_leaf(idx).len();
+                (offset, len)
+            })
+            .unwrap_or((0, 0));
+
+        self.run_idxs.push((last_idx, last_offset + last_len));
     }
 
     #[inline]
     pub fn extend_last(&mut self, extend_by: Length) {
-        self.last_run.len += extend_by;
+        if let Some(last) = &mut self.last_run {
+            last.len += extend_by;
+        } else {
+            let &(last_idx, _) = self.run_idxs.last().unwrap();
+
+            self.insertion_runs.get_leaf_mut(last_idx, |splits| {
+                let splits_len = splits.len();
+                let (last_split_idx, _) = splits.leaf_at_offset(splits_len);
+                splits.get_leaf_mut(last_split_idx, |last| {
+                    last.len += extend_by;
+                });
+            });
+        }
     }
 
     #[inline]
     pub fn new(first_idx: LeafIdx<EditRun>, len: Length) -> Self {
-        let last_run = RunSplit::new(len, first_idx);
-
-        let mut run_idxs = Vec::with_capacity(128);
-
-        Self { insertion_runs: todo!(), run_idxs, last_run }
+        Self {
+            insertion_runs: Gtree::uninit(),
+            run_idxs: Vec::with_capacity(128),
+            last_run: Some(RunSplit::new(len, first_idx)),
+        }
     }
 
     #[inline]
     pub fn split(
         &mut self,
         insertion_ts: InsertionTimestamp,
-        at_offset: Length,
+        mut at_offset: Length,
         right_idx: LeafIdx<EditRun>,
     ) {
-        let leaf_idx = self.run_idxs[insertion_ts as usize];
+        if insertion_ts == self.run_idxs.len() as u64 {
+            let last = self.last_run.take().unwrap();
+            self.append_split(last);
+        }
+
+        let (leaf_idx, run_offset) = self.run_idxs[insertion_ts as usize];
+
+        at_offset -= run_offset;
 
         self.insertion_runs.get_leaf_mut(leaf_idx, |splits| {
-            // TODO: at_offset is wrong.
             let (split_idx, split_offset) = splits.leaf_at_offset(at_offset);
 
             splits.split_leaf(split_idx, |split| {

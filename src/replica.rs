@@ -185,15 +185,15 @@ impl Replica {
                 split_idx,
                 inserted_idx,
             } => {
+                self.run_indices
+                    .get_mut(self.id)
+                    .append(run_len, inserted_idx);
+
                 self.run_indices.get_mut(split_id).split(
                     split_insertion,
                     split_at_offset,
                     split_idx,
                 );
-
-                self.run_indices
-                    .get_mut(self.id)
-                    .append(run_len, inserted_idx);
             },
 
             InsertionOutcome::InsertedRun { inserted_idx } => {
