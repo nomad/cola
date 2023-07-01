@@ -8,7 +8,11 @@ const RUN_TREE_ARITY: usize = 32;
 
 #[derive(Clone, Debug)]
 pub struct RunTree {
+    /// TODO: docs
     pub gtree: Gtree<RUN_TREE_ARITY, EditRun>,
+
+    /// TODO: docs
+    this_id: ReplicaId,
 }
 
 impl RunTree {
@@ -23,7 +27,12 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn delete(&mut self, range: Range<u64>) -> DeletionOutcome {
+    pub fn count_empty_leaves(&self) -> (usize, usize) {
+        self.gtree.count_empty_leaves()
+    }
+
+    #[inline]
+    pub fn delete(&mut self, range: Range<Length>) -> DeletionOutcome {
         let mut id_start = ReplicaId::zero();
         let mut offset_start = 0;
 
@@ -99,8 +108,87 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn count_empty_leaves(&self) -> (usize, usize) {
-        self.gtree.count_empty_leaves()
+    pub fn insert(
+        &mut self,
+        offset: Length,
+        run_len: Length,
+        character_ts: Length,
+        lamport_clock: &mut LamportClock,
+    ) -> (Anchor, InsertionOutcome) {
+        debug_assert!(run_len > 0);
+
+        let mut split_id = self.this_id;
+
+        let mut split_at_offset = 0;
+
+        let mut anchor = Anchor::origin();
+
+        let insert_with = |run: &mut EditRun, offset: u64| {
+            split_id = run.replica_id();
+            split_at_offset = run.start() + offset;
+
+            if run.len() == offset
+                && run.replica_id() == self.this_id
+                && run.end() == character_ts
+            {
+                anchor = Anchor::new(run.replica_id(), run.end());
+                run.extend(run_len);
+                return (None, None);
+            }
+
+            let range = (character_ts..character_ts + run_len).into();
+
+            let lamport_ts = lamport_clock.next();
+
+            if offset == 0 {
+                let new_run = EditRun::new(
+                    anchor.clone(),
+                    self.this_id,
+                    range,
+                    lamport_ts,
+                );
+
+                let this_run = core::mem::replace(run, new_run);
+
+                (Some(this_run), None)
+            } else {
+                let split = run.split(offset);
+
+                anchor = Anchor::new(run.replica_id(), run.end());
+
+                let new_run = EditRun::new(
+                    anchor.clone(),
+                    self.this_id,
+                    range,
+                    lamport_ts,
+                );
+
+                (Some(new_run), split)
+            }
+        };
+
+        let (inserted_idx, split_idx) = self.gtree.insert(offset, insert_with);
+
+        let outcome = match (inserted_idx, split_idx) {
+            (None, None) => InsertionOutcome::ExtendedLastRun,
+
+            (Some(inserted_idx), Some(split_idx)) => {
+                InsertionOutcome::SplitRun {
+                    split_id,
+                    split_at_offset,
+                    split_idx,
+                    inserted_idx,
+                }
+            },
+
+            (Some(inserted_idx), None) => {
+                InsertionOutcome::InsertedRun { inserted_idx }
+            },
+
+            _ => unreachable!(),
+        };
+
+        (anchor, outcome)
     }
 
     #[inline]
@@ -109,10 +197,30 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn new(first_run: EditRun) -> (Self, LeafIdx<EditRun>) {
+    pub fn new(
+        this_id: ReplicaId,
+        first_run: EditRun,
+    ) -> (Self, LeafIdx<EditRun>) {
         let (gtree, idx) = Gtree::new(first_run);
-        (Self { gtree }, idx)
+        (Self { this_id, gtree }, idx)
     }
+}
+
+/// TODO: docs
+pub enum InsertionOutcome {
+    /// TODO: docs
+    ExtendedLastRun,
+
+    /// TODO: docs
+    InsertedRun { inserted_idx: LeafIdx<EditRun> },
+
+    /// TODO: docs
+    SplitRun {
+        split_id: ReplicaId,
+        split_at_offset: Length,
+        split_idx: LeafIdx<EditRun>,
+        inserted_idx: LeafIdx<EditRun>,
+    },
 }
 
 /// TODO: docs

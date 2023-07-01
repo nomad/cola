@@ -138,9 +138,9 @@ pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
 use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
-use replica::{LamportTimestamp, ReplicaId};
+use replica::{LamportClock, LamportTimestamp, ReplicaId};
 use run_indices::RunIndices;
-use run_tree::{Anchor, DeletionOutcome, EditRun, RunTree};
+use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
 pub use text_edit::TextEdit;
 
 /// TODO: docs

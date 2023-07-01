@@ -115,7 +115,7 @@ impl Replica {
             lamport_clock.next(),
         );
 
-        let (run_tree, origin_idx) = RunTree::new(origin_run);
+        let (run_tree, origin_idx) = RunTree::new(replica_id, origin_run);
 
         let run_indices = RunIndices::new(replica_id, origin_idx, len);
 
@@ -136,93 +136,48 @@ impl Replica {
             return CrdtEdit::no_op();
         }
 
-        let len = len as u64;
+        let run_len = len as Length;
 
-        let mut edit = CrdtEdit::no_op();
+        let (anchor, outcome) = self.run_tree.insert(
+            offset as Length,
+            run_len,
+            self.character_clock,
+            &mut self.lamport_clock,
+        );
 
-        let mut inserted_at_id = self.id;
+        self.character_clock += run_len;
 
-        let mut inserted_at_offset = 0;
+        match outcome {
+            InsertionOutcome::ExtendedLastRun => {
+                self.run_indices.get_mut(self.id).extend_last(run_len)
+            },
 
-        let insert_with = |run: &mut EditRun, offset: u64| {
-            inserted_at_id = run.replica_id();
-            inserted_at_offset = run.start() + offset;
+            InsertionOutcome::SplitRun {
+                split_id,
+                split_at_offset,
+                split_idx,
+                inserted_idx,
+            } => {
+                self.run_indices
+                    .get_mut(split_id)
+                    .split(split_at_offset, split_idx);
 
-            if offset == run.len()
-                && self.id == run.replica_id()
-                && self.character_clock == run.end()
-            {
-                edit = CrdtEdit::insertion(
-                    Anchor::new(run.replica_id(), run.end()),
-                    self.id,
-                    len,
-                    run.lamport_ts(),
-                );
+                self.run_indices
+                    .get_mut(self.id)
+                    .append(run_len, inserted_idx);
+            },
 
-                run.extend(len);
-
-                return (None, None);
-            }
-
-            let range =
-                (self.character_clock..self.character_clock + len).into();
-
-            let lamport_ts = self.lamport_clock.next();
-
-            if offset == 0 {
-                let new_run =
-                    EditRun::new(Anchor::origin(), self.id, range, lamport_ts);
-
-                let run = core::mem::replace(run, new_run);
-
-                edit = CrdtEdit::insertion(
-                    Anchor::origin(),
-                    self.id,
-                    len,
-                    lamport_ts,
-                );
-
-                (Some(run), None)
-            } else {
-                let split = run.split(offset);
-
-                let anchor = Anchor::new(run.replica_id(), run.end());
-
-                edit = CrdtEdit::insertion(
-                    anchor.clone(),
-                    self.id,
-                    len,
-                    lamport_ts,
-                );
-
-                let new_run = EditRun::new(anchor, self.id, range, lamport_ts);
-
-                (Some(new_run), split)
-            }
+            InsertionOutcome::InsertedRun { inserted_idx } => {
+                self.run_indices.get_mut(self.id).append(run_len, inserted_idx)
+            },
         };
 
-        let (inserted_run, split_run) =
-            self.run_tree.gtree.insert(offset as u64, insert_with);
-
-        match (inserted_run, split_run) {
-            (Some(inserted_run), Some(split_run)) => {
-                self.run_indices
-                    .get_mut(inserted_at_id)
-                    .split(inserted_at_offset, split_run);
-
-                self.run_indices.get_mut(self.id).append(len, inserted_run);
-            },
-
-            (Some(inserted_run), None) => {
-                self.run_indices.get_mut(self.id).append(len, inserted_run);
-            },
-
-            _ => self.run_indices.get_mut(self.id).extend_last(len),
-        }
-
-        self.character_clock += len;
-
-        edit
+        CrdtEdit::insertion(
+            anchor,
+            self.id,
+            run_len,
+            self.lamport_clock.last(),
+        )
     }
 
     /// TODO: docs
@@ -409,13 +364,18 @@ impl core::fmt::Debug for LamportClock {
 
 impl LamportClock {
     #[inline]
+    fn last(&self) -> LamportTimestamp {
+        self.0.saturating_sub(1)
+    }
+
+    #[inline]
     fn new() -> Self {
         Self::default()
     }
 
     /// TODO: docs
     #[inline]
-    fn next(&mut self) -> LamportTimestamp {
+    pub fn next(&mut self) -> LamportTimestamp {
         let next = self.0;
         self.0 += 1;
         next
