@@ -2602,10 +2602,22 @@ mod debug {
             let debug_lnodes =
                 DebugLnodesSequentially(gtree.lnodes.as_slice());
 
-            f.debug_map()
-                .entry(&DebugAsDisplay(&"inodes"), &debug_inodes)
-                .entry(&DebugAsDisplay(&"lnodes"), &debug_lnodes)
-                .finish()
+            let inodes = DebugAsDisplay(&"inodes");
+            let lnodes = DebugAsDisplay(&"lnodes");
+
+            if gtree.is_initialized() {
+                f.debug_map()
+                    .entry(&inodes, &debug_inodes)
+                    .entry(&lnodes, &debug_lnodes)
+                    .finish()
+            } else {
+                let empty_slice: &[()] = &[];
+
+                f.debug_map()
+                    .entry(&DebugAsDisplay(&"inodes"), &empty_slice)
+                    .entry(&DebugAsDisplay(&"lnodes"), &empty_slice)
+                    .finish()
+            }
         }
     }
 
@@ -2743,16 +2755,20 @@ mod debug {
                 Ok(())
             }
 
-            writeln!(f)?;
+            if self.gtree.is_initialized() {
+                writeln!(f)?;
 
-            print_inode_as_tree(
-                self.gtree,
-                self.inode_idx,
-                &mut String::new(),
-                "",
-                0,
-                f,
-            )
+                print_inode_as_tree(
+                    self.gtree,
+                    self.inode_idx,
+                    &mut String::new(),
+                    "",
+                    0,
+                    f,
+                )
+            } else {
+                f.debug_map().finish()
+            }
         }
     }
 }
@@ -2772,20 +2788,22 @@ mod leaves {
         fn from(gtree: &'a Gtree<N, L>) -> Self {
             let mut path = Vec::new();
             let mut idx = gtree.root_idx;
-            let current_leaves;
+            let mut current_leaves = &[][..];
 
-            loop {
-                path.push((idx, 0));
+            if gtree.is_initialized() {
+                loop {
+                    path.push((idx, 0));
 
-                match gtree.inode(idx).children() {
-                    Either::Internal(inode_idxs) => {
-                        idx = inode_idxs[0];
-                    },
+                    match gtree.inode(idx).children() {
+                        Either::Internal(inode_idxs) => {
+                            idx = inode_idxs[0];
+                        },
 
-                    Either::Leaf(leaf_idxs) => {
-                        current_leaves = leaf_idxs;
-                        break;
-                    },
+                        Either::Leaf(leaf_idxs) => {
+                            current_leaves = leaf_idxs;
+                            break;
+                        },
+                    }
                 }
             }
 
@@ -2797,6 +2815,10 @@ mod leaves {
         type Item = &'a L;
 
         fn next(&mut self) -> Option<Self::Item> {
+            if !self.gtree.is_initialized() {
+                return None;
+            }
+
             if let Some((first, rest)) = self.current_leaves.split_first() {
                 let leaf = self.gtree.leaf(*first);
                 self.current_leaves = rest;
