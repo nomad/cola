@@ -6,6 +6,7 @@ use crate::*;
 #[derive(Clone)]
 pub struct RunIndices {
     map: HashMap<ReplicaId, ReplicaIndices>,
+    this: ReplicaIndices,
 }
 
 impl core::fmt::Debug for RunIndices {
@@ -15,21 +16,37 @@ impl core::fmt::Debug for RunIndices {
 }
 
 impl RunIndices {
+    /// TODO: docs
+    pub fn assert_invariants(&self, run_tree: &RunTree) {
+        for (replica_id, indices) in self.iter() {
+            for (run_idx, run_offset, run_len) in indices.splits() {
+                let run = run_tree.get_run(run_idx);
+                assert_eq!(replica_id, run.replica_id());
+                assert_eq!(run_offset, run.start());
+                assert_eq!(run_len, run.len());
+            }
+        }
+    }
+
+    /// TODO: docs
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (ReplicaId, &ReplicaIndices)> {
         self.map.iter().map(|(id, indices)| (*id, indices))
     }
 
+    /// TODO: docs
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
-        self.map.get_mut(&id).unwrap()
+        &mut self.this
+        // self.map.get_mut(&id).unwrap()
     }
 
+    /// TODO: docs
     #[inline]
     pub fn new(id: ReplicaId, idx: LeafIdx<EditRun>, len: u64) -> Self {
         let mut map = HashMap::new();
         map.insert(id, ReplicaIndices::new(idx, len));
-        Self { map }
+        Self { map, this: ReplicaIndices::new(idx, len) }
     }
 }
 
@@ -150,6 +167,26 @@ impl ReplicaIndices {
             },
         };
     }
+
+    #[inline]
+    pub fn splits(&self) -> Splits<'_> {
+        let mut run_splits = self.insertion_runs.leaves();
+
+        let (visited_last, first_split) =
+            if let Some(first) = run_splits.next() {
+                (false, first)
+            } else {
+                (true, &self.last_run)
+            };
+
+        Splits {
+            visited_last,
+            current_split: first_split.leaves(),
+            last: &self.last_run,
+            run_splits,
+            offset: 0,
+        }
+    }
 }
 
 /// TODO: docs
@@ -240,4 +277,67 @@ impl gtree::Join for RunSplit {}
 
 impl gtree::Leaf for RunSplit {
     type Length = Length;
+}
+
+pub use splits::Splits;
+
+mod splits {
+    use super::*;
+
+    impl RunSplits {
+        #[inline]
+        pub fn leaves(&self) -> RunSplitLeaves<'_> {
+            match self {
+                Self::Single(split) => RunSplitLeaves::Single(Some(split)),
+                Self::Multi(splits) => RunSplitLeaves::Multi(splits.leaves()),
+            }
+        }
+    }
+
+    pub(super) enum RunSplitLeaves<'a> {
+        Single(Option<&'a RunSplit>),
+        Multi(gtree::Leaves<'a, 4, RunSplit>),
+    }
+
+    impl<'a> Iterator for RunSplitLeaves<'a> {
+        type Item = &'a RunSplit;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::Single(split) => split.take(),
+                Self::Multi(splits) => splits.next(),
+            }
+        }
+    }
+
+    pub struct Splits<'a> {
+        pub(super) run_splits: gtree::Leaves<'a, 32, RunSplits>,
+        pub(super) current_split: RunSplitLeaves<'a>,
+        pub(super) last: &'a RunSplits,
+        pub(super) offset: Length,
+        pub(super) visited_last: bool,
+    }
+
+    impl<'a> Iterator for Splits<'a> {
+        type Item = (LeafIdx<EditRun>, Length, Length); // (idx, offset, len)
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if let Some(split) = self.current_split.next() {
+                let idx = split.idx_in_run_tree;
+                let len = split.len;
+                let offset = self.offset;
+                self.offset += len;
+                Some((idx, offset, len))
+            } else if let Some(splits) = self.run_splits.next() {
+                self.current_split = splits.leaves();
+                self.next()
+            } else if self.visited_last {
+                None
+            } else {
+                self.visited_last = true;
+                self.current_split = self.last.leaves();
+                self.next()
+            }
+        }
+    }
 }

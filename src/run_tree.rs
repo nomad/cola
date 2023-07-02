@@ -127,6 +127,11 @@ impl RunTree {
     }
 
     #[inline]
+    pub fn get_run(&self, run_idx: LeafIdx<EditRun>) -> &EditRun {
+        self.gtree.get_leaf(run_idx)
+    }
+
+    #[inline]
     pub fn insert(
         &mut self,
         offset: Length,

@@ -362,7 +362,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
     /// TODO: docs
     #[inline]
-    pub fn get_leaf(&mut self, leaf_idx: LeafIdx<L>) -> &L {
+    pub fn get_leaf(&self, leaf_idx: LeafIdx<L>) -> &L {
         self.leaf(leaf_idx)
     }
 
@@ -473,6 +473,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 },
             }
         }
+    }
+
+    #[inline]
+    pub fn leaves(&self) -> Leaves<'_, ARITY, L> {
+        self.into()
     }
 
     #[inline(always)]
@@ -2748,6 +2753,82 @@ mod debug {
                 0,
                 f,
             )
+        }
+    }
+}
+
+pub use leaves::Leaves;
+
+mod leaves {
+    use super::*;
+
+    pub struct Leaves<'a, const N: usize, L: Leaf> {
+        gtree: &'a Gtree<N, L>,
+        path: Vec<(InodeIdx, ChildIdx)>,
+        current_leaves: &'a [LeafIdx<L>],
+    }
+
+    impl<'a, const N: usize, L: Leaf> From<&'a Gtree<N, L>> for Leaves<'a, N, L> {
+        fn from(gtree: &'a Gtree<N, L>) -> Self {
+            let mut path = Vec::new();
+            let mut idx = gtree.root_idx;
+            let current_leaves;
+
+            loop {
+                path.push((idx, 0));
+
+                match gtree.inode(idx).children() {
+                    Either::Internal(inode_idxs) => {
+                        idx = inode_idxs[0];
+                    },
+
+                    Either::Leaf(leaf_idxs) => {
+                        current_leaves = leaf_idxs;
+                        break;
+                    },
+                }
+            }
+
+            Self { gtree, path, current_leaves }
+        }
+    }
+
+    impl<'a, const N: usize, L: Leaf> Iterator for Leaves<'a, N, L> {
+        type Item = &'a L;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if let Some((first, rest)) = self.current_leaves.split_first() {
+                let leaf = self.gtree.leaf(*first);
+                self.current_leaves = rest;
+                Some(leaf)
+            } else {
+                while let Some((idx, child_idx)) = self.path.last_mut() {
+                    *child_idx += 1;
+                    if *child_idx < self.gtree.inode(*idx).len() {
+                        break;
+                    }
+                    self.path.pop();
+                }
+
+                let (mut idx, _) = self.path.last()?;
+
+                loop {
+                    match self.gtree.inode(idx).children() {
+                        Either::Internal(inode_idxs) => {
+                            let first_idx = inode_idxs[0];
+                            self.path.push((first_idx, 0));
+                            idx = first_idx;
+                        },
+
+                        Either::Leaf(leaf_idxs) => {
+                            self.current_leaves = leaf_idxs;
+                            break;
+                        },
+                    }
+                }
+
+                self.next()
+            }
         }
     }
 }

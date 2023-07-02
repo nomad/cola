@@ -32,7 +32,8 @@ pub struct Replica {
 impl Replica {
     #[doc(hidden)]
     pub fn assert_invariants(&self) {
-        self.run_tree.assert_invariants()
+        self.run_tree.assert_invariants();
+        self.run_indices.assert_invariants(&self.run_tree);
     }
 
     #[doc(hidden)]
