@@ -552,7 +552,7 @@ impl gtree::Summarize for EditRun {
 
     #[inline]
     fn summarize(&self) -> Self::Summary {
-        self.len() * (!self.is_deleted as u64)
+        self.len() * (!self.is_deleted as Length)
     }
 }
 
