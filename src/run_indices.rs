@@ -3,9 +3,6 @@ use std::collections::HashMap;
 use crate::*;
 
 /// TODO: docs
-const RUN_INDICES_ARITY: usize = 32;
-
-/// TODO: docs
 #[derive(Clone)]
 pub struct RunIndices {
     map: HashMap<ReplicaId, ReplicaIndices>,
@@ -18,6 +15,11 @@ impl core::fmt::Debug for RunIndices {
 }
 
 impl RunIndices {
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (ReplicaId, &ReplicaIndices)> {
+        self.map.iter().map(|(id, indices)| (*id, indices))
+    }
+
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
         self.map.get_mut(&id).unwrap()
@@ -35,7 +37,7 @@ impl RunIndices {
 #[derive(Clone)]
 pub struct ReplicaIndices {
     /// TODO: docs
-    insertion_runs: Gtree<RUN_INDICES_ARITY, RunSplits>,
+    insertion_runs: Gtree<32, RunSplits>,
 
     /// TODO: docs
     run_idxs: Vec<(LeafIdx<RunSplits>, Length)>,
@@ -55,25 +57,17 @@ impl ReplicaIndices {
     pub fn append(&mut self, len: Length, idx: LeafIdx<EditRun>) {
         let new_last = RunSplit::new(len, idx);
 
-        let old_last = self.last_run.replace(new_last);
-
-        if let Some(old_last) = old_last {
+        if let Some(old_last) = self.last_run.replace(new_last) {
             self.append_split(old_last)
         }
     }
 
     #[inline]
     fn append_split(&mut self, split: RunSplit) {
-        let (splits, _) = Gtree::new(split);
+        let (splits, _) = RunSplits::new(split);
 
         let last_idx = if self.insertion_runs.is_initialized() {
-            let (last_idx, _) = self
-                .insertion_runs
-                .insert(self.insertion_runs.len(), |_, _| {
-                    (Some(splits), None)
-                });
-
-            last_idx.unwrap()
+            self.insertion_runs.append(splits)
         } else {
             self.insertion_runs.initialize(splits)
         };
@@ -123,12 +117,14 @@ impl ReplicaIndices {
         mut at_offset: Length,
         right_idx: LeafIdx<EditRun>,
     ) {
-        if insertion_ts == self.run_idxs.len() as u64 {
+        let idx = insertion_ts as usize;
+
+        if idx == self.run_idxs.len() {
             let last = self.last_run.take().unwrap();
             self.append_split(last);
         }
 
-        let (leaf_idx, run_offset) = self.run_idxs[insertion_ts as usize];
+        let (leaf_idx, run_offset) = self.run_idxs[idx];
 
         at_offset -= run_offset;
 
@@ -143,7 +139,7 @@ impl ReplicaIndices {
 }
 
 /// TODO: docs
-type RunSplits = Gtree<RUN_INDICES_ARITY, RunSplit>;
+type RunSplits = Gtree<4, RunSplit>;
 
 impl gtree::Join for RunSplits {}
 

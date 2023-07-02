@@ -281,6 +281,27 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         (total as f32) / (self.inodes.len() as f32)
     }
 
+    /// TODO: docs
+    #[inline]
+    pub fn append(&mut self, leaf: L) -> LeafIdx<L> {
+        let mut inode_idx = self.root_idx;
+
+        let (last_leaf_idx, idx_in_parent) = loop {
+            match self.inode(inode_idx).children() {
+                Either::Internal(inode_idxs) => {
+                    inode_idx = inode_idxs[inode_idxs.len() - 1];
+                },
+
+                Either::Leaf(leaf_idxs) => {
+                    let child_idx = leaf_idxs.len() - 1;
+                    break (leaf_idxs[child_idx], child_idx);
+                },
+            }
+        };
+
+        self.insert_leaf_after_leaf(last_leaf_idx, idx_in_parent, leaf)
+    }
+
     /// Returns an `(empty_leaves, total_leaves)` tuple.
     ///
     /// This is mostly useful for debugging purposes.
@@ -500,8 +521,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     #[inline]
     pub fn uninit() -> Self {
         Self {
-            inodes: Vec::with_capacity(128),
-            lnodes: Vec::with_capacity(1024),
+            inodes: Vec::new(),
+            lnodes: Vec::new(),
             root_idx: InodeIdx::dangling(),
             cursor: None,
         }
