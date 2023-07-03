@@ -1,9 +1,13 @@
 use alloc::collections::VecDeque;
 use core::ops::RangeBounds;
+use std::collections::HashMap;
 
 use uuid::Uuid;
 
 use crate::*;
+
+/// TODO: docs
+pub type VersionVector = HashMap<ReplicaId, Length>;
 
 /// TODO: docs
 pub struct Replica {
@@ -27,6 +31,9 @@ pub struct Replica {
 
     /// TODO: docs
     pending: VecDeque<CrdtEdit>,
+
+    /// TODO: docs
+    version_vector: VersionVector,
 }
 
 impl Replica {
@@ -66,7 +73,7 @@ impl Replica {
         let deleted_range =
             Range { start: start as Length, end: end as Length };
 
-        let outcome = self.run_tree.delete(deleted_range);
+        let (start, end, outcome) = self.run_tree.delete(deleted_range);
 
         match outcome {
             DeletionOutcome::DeletedAcrossRuns { split_start, split_end } => {
@@ -130,7 +137,13 @@ impl Replica {
             DeletionOutcome::DeletedWholeRun => {},
         }
 
-        CrdtEdit::no_op()
+        CrdtEdit::deletion(
+            start,
+            end,
+            self.id,
+            self.character_clock,
+            self.version_vector.clone(),
+        )
     }
 
     #[doc(hidden)]
@@ -167,6 +180,7 @@ impl Replica {
             insertion_clock,
             lamport_clock,
             pending: VecDeque::new(),
+            version_vector: VersionVector::new(),
         }
     }
 
@@ -360,6 +374,7 @@ impl Clone for Replica {
             insertion_clock: InsertionClock::new(),
             lamport_clock,
             pending: self.pending.clone(),
+            version_vector: self.version_vector.clone(),
         }
     }
 }

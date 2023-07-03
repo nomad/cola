@@ -42,7 +42,10 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn delete(&mut self, range: Range<Length>) -> DeletionOutcome {
+    pub fn delete(
+        &mut self,
+        range: Range<Length>,
+    ) -> (Anchor, Anchor, DeletionOutcome) {
         let mut id_start = ReplicaId::zero();
         let mut insertion_ts_start = 0;
         let mut offset_start = 0;
@@ -87,15 +90,33 @@ impl RunTree {
             self.gtree.delete(range, delete_range, delete_from, delete_up_to);
 
         if split_across_runs {
+            let anchor_start = Anchor::new(id_start, offset_start);
+
+            let anchor_end = Anchor::new(id_end, offset_end);
+
             let split_start = first_idx
                 .map(|idx| (id_start, insertion_ts_start, offset_start, idx));
 
             let split_end = second_idx
                 .map(|idx| (id_end, insertion_ts_end, offset_end, idx));
 
-            DeletionOutcome::DeletedAcrossRuns { split_start, split_end }
+            (
+                anchor_start,
+                anchor_end,
+                DeletionOutcome::DeletedAcrossRuns { split_start, split_end },
+            )
         } else {
-            match (first_idx, second_idx) {
+            let anchor_start = Anchor::new(
+                id_range,
+                deleted_range_offset + deleted_range.start,
+            );
+
+            let anchor_end = Anchor::new(
+                id_range,
+                deleted_range_offset + deleted_range.end,
+            );
+
+            let outcome = match (first_idx, second_idx) {
                 (Some(first), Some(second)) => {
                     DeletionOutcome::DeletedInMiddleOfSingleRun {
                         replica_id: id_range,
@@ -141,7 +162,9 @@ impl RunTree {
                 },
 
                 _ => unreachable!(),
-            }
+            };
+
+            (anchor_start, anchor_end, outcome)
         }
     }
 
