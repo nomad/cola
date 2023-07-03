@@ -125,14 +125,26 @@ impl Replica {
                 insertion_ts,
                 offset,
                 deleted,
-            } => {},
+            } => {
+                self.run_indices.get_mut(replica_id).move_len_to_prev_split(
+                    insertion_ts,
+                    offset,
+                    deleted,
+                );
+            },
 
             DeletionOutcome::DeletionMergedInNextRun {
                 replica_id,
                 insertion_ts,
                 offset,
                 deleted,
-            } => {},
+            } => {
+                self.run_indices.get_mut(replica_id).move_len_to_next_split(
+                    insertion_ts,
+                    offset,
+                    deleted,
+                );
+            },
 
             DeletionOutcome::DeletedWholeRun => {},
         }

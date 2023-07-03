@@ -410,6 +410,37 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
     /// TODO: docs
     #[inline]
+    pub fn get_next_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
+        todo!();
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn get_prev_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
+        todo!();
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn with_two_mut<F>(
+        &mut self,
+        first_idx: LeafIdx<L>,
+        second_idx: LeafIdx<L>,
+        with_two: F,
+    ) where
+        F: FnOnce(&mut L, &mut L),
+    {
+        debug_assert!(first_idx.idx < second_idx.idx);
+
+        let split_at = first_idx.idx + 1;
+        let (first, second) = self.lnodes.split_at_mut(split_at);
+        let first = first[first_idx.idx].value_mut();
+        let second = second[second_idx.idx - split_at].value_mut();
+        with_two(first, second)
+    }
+
+    /// TODO: docs
+    #[inline]
     pub fn from_children<I>(children: I, tot_summary: L::Summary) -> Self
     where
         I: ExactSizeIterator<Item = L>,
