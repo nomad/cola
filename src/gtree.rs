@@ -187,6 +187,19 @@ pub struct LeafIdx<L: Leaf> {
     _pd: PhantomData<L>,
 }
 
+impl<L: Leaf> LeafIdx<L> {
+    /// TODO: docs
+    #[inline]
+    pub const fn dangling() -> Self {
+        Self::new(usize::MAX)
+    }
+
+    #[inline]
+    const fn new(idx: usize) -> Self {
+        Self { idx, _pd: PhantomData }
+    }
+}
+
 impl<L: Leaf> Copy for LeafIdx<L> {}
 
 impl<L: Leaf> Clone for LeafIdx<L> {
@@ -393,6 +406,39 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     {
         let (last_idx, _) = self.last_leaf();
         self.get_leaf_mut(last_idx, with_leaf);
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn from_children<I>(children: I, tot_summary: L::Summary) -> Self
+    where
+        I: ExactSizeIterator<Item = L>,
+    {
+        let len = children.len();
+
+        let root_idx = InodeIdx(0);
+
+        let mut inode_children = [NodeIdx::dangling(); ARITY];
+
+        let mut lnodes = Vec::with_capacity(children.len());
+
+        for (i, child) in children.enumerate() {
+            let leaf_idx = LeafIdx::new(i);
+            inode_children[i] = NodeIdx::from_leaf(leaf_idx);
+            lnodes.push(Lnode::new(child, root_idx));
+        }
+
+        let inode = Inode {
+            summary: tot_summary,
+            parent: InodeIdx::dangling(),
+            len,
+            children: inode_children,
+            has_leaves: true,
+        };
+
+        let inodes = vec![inode];
+
+        Self { inodes, lnodes, root_idx: InodeIdx(0), cursor: None }
     }
 
     /// TODO: docs
@@ -1608,7 +1654,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// Pushes a leaf node to the Gtree, returning its index.
     #[inline]
     fn push_leaf(&mut self, leaf: L, parent: InodeIdx) -> LeafIdx<L> {
-        let idx = LeafIdx { idx: self.lnodes.len(), _pd: PhantomData };
+        let idx = LeafIdx::new(self.lnodes.len());
         self.lnodes.push(Lnode::new(leaf, parent));
         idx
     }
