@@ -150,7 +150,7 @@ impl RunTree {
 
         let mut anchor = Anchor::origin();
 
-        let insert_with = |run: &mut EditRun, offset: u64| {
+        let insert_with = |run: &mut EditRun, offset: Length| {
             split_id = run.replica_id();
             split_insertion = run.insertion_ts();
             split_at_offset = run.start() + offset;
@@ -225,7 +225,7 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn len(&self) -> u64 {
+    pub fn len(&self) -> Length {
         self.gtree.summary()
     }
 
@@ -359,12 +359,12 @@ impl EditRun {
     }
 
     #[inline(always)]
-    pub fn extend(&mut self, extend_by: u64) {
+    pub fn extend(&mut self, extend_by: Length) {
         self.character_range.end += extend_by;
     }
 
     #[inline]
-    fn delete_from(&mut self, offset: u64) -> Option<Self> {
+    fn delete_from(&mut self, offset: Length) -> Option<Self> {
         if offset == 0 {
             self.is_deleted = true;
             None
@@ -380,7 +380,7 @@ impl EditRun {
     #[inline]
     fn delete_range(
         &mut self,
-        Range { start, end }: Range<u64>,
+        Range { start, end }: Range<Length>,
     ) -> (Option<Self>, Option<Self>) {
         debug_assert!(start <= end);
 
@@ -401,7 +401,7 @@ impl EditRun {
     }
 
     #[inline]
-    fn delete_up_to(&mut self, offset: u64) -> Option<Self> {
+    fn delete_up_to(&mut self, offset: Length) -> Option<Self> {
         if offset == 0 {
             None
         } else if offset < self.len() {
@@ -421,7 +421,7 @@ impl EditRun {
 
     /// TODO: docs
     #[inline]
-    pub fn len(&self) -> u64 {
+    pub fn len(&self) -> Length {
         self.end() - self.start()
     }
 
@@ -518,11 +518,11 @@ impl Anchor {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Diff {
-    Add(u64),
-    Subtract(u64),
+    Add(Length),
+    Subtract(Length),
 }
 
-impl gtree::Summary for u64 {
+impl gtree::Summary for Length {
     type Diff = Diff;
 
     #[inline]
@@ -549,7 +549,7 @@ impl gtree::Summary for u64 {
 }
 
 impl gtree::Summarize for EditRun {
-    type Summary = u64;
+    type Summary = Length;
 
     #[inline]
     fn summarize(&self) -> Self::Summary {
@@ -557,7 +557,7 @@ impl gtree::Summarize for EditRun {
     }
 }
 
-impl gtree::Length<u64> for u64 {
+impl gtree::Length<Length> for Length {
     #[inline]
     fn zero() -> Self {
         0
@@ -604,7 +604,7 @@ impl gtree::Delete for EditRun {
 }
 
 impl gtree::Leaf for EditRun {
-    type Length = u64;
+    type Length = Length;
 }
 
 pub type DebugAsBtree<'a> = gtree::DebugAsBtree<'a, RUN_TREE_ARITY, EditRun>;

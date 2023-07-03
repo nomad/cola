@@ -63,7 +63,8 @@ impl Replica {
             return CrdtEdit::no_op();
         }
 
-        let deleted_range = Range { start: start as u64, end: end as u64 };
+        let deleted_range =
+            Range { start: start as Length, end: end as Length };
 
         let outcome = self.run_tree.delete(deleted_range);
 
@@ -125,7 +126,7 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    pub fn new(len: u64) -> Self {
+    pub fn new(len: Length) -> Self {
         let replica_id = ReplicaId::new();
 
         let mut insertion_clock = InsertionClock::new();

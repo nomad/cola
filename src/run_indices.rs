@@ -43,7 +43,7 @@ impl RunIndices {
 
     /// TODO: docs
     #[inline]
-    pub fn new(id: ReplicaId, idx: LeafIdx<EditRun>, len: u64) -> Self {
+    pub fn new(id: ReplicaId, idx: LeafIdx<EditRun>, len: Length) -> Self {
         let mut map = HashMap::new();
         map.insert(id, ReplicaIndices::new(idx, len));
         Self { map, this: ReplicaIndices::new(idx, len) }
@@ -177,94 +177,140 @@ impl ReplicaIndices {
 }
 
 /// TODO: docs
-#[derive(Clone)]
-enum RunSplits {
-    /// TODO: docs
-    Array { splits: [RunSplit; 4], len: usize, total_len: Length },
+const RUN_SPLITS_INLINE: usize = 4;
+
+type RunSplits = run_splits::RunSplits<RUN_SPLITS_INLINE>;
+
+type RunSplitLeaves<'a> = run_splits::RunSplitLeaves<'a, RUN_SPLITS_INLINE>;
+
+mod run_splits {
+    use super::*;
 
     /// TODO: docs
-    Gtree(Gtree<4, RunSplit>),
-}
+    #[derive(Clone)]
+    pub(super) enum RunSplits<const INLINE: usize> {
+        /// TODO: docs
+        Array { splits: [RunSplit; INLINE], len: usize, total_len: Length },
 
-impl core::fmt::Debug for RunSplits {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        match self {
-            Self::Array { splits, .. } => splits.fmt(f),
-            Self::Gtree(splits) => splits.fmt(f),
-        }
+        /// TODO: docs
+        Gtree(Gtree<INLINE, RunSplit>),
     }
-}
 
-impl RunSplits {
-    #[inline]
-    fn len(&self) -> Length {
-        match self {
-            Self::Array { total_len, .. } => *total_len,
-            Self::Gtree(splits) => splits.len(),
+    impl<const N: usize> core::fmt::Debug for RunSplits<N> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            match self {
+                Self::Array { splits, .. } => splits.fmt(f),
+                Self::Gtree(splits) => splits.fmt(f),
+            }
         }
     }
 
-    #[inline]
-    fn new(first_split: RunSplit) -> Self {
-        let mut array = [RunSplit::null(); 4];
-        let total_len = first_split.len;
-        array[0] = first_split;
-        Self::Array { splits: array, len: 1, total_len }
-    }
+    impl<const INLINE: usize> RunSplits<INLINE> {
+        #[inline]
+        pub fn len(&self) -> Length {
+            match self {
+                Self::Array { total_len, .. } => *total_len,
+                Self::Gtree(splits) => splits.len(),
+            }
+        }
 
-    #[inline]
-    fn split(&mut self, at_offset: Length, right_idx: LeafIdx<EditRun>) {
-        match self {
-            RunSplits::Array { splits, len, total_len } => {
-                if *len < 4 {
-                    let mut offset = 0;
-                    for (idx, split) in splits.iter_mut().enumerate() {
-                        offset += split.len;
-                        if offset > at_offset {
-                            offset -= split.len;
-                            let new_split =
-                                split.split(at_offset - offset, right_idx);
-                            splits[idx..].rotate_right(1);
-                            splits[idx] = new_split;
-                            *len += 1;
-                            return;
+        #[inline]
+        pub fn new(first_split: RunSplit) -> Self {
+            let mut array = [RunSplit::null(); INLINE];
+            let total_len = first_split.len;
+            array[0] = first_split;
+            Self::Array { splits: array, len: 1, total_len }
+        }
+
+        #[inline]
+        pub fn split(
+            &mut self,
+            at_offset: Length,
+            right_idx: LeafIdx<EditRun>,
+        ) {
+            match self {
+                RunSplits::Array { splits, len, total_len } => {
+                    if *len < INLINE {
+                        let mut offset = 0;
+                        for (idx, split) in splits.iter_mut().enumerate() {
+                            offset += split.len;
+                            if offset > at_offset {
+                                offset -= split.len;
+                                let new_split =
+                                    split.split(at_offset - offset, right_idx);
+                                splits[idx..].rotate_right(1);
+                                splits[idx] = new_split;
+                                *len += 1;
+                                return;
+                            }
                         }
+                        unreachable!();
+                    } else {
+                        let gtree = Gtree::from_children(
+                            splits.iter().copied(),
+                            *total_len,
+                        );
+                        *self = RunSplits::Gtree(gtree);
+                        self.split(at_offset, right_idx);
                     }
-                    unreachable!();
-                } else {
-                    let gtree = Gtree::from_children(
-                        splits.iter().copied(),
-                        *total_len,
-                    );
-                    *self = RunSplits::Gtree(gtree);
-                    self.split(at_offset, right_idx);
-                }
-            },
+                },
 
-            RunSplits::Gtree(splits) => {
-                let (split_idx, split_offset) =
-                    splits.leaf_at_offset(at_offset);
+                RunSplits::Gtree(splits) => {
+                    let (split_idx, split_offset) =
+                        splits.leaf_at_offset(at_offset);
 
-                splits.split_leaf(split_idx, |split| {
-                    split.split(at_offset - split_offset, right_idx)
-                });
-            },
-        };
+                    splits.split_leaf(split_idx, |split| {
+                        split.split(at_offset - split_offset, right_idx)
+                    });
+                },
+            };
+        }
     }
-}
 
-impl gtree::Join for RunSplits {}
+    impl<const N: usize> gtree::Join for RunSplits<N> {}
 
-impl gtree::Leaf for RunSplits {
-    type Length = Length;
-}
+    impl<const N: usize> gtree::Leaf for RunSplits<N> {
+        type Length = Length;
+    }
 
-impl gtree::Summarize for RunSplits {
-    type Summary = Length;
+    impl<const N: usize> gtree::Summarize for RunSplits<N> {
+        type Summary = Length;
 
-    #[inline]
-    fn summarize(&self) -> Self::Summary {
-        self.len()
+        #[inline]
+        fn summarize(&self) -> Self::Summary {
+            self.len()
+        }
+    }
+
+    impl<const N: usize> RunSplits<N> {
+        #[inline]
+        pub fn leaves(&self) -> RunSplitLeaves<'_, N> {
+            match self {
+                Self::Array { splits, len, .. } => {
+                    RunSplitLeaves::OverArray(splits[..*len].iter())
+                },
+
+                Self::Gtree(splits) => {
+                    RunSplitLeaves::OverGtree(splits.leaves())
+                },
+            }
+        }
+    }
+
+    pub(super) enum RunSplitLeaves<'a, const N: usize> {
+        OverArray(core::slice::Iter<'a, RunSplit>),
+        OverGtree(gtree::Leaves<'a, N, RunSplit>),
+    }
+
+    impl<'a, const N: usize> Iterator for RunSplitLeaves<'a, N> {
+        type Item = &'a RunSplit;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::OverArray(split) => split.next(),
+                Self::OverGtree(splits) => splits.next(),
+            }
+        }
     }
 }
 
@@ -296,7 +342,11 @@ impl RunSplit {
     }
 
     #[inline]
-    fn split(&mut self, at_offset: u64, right_idx: LeafIdx<EditRun>) -> Self {
+    fn split(
+        &mut self,
+        at_offset: Length,
+        right_idx: LeafIdx<EditRun>,
+    ) -> Self {
         debug_assert!(at_offset < self.len);
         let right_len = self.len - at_offset;
         self.len = at_offset;
@@ -323,37 +373,6 @@ pub use splits::Splits;
 
 mod splits {
     use super::*;
-
-    impl RunSplits {
-        #[inline]
-        pub fn leaves(&self) -> RunSplitLeaves<'_> {
-            match self {
-                Self::Array { splits, len, .. } => {
-                    RunSplitLeaves::OverArray(splits[..*len].iter())
-                },
-
-                Self::Gtree(splits) => {
-                    RunSplitLeaves::OverGtree(splits.leaves())
-                },
-            }
-        }
-    }
-
-    pub(super) enum RunSplitLeaves<'a> {
-        OverArray(core::slice::Iter<'a, RunSplit>),
-        OverGtree(gtree::Leaves<'a, 4, RunSplit>),
-    }
-
-    impl<'a> Iterator for RunSplitLeaves<'a> {
-        type Item = &'a RunSplit;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            match self {
-                Self::OverArray(split) => split.next(),
-                Self::OverGtree(splits) => splits.next(),
-            }
-        }
-    }
 
     pub struct Splits<'a> {
         pub(super) run_splits: gtree::Leaves<'a, 32, RunSplits>,
