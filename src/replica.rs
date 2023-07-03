@@ -113,7 +113,21 @@ impl Replica {
                 idx,
             ),
 
-            _ => {},
+            DeletionOutcome::DeletionMergedInPreviousRun {
+                replica_id,
+                insertion_ts,
+                offset,
+                deleted,
+            } => {},
+
+            DeletionOutcome::DeletionMergedInNextRun {
+                replica_id,
+                insertion_ts,
+                offset,
+                deleted,
+            } => {},
+
+            DeletionOutcome::DeletedWholeRun => {},
         }
 
         CrdtEdit::no_op()

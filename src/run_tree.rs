@@ -70,21 +70,16 @@ impl RunTree {
 
         let mut id_range = ReplicaId::zero();
         let mut insertion_ts_range = 0;
+        let mut deleted_range_offset = 0;
+        let mut deleted_range_run_len = 0;
         let mut deleted_range = Range { start: 0, end: 0 };
-        let mut deleted_left_part = 0;
-        let mut deleted_right_part = 0;
 
         let delete_range = |run: &mut EditRun, range: Range<Length>| {
             id_range = run.replica_id();
             insertion_ts_range = run.insertion_ts();
-            if range.start == 0 {
-                deleted_left_part = run.start() + range.end;
-            } else if range.end == run.len() {
-                deleted_right_part = run.start() + range.start;
-            } else {
-                deleted_range.start = run.start() + range.start;
-                deleted_range.end = run.start() + range.end;
-            }
+            deleted_range_offset = run.start();
+            deleted_range_run_len = run.len();
+            deleted_range = range;
             run.delete_range(range)
         };
 
@@ -105,7 +100,7 @@ impl RunTree {
                     DeletionOutcome::DeletedInMiddleOfSingleRun {
                         replica_id: id_range,
                         insertion_ts: insertion_ts_range,
-                        range: deleted_range,
+                        range: deleted_range + deleted_range_offset,
                         idx_of_deleted: first,
                         idx_of_split: second,
                     }
@@ -114,14 +109,38 @@ impl RunTree {
                 (Some(first), _) => DeletionOutcome::DeletionSplitSingleRun {
                     replica_id: id_range,
                     insertion_ts: insertion_ts_range,
-                    offset: core::cmp::max(
-                        deleted_left_part,
-                        deleted_right_part,
-                    ),
+                    offset: deleted_range_offset
+                        + if deleted_range.start == 0 {
+                            deleted_range.end
+                        } else {
+                            deleted_range.start
+                        },
                     idx: first,
                 },
 
-                _ => DeletionOutcome::Wip,
+                (None, None) => {
+                    if deleted_range.len() == deleted_range_run_len {
+                        DeletionOutcome::DeletedWholeRun
+                    } else if deleted_range.start == 0 {
+                        DeletionOutcome::DeletionMergedInPreviousRun {
+                            replica_id: id_range,
+                            insertion_ts: insertion_ts_range,
+                            offset: deleted_range_offset + deleted_range.end,
+                            deleted: deleted_range.len(),
+                        }
+                    } else if deleted_range.end == deleted_range_run_len {
+                        DeletionOutcome::DeletionMergedInNextRun {
+                            replica_id: id_range,
+                            insertion_ts: insertion_ts_range,
+                            offset: deleted_range_offset + deleted_range.start,
+                            deleted: deleted_range.len(),
+                        }
+                    } else {
+                        unreachable!();
+                    }
+                },
+
+                _ => unreachable!(),
             }
         }
     }
@@ -286,7 +305,23 @@ pub enum DeletionOutcome {
         idx: LeafIdx<EditRun>,
     },
 
-    Wip,
+    /// TODO: docs
+    DeletionMergedInPreviousRun {
+        replica_id: ReplicaId,
+        insertion_ts: InsertionTimestamp,
+        offset: Length,
+        deleted: Length,
+    },
+
+    /// TODO: docs
+    DeletionMergedInNextRun {
+        replica_id: ReplicaId,
+        insertion_ts: InsertionTimestamp,
+        offset: Length,
+        deleted: Length,
+    },
+
+    DeletedWholeRun,
 }
 
 /// TODO: docs

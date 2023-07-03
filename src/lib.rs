@@ -190,6 +190,16 @@ mod range {
         }
     }
 
+    impl<T> Range<T> {
+        #[inline]
+        pub fn len(&self) -> T
+        where
+            T: Sub<T, Output = T> + Copy,
+        {
+            self.end - self.start
+        }
+    }
+
     pub trait RangeExt<T> {
         fn contains_range(&self, range: Range<T>) -> bool;
     }
