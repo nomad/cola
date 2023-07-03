@@ -2547,7 +2547,9 @@ mod debug {
     /// line even when the alternate flag (`{:#?}`) is enabled.
     impl<L: Leaf> Debug for LeafIdx<L> {
         fn fmt(&self, f: &mut Formatter) -> FmtResult {
-            write!(f, "LeafIdx({})", self.idx)
+            let type_name = core::any::type_name::<L>();
+            let type_name_wo_path = type_name.split("::").last().unwrap();
+            write!(f, "LeafIdx<{}>({})", type_name_wo_path, self.idx)
         }
     }
 

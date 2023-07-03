@@ -96,7 +96,7 @@ impl RunTree {
                 .map(|idx| (id_start, insertion_ts_start, offset_start, idx));
 
             let split_end = second_idx
-                .map(|idx| (id_end, insertion_ts_start, offset_end, idx));
+                .map(|idx| (id_end, insertion_ts_end, offset_end, idx));
 
             DeletionOutcome::DeletedAcrossRuns { split_start, split_end }
         } else {
@@ -315,11 +315,12 @@ impl core::fmt::Debug for EditRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:x}.{:?} L({}) |@ {:?}{}",
+            "{:x}.{:?} L({}) |@ {:?} I({}){}",
             self.inserted_by.as_u32(),
             self.character_range,
             self.lamport_ts,
             self.inserted_at,
+            self.insertion_ts,
             if self.is_deleted { " 🪦" } else { "" },
         )
     }

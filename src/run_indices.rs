@@ -37,8 +37,8 @@ impl RunIndices {
     /// TODO: docs
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
-        &mut self.this
-        // self.map.get_mut(&id).unwrap()
+        // &mut self.this
+        self.map.get_mut(&id).unwrap()
     }
 
     /// TODO: docs
@@ -190,20 +190,20 @@ impl ReplicaIndices {
 }
 
 /// TODO: docs
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 enum RunSplits {
     Single(RunSplit),
     Multi(Gtree<4, RunSplit>),
 }
 
-// impl core::fmt::Debug for RunSplits {
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         match self {
-//             Self::Single(split) => split.fmt(f),
-//             Self::Multi(splits) => splits.fmt(f),
-//         }
-//     }
-// }
+impl core::fmt::Debug for RunSplits {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match self {
+            Self::Single(split) => split.fmt(f),
+            Self::Multi(splits) => splits.fmt(f),
+        }
+    }
+}
 
 impl RunSplits {
     #[inline]
