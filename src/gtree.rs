@@ -2091,7 +2091,6 @@ enum Either<I, L> {
 }
 
 impl<I, L> Either<I, L> {
-    #[track_caller]
     #[inline]
     fn unwrap_inode(self) -> I {
         match self {
@@ -2100,7 +2099,6 @@ impl<I, L> Either<I, L> {
         }
     }
 
-    #[track_caller]
     #[inline]
     fn unwrap_leaf(self) -> L {
         match self {
@@ -2339,7 +2337,7 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
 }
 
 /// A leaf node of the Gtree.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Lnode<Leaf> {
     /// The value of this leaf node.
     value: Leaf,
