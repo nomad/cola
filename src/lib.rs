@@ -212,6 +212,7 @@ mod range {
     }
 }
 
+/// TODO: docs
 #[inline]
 fn get_two_mut<T>(
     slice: &mut [T],
@@ -223,4 +224,12 @@ fn get_two_mut<T>(
     let split_at = first_idx + 1;
     let (first, second) = slice.split_at_mut(split_at);
     (&mut first[first_idx], &mut second[second_idx - split_at])
+}
+
+/// TODO: docs
+#[inline]
+fn insert_in_slice<T>(slice: &mut [T], elem: T, at_offset: usize) {
+    debug_assert!(at_offset < slice.len());
+    slice[at_offset..].rotate_right(1);
+    slice[at_offset] = elem;
 }

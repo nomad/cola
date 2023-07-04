@@ -1319,7 +1319,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         let (first, second) = insert_with(lnode.value_mut(), insert_at_offset);
 
-        let patch = L::Summary::diff(old_summary, lnode.value().summarize());
+        let new_summary = lnode.value().summarize();
+
+        let patch = L::Summary::diff(old_summary, new_summary);
 
         let parent_idx = lnode.parent();
 
@@ -1356,7 +1358,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.cursor = if insert_at_offset == L::Length::zero() {
             None
         } else if let Some(first_idx) = first_idx {
-            let len = self.leaf_len(first_idx);
+            let len = L::Length::len(&new_summary);
 
             let idx_in_parent = self.update_child_idx_after_inserting_after(
                 parent_idx,
@@ -2237,9 +2239,7 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     ) {
         debug_assert!(at_offset <= self.len());
         debug_assert!(!self.is_full());
-
-        self.children[at_offset..].rotate_right(1);
-        self.children[at_offset] = child;
+        crate::insert_in_slice(&mut self.children, child, at_offset);
         self.summary += child_summary;
         self.len += 1;
     }
@@ -2873,139 +2873,101 @@ mod debug {
         pub(super) inode_idx: InodeIdx,
     }
 
-    struct DebugLevel<'a, 'b, const N: usize, L: Leaf> {
-        gtree: &'a Gtree<N, L>,
-        inode_idx: InodeIdx,
-        shifts: &'b mut String,
-        ident: &'a str,
-        last_shift_byte_len: usize,
-    }
-
-    fn indent(f: &mut Formatter, level: usize) -> FmtResult {
-        for _ in 0..level {
-            write!(f, "    ")?;
-        }
-        Ok(())
-    }
-
-    impl<const N: usize, L: Leaf> Debug for DebugLevel<'_, '_, N, L> {
-        fn fmt(&self, f: &mut Formatter) -> FmtResult {
-            let inode = self.gtree.inode(self.inode_idx);
-
-            let indent_level = f.precision().unwrap_or(0);
-
-            if indent_level == 1 {
-                indent(f, indent_level)?;
-            }
-
-            writeln!(
-                f,
-                "{}{}{:?}",
-                &self.shifts[..self.shifts.len() - self.last_shift_byte_len],
-                self.ident,
-                inode.summary()
-            )?;
-
-            let is_last = |idx: usize| idx + 1 == inode.len();
-
-            let ident = |idx: usize| {
-                if is_last(idx) {
-                    "└── "
-                } else {
-                    "├── "
-                }
-            };
-
-            let shift = |idx: usize| {
-                if is_last(idx) {
-                    "    "
-                } else {
-                    "│   "
-                }
-            };
-
-            match inode.children() {
-                Either::Internal(inode_idxs) => {
-                    for (i, &inode_idx) in inode_idxs.iter().enumerate() {
-                        let shift = shift(i);
-
-                        let mut shifts = self.shifts.clone();
-                        shifts.push_str(shift);
-
-                        let level = DebugLevel {
-                            gtree: self.gtree,
-                            inode_idx,
-                            shifts: &mut shifts,
-                            ident: ident(i),
-                            last_shift_byte_len: shift.len(),
-                        };
-
-                        f.write_fmt(format_args!(
-                            "{:.precision$?}",
-                            level,
-                            precision = indent_level + 1
-                        ))?;
-                    }
-                },
-
-                Either::Leaf(leaf_idxs) => {
-                    for (i, &leaf_idx) in leaf_idxs.iter().enumerate() {
-                        if let Some(cursor) = self.gtree.cursor {
-                            if cursor.leaf_idx == leaf_idx {
-                                indent(f, indent_level)?;
-                                writeln!(f, "{}│", self.shifts)?;
-                                indent(f, indent_level)?;
-                                writeln!(
-                                    f,
-                                    "{}│ -> cursor @ {:?}",
-                                    self.shifts, cursor.offset
-                                )?;
-                                indent(f, indent_level)?;
-                                writeln!(f, "{}│", self.shifts)?;
-                            }
-                        }
-
-                        let ident = ident(i);
-                        let lnode = self.gtree.lnode(leaf_idx);
-                        indent(f, indent_level)?;
-                        writeln!(
-                            f,
-                            "{}{}{:#.precision$?}",
-                            self.shifts,
-                            ident,
-                            &lnode.value(),
-                            precision = indent_level,
-                        )?;
-                    }
-                },
-            }
-
-            Ok(())
-        }
-    }
-
     impl<const N: usize, L: Leaf> Debug for DebugAsBtree<'_, N, L> {
         fn fmt(&self, f: &mut Formatter) -> FmtResult {
-            if self.gtree.is_initialized() {
-                let level = DebugLevel {
-                    gtree: self.gtree,
-                    inode_idx: self.inode_idx,
-                    shifts: &mut String::new(),
-                    ident: "",
-                    last_shift_byte_len: 0,
+            fn print_inode_as_tree<const N: usize, L: Leaf>(
+                gtree: &Gtree<N, L>,
+                inode_idx: InodeIdx,
+                shifts: &mut String,
+                ident: &str,
+                last_shift_byte_len: usize,
+                f: &mut Formatter,
+            ) -> FmtResult {
+                let inode = gtree.inode(inode_idx);
+
+                writeln!(
+                    f,
+                    "{}{}{:?}",
+                    &shifts[..shifts.len() - last_shift_byte_len],
+                    ident,
+                    inode.summary()
+                )?;
+
+                let is_last = |idx: usize| idx + 1 == inode.len();
+
+                let ident = |idx: usize| {
+                    if is_last(idx) {
+                        "└── "
+                    } else {
+                        "├── "
+                    }
                 };
 
-                let precision = f.precision().unwrap_or(0);
+                let shift = |idx: usize| {
+                    if is_last(idx) {
+                        "    "
+                    } else {
+                        "│   "
+                    }
+                };
 
-                if precision == 0 {
-                    writeln!(f)?;
+                match inode.children() {
+                    Either::Internal(inode_idxs) => {
+                        for (i, &inode_idx) in inode_idxs.iter().enumerate() {
+                            let shift = shift(i);
+                            shifts.push_str(shift);
+                            let ident = ident(i);
+                            print_inode_as_tree(
+                                gtree,
+                                inode_idx,
+                                shifts,
+                                ident,
+                                shift.len(),
+                                f,
+                            )?;
+                            shifts.truncate(shifts.len() - shift.len());
+                        }
+                    },
+
+                    Either::Leaf(leaf_idxs) => {
+                        for (i, &leaf_idx) in leaf_idxs.iter().enumerate() {
+                            if let Some(cursor) = gtree.cursor {
+                                if cursor.leaf_idx == leaf_idx {
+                                    writeln!(
+                                        f,
+                                        "{}│\n{}│ -> cursor @ {:?}\n{}│",
+                                        shifts, shifts, cursor.offset, shifts,
+                                    )?;
+                                }
+                            }
+
+                            let ident = ident(i);
+                            let lnode = gtree.lnode(leaf_idx);
+                            writeln!(
+                                f,
+                                "{}{}{:#?}",
+                                &shifts,
+                                ident,
+                                &lnode.value()
+                            )?;
+                        }
+                    },
                 }
 
-                f.write_fmt(format_args!(
-                    "{:.precision$?}",
-                    level,
-                    precision = precision + 1
-                ))
+                Ok(())
+            }
+
+            if self.gtree.is_initialized() {
+                writeln!(f)?;
+
+                print_inode_as_tree(
+                    self.gtree,
+                    self.inode_idx,
+                    &mut String::new(),
+                    "",
+                    0,
+                    f,
+                )
             } else {
                 f.debug_map().finish()
             }
@@ -3072,14 +3034,17 @@ mod leaves {
                     self.path.pop();
                 }
 
-                let (mut idx, _) = self.path.last()?;
+                let &(last_idx, child_idx) = self.path.last()?;
+
+                let mut inode_idx =
+                    self.gtree.inode(last_idx).child(child_idx).unwrap_inode();
 
                 loop {
-                    match self.gtree.inode(idx).children() {
+                    match self.gtree.inode(inode_idx).children() {
                         Either::Internal(inode_idxs) => {
                             let first_idx = inode_idxs[0];
                             self.path.push((first_idx, 0));
-                            idx = first_idx;
+                            inode_idx = first_idx;
                         },
 
                         Either::Leaf(leaf_idxs) => {

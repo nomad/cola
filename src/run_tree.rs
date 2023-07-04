@@ -373,11 +373,11 @@ impl core::fmt::Debug for EditRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:x}.{:?} L({}) |@ {:?} I({}){}",
+            "{:x}.{:?} |@ {:?} - L({}) I({}){}",
             self.inserted_by.as_u32(),
             self.character_range,
-            self.lamport_ts,
             self.inserted_at,
+            self.lamport_ts,
             self.insertion_ts,
             if self.is_deleted { " 🪦" } else { "" },
         )
@@ -473,7 +473,7 @@ impl EditRun {
     }
 
     #[inline(always)]
-    fn insertion_ts(&self) -> InsertionTimestamp {
+    pub fn insertion_ts(&self) -> InsertionTimestamp {
         self.insertion_ts
     }
 
@@ -647,6 +647,7 @@ impl gtree::Join for EditRun {
             && self.replica_id() == other.replica_id()
             && other.end() == self.start()
         {
+            debug_assert_eq!(self.insertion_ts, other.insertion_ts);
             *self.start_mut() = other.start();
             None
         } else {
