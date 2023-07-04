@@ -263,9 +263,22 @@ mod run_splits {
             debug_assert!(len_move > 0);
 
             match self {
-                Self::Array { splits, len, .. } => {
-                    // TODO
-                    todo!();
+                Self::Array { splits, .. } => {
+                    let mut leaf_idx = 0;
+                    let mut next_idx = 0;
+                    let mut offset = 0;
+                    for (idx, split) in splits.iter().enumerate() {
+                        offset += split.len;
+                        if offset > at_offset {
+                            leaf_idx = idx;
+                            next_idx = idx + 1;
+                            break;
+                        }
+                    }
+                    let (this, next) =
+                        crate::get_two_mut(splits, leaf_idx, next_idx);
+                    this.len -= len_move;
+                    next.len += len_move;
                 },
 
                 Self::Gtree(splits) => {
@@ -289,9 +302,22 @@ mod run_splits {
             debug_assert!(len_move > 0);
 
             match self {
-                Self::Array { splits, len, .. } => {
-                    // TODO
-                    todo!();
+                Self::Array { splits, .. } => {
+                    let mut prev_idx = 0;
+                    let mut leaf_idx = 0;
+                    let mut offset = 0;
+                    for (idx, split) in splits.iter().enumerate() {
+                        offset += split.len;
+                        if offset > at_offset {
+                            leaf_idx = idx;
+                            prev_idx = idx - 1;
+                            break;
+                        }
+                    }
+                    let (prev, this) =
+                        crate::get_two_mut(splits, prev_idx, leaf_idx);
+                    this.len -= len_move;
+                    prev.len += len_move;
                 },
 
                 Self::Gtree(splits) => {

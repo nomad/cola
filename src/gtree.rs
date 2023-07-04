@@ -411,13 +411,87 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// TODO: docs
     #[inline]
     pub fn get_next_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
-        todo!();
+        let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
+
+        let parent_idx = self.lnode(leaf_idx).parent();
+
+        let parent = self.inode(parent_idx);
+
+        if idx_in_parent + 1 < parent.len() {
+            return parent.child(idx_in_parent + 1).unwrap_leaf();
+        }
+
+        let mut inode_idx = parent_idx;
+
+        loop {
+            debug_assert!(!self.is_root(inode_idx));
+
+            let idx_in_parent = self.idx_of_inode_in_parent(inode_idx);
+            let parent_idx = self.inode(inode_idx).parent();
+            let parent = self.inode(parent_idx);
+
+            if idx_in_parent + 1 < parent.len() {
+                inode_idx = parent.child(idx_in_parent + 1).unwrap_inode();
+                break;
+            } else {
+                inode_idx = parent_idx;
+            }
+        }
+
+        loop {
+            match self.inode(inode_idx).children() {
+                Either::Internal(inode_idxs) => {
+                    inode_idx = inode_idxs[0];
+                },
+
+                Either::Leaf(leaf_idxs) => {
+                    return leaf_idxs[0];
+                },
+            }
+        }
     }
 
     /// TODO: docs
     #[inline]
     pub fn get_prev_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
-        todo!();
+        let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
+
+        let parent_idx = self.lnode(leaf_idx).parent();
+
+        let parent = self.inode(parent_idx);
+
+        if idx_in_parent > 0 {
+            return parent.child(idx_in_parent - 1).unwrap_leaf();
+        }
+
+        let mut inode_idx = parent_idx;
+
+        loop {
+            debug_assert!(!self.is_root(inode_idx));
+
+            let idx_in_parent = self.idx_of_inode_in_parent(inode_idx);
+            let parent_idx = self.inode(inode_idx).parent();
+            let parent = self.inode(parent_idx);
+
+            if idx_in_parent > 0 {
+                inode_idx = parent.child(idx_in_parent - 1).unwrap_inode();
+                break;
+            } else {
+                inode_idx = parent_idx;
+            }
+        }
+
+        loop {
+            match self.inode(inode_idx).children() {
+                Either::Internal(inode_idxs) => {
+                    inode_idx = inode_idxs[inode_idxs.len() - 1];
+                },
+
+                Either::Leaf(leaf_idxs) => {
+                    return leaf_idxs[leaf_idxs.len() - 1];
+                },
+            }
+        }
     }
 
     /// TODO: docs
@@ -432,11 +506,31 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     {
         debug_assert!(first_idx.idx < second_idx.idx);
 
-        let split_at = first_idx.idx + 1;
-        let (first, second) = self.lnodes.split_at_mut(split_at);
-        let first = first[first_idx.idx].value_mut();
-        let second = second[second_idx.idx - split_at].value_mut();
-        with_two(first, second)
+        let (first, second) = crate::get_two_mut(
+            &mut self.lnodes,
+            first_idx.idx,
+            second_idx.idx,
+        );
+
+        let first_parent = first.parent();
+
+        let old_first_summary = first.value().summarize();
+
+        let second_parent = second.parent();
+
+        let old_second_summary = second.value().summarize();
+
+        with_two(first.value_mut(), second.value_mut());
+
+        let first_diff =
+            L::Summary::diff(old_first_summary, first.value().summarize());
+
+        let second_diff =
+            L::Summary::diff(old_second_summary, second.value().summarize());
+
+        self.apply_diff(first_parent, first_diff);
+
+        self.apply_diff(second_parent, second_diff);
     }
 
     /// TODO: docs
@@ -1167,6 +1261,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     #[inline(always)]
+    fn idx_of_inode_in_parent(&self, inode_idx: InodeIdx) -> ChildIdx {
+        let parent = self.inode(self.inode(inode_idx).parent());
+        parent.idx_of_internal_child(inode_idx)
+    }
+
+    #[inline(always)]
     fn idx_of_leaf_in_parent(&self, leaf_idx: LeafIdx<L>) -> ChildIdx {
         let parent = self.inode(self.lnode(leaf_idx).parent());
         parent.idx_of_leaf_child(leaf_idx)
@@ -1541,6 +1641,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.bubble(parent_idx, maybe_split, patch, leaf_patch);
 
         (first_idx, second_idx)
+    }
+
+    #[inline]
+    fn is_root(&self, idx: InodeIdx) -> bool {
+        idx == self.root_idx
     }
 
     #[inline]
@@ -1981,6 +2086,24 @@ impl<L: Leaf> NodeIdx<L> {
 enum Either<I, L> {
     Internal(I),
     Leaf(L),
+}
+
+impl<I, L> Either<I, L> {
+    #[inline]
+    fn unwrap_inode(self) -> I {
+        match self {
+            Self::Internal(inode) => inode,
+            Self::Leaf(_) => unreachable!(),
+        }
+    }
+
+    #[inline]
+    fn unwrap_leaf(self) -> L {
+        match self {
+            Self::Internal(_) => unreachable!(),
+            Self::Leaf(leaf) => leaf,
+        }
+    }
 }
 
 impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {

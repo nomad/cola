@@ -211,3 +211,16 @@ mod range {
         }
     }
 }
+
+#[inline]
+fn get_two_mut<T>(
+    slice: &mut [T],
+    first_idx: usize,
+    second_idx: usize,
+) -> (&mut T, &mut T) {
+    debug_assert!(first_idx < second_idx);
+    debug_assert!(second_idx < slice.len());
+    let split_at = first_idx + 1;
+    let (first, second) = slice.split_at_mut(split_at);
+    (&mut first[first_idx], &mut second[second_idx - split_at])
+}
