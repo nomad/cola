@@ -112,7 +112,7 @@ pub trait Leaf: Debug + Summarize + Join {
 const _NODE_IDX_LAYOUT_CHECK: usize = {
     use core::alloc::Layout;
     let i_idx = Layout::new::<InodeIdx>();
-    let l_idx = Layout::new::<LeafIdx<crate::EditRun>>();
+    let l_idx = Layout::new::<LeafIdx<()>>();
     (i_idx.size() == l_idx.size() && i_idx.align() == l_idx.align()) as usize
         - 1
 };
@@ -182,12 +182,12 @@ impl InodeIdx {
 
 /// A stable identifier for a particular leaf of the Gtree.
 #[derive(Eq)]
-pub struct LeafIdx<L: Leaf> {
+pub struct LeafIdx<L> {
     idx: usize,
     _pd: PhantomData<L>,
 }
 
-impl<L: Leaf> LeafIdx<L> {
+impl<L> LeafIdx<L> {
     /// TODO: docs
     #[inline]
     pub const fn dangling() -> Self {
@@ -200,16 +200,16 @@ impl<L: Leaf> LeafIdx<L> {
     }
 }
 
-impl<L: Leaf> Copy for LeafIdx<L> {}
+impl<L> Copy for LeafIdx<L> {}
 
-impl<L: Leaf> Clone for LeafIdx<L> {
+impl<L> Clone for LeafIdx<L> {
     #[inline]
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<L: Leaf> PartialEq<LeafIdx<L>> for LeafIdx<L> {
+impl<L> PartialEq<LeafIdx<L>> for LeafIdx<L> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.idx == other.idx
