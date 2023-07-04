@@ -37,8 +37,8 @@ impl RunIndices {
     /// TODO: docs
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
-        // &mut self.this
-        self.map.get_mut(&id).unwrap()
+        &mut self.this
+        // self.map.get_mut(&id).unwrap()
     }
 
     /// TODO: docs

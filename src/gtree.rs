@@ -992,7 +992,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let child_summary = match self.inode(of_inode).child(child_idx) {
             Either::Internal(inode_idx) => {
                 let inode = self.inode_mut(inode_idx);
-                mem::replace(inode.summary_mut(), L::Summary::empty())
+                let old_summary = inode.summary();
+                self.delete_inode(inode_idx);
+                old_summary
             },
             Either::Leaf(leaf_idx) => {
                 let leaf = self.leaf_mut(leaf_idx);
@@ -1003,6 +1005,41 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         };
 
         *self.inode_mut(of_inode).summary_mut() -= child_summary;
+    }
+
+    #[inline]
+    fn delete_inode(&mut self, inode: InodeIdx)
+    where
+        L: Delete,
+    {
+        let inode = self.inode_mut(inode);
+
+        *inode.summary_mut() = L::Summary::empty();
+
+        // In both arms of the match we transmute the slices back into the same
+        // types to iterate over the inode/leaf indices and delete the
+        // inodes/leaves at the same time, which Rust's aliasing rules would
+        // prohibit.
+        //
+        // SAFETY: left as an exercise to the reader (it's safe).
+
+        match inode.children() {
+            Either::Internal(inode_idxs) => {
+                let inode_idxs =
+                    unsafe { mem::transmute::<_, &[InodeIdx]>(inode_idxs) };
+                for &inode_idx in inode_idxs {
+                    self.delete_inode(inode_idx);
+                }
+            },
+
+            Either::Leaf(leaf_idxs) => {
+                let leaf_idxs =
+                    unsafe { mem::transmute::<_, &[LeafIdx<L>]>(leaf_idxs) };
+                for &leaf_idx in leaf_idxs {
+                    self.leaf_mut(leaf_idx).delete();
+                }
+            },
+        }
     }
 
     /// TODO: docs
