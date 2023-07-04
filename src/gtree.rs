@@ -2091,6 +2091,7 @@ enum Either<I, L> {
 }
 
 impl<I, L> Either<I, L> {
+    #[track_caller]
     #[inline]
     fn unwrap_inode(self) -> I {
         match self {
@@ -2099,6 +2100,7 @@ impl<I, L> Either<I, L> {
         }
     }
 
+    #[track_caller]
     #[inline]
     fn unwrap_leaf(self) -> L {
         match self {
@@ -3036,15 +3038,14 @@ mod leaves {
 
                 let &(last_idx, child_idx) = self.path.last()?;
 
-                let mut inode_idx =
+                let mut idx =
                     self.gtree.inode(last_idx).child(child_idx).unwrap_inode();
 
                 loop {
-                    match self.gtree.inode(inode_idx).children() {
+                    match self.gtree.inode(idx).children() {
                         Either::Internal(inode_idxs) => {
-                            let first_idx = inode_idxs[0];
-                            self.path.push((first_idx, 0));
-                            inode_idx = first_idx;
+                            self.path.push((idx, 0));
+                            idx = inode_idxs[0];
                         },
 
                         Either::Leaf(leaf_idxs) => {
