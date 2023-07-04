@@ -8,7 +8,7 @@ pub struct TextEdit {
 
 impl TextEdit {
     #[inline]
-    pub(crate) fn new(range: Range<usize>) -> Self {
+    pub(crate) fn _new(range: Range<usize>) -> Self {
         Self { range }
     }
 }

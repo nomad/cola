@@ -261,87 +261,54 @@ impl Replica {
     /// TODO: docs
     #[inline]
     pub fn merge(&mut self, crdt_edit: CrdtEdit) -> Option<TextEdit> {
-        //match crdt_edit {
-        //    Cow::Owned(CrdtEdit {
-        //        kind:
-        //            CrdtEditKind::Insertion {
-        //                content,
-        //                id,
-        //                anchor,
-        //                lamport_ts,
-        //                len,
-        //            },
-        //    }) => self.merge_insertion(
-        //        Cow::Owned(content),
-        //        id,
-        //        anchor,
-        //        lamport_ts,
-        //    ),
+        match crdt_edit.kind() {
+            CrdtEditKind::Insertion {
+                anchor,
+                replica_id,
+                run_len,
+                lamport_ts,
+            } => self.merge_insertion(anchor, replica_id, run_len, lamport_ts),
 
-        //    Cow::Borrowed(CrdtEdit {
-        //        kind:
-        //            CrdtEditKind::Insertion {
-        //                content,
-        //                id,
-        //                anchor,
-        //                lamport_ts,
-        //                len,
-        //            },
-        //    }) => self.merge_insertion(
-        //        Cow::Borrowed(content.as_str()),
-        //        id.clone(),
-        //        anchor.clone(),
-        //        *lamport_ts,
-        //    ),
+            CrdtEditKind::Deletion {
+                start,
+                end,
+                replica_id,
+                character_ts,
+                version_vector,
+            } => self.merge_deletion(
+                start,
+                end,
+                replica_id,
+                character_ts,
+                version_vector,
+            ),
 
-        //    _ => None,
-        //}
-
-        todo!()
+            CrdtEditKind::NoOp => None,
+        }
     }
 
+    #[inline]
     fn merge_insertion(
         &mut self,
-        anchor: Anchor,
+        _anchor: Anchor,
+        _replica: ReplicaId,
+        _len: Length,
         lamport_ts: LamportTimestamp,
     ) -> Option<TextEdit> {
+        self.lamport_clock.update(lamport_ts);
+
         todo!();
-
-        //let Some(run_id) = self.run_indexes.get_run_id(&anchor) else {
-        //    let crdt_edit = CrdtEdit::insertion(
-        //        content.into_owned(),
-        //        id,
-        //        anchor,
-        //        lamport_ts,
-        //    );
-        //    self.pending.push_back(crdt_edit);
-        //    return None;
-        //};
-
-        //let len = M::len(&content);
-
-        //let lamport_ts = self.lamport_clock.update(lamport_ts);
-
-        //let offset = downstream::insert(
-        //    &mut self.insertion_runs,
-        //    &mut self.run_indexes,
-        //    id,
-        //    lamport_ts,
-        //    anchor,
-        //    run_id,
-        //    len,
-        //);
-
-        //Some(TextEdit::new(content, offset..offset))
     }
 
-    /// TODO: docs
     #[inline]
-    pub fn replaced<R, T>(&mut self, _byte_range: R, _text: T) -> CrdtEdit
-    where
-        R: RangeBounds<usize>,
-        T: Into<String>,
-    {
+    fn merge_deletion(
+        &mut self,
+        _start: Anchor,
+        _end: Anchor,
+        _replica: ReplicaId,
+        _character_ts: Length,
+        _version_vector: VersionVector,
+    ) -> Option<TextEdit> {
         todo!();
     }
 

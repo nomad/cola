@@ -42,6 +42,11 @@ impl CrdtEdit {
     }
 
     #[inline]
+    pub(super) fn kind(self) -> CrdtEditKind {
+        self.kind
+    }
+
+    #[inline]
     pub(super) fn no_op() -> Self {
         Self { kind: CrdtEditKind::NoOp }
     }
