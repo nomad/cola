@@ -664,6 +664,30 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         (this, idx)
     }
 
+    /// TODO: docs
+    #[inline]
+    pub fn prepend(&mut self, leaf: L) -> LeafIdx<L> {
+        let first_leaf_idx = {
+            let mut idx = self.root_idx;
+            loop {
+                match self.inode(idx).children() {
+                    Either::Internal(children) => {
+                        idx = children[0];
+                    },
+                    Either::Leaf(leaf_idx) => {
+                        break leaf_idx[0];
+                    },
+                }
+            }
+        };
+
+        let leaf_idx = self.insert_leaf_before_leaf(first_leaf_idx, 0, leaf);
+
+        self.cursor = Some(Cursor::new(leaf_idx, L::Length::zero(), 0));
+
+        leaf_idx
+    }
+
     #[inline]
     pub fn split_leaf<F>(
         &mut self,
@@ -1313,6 +1337,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     where
         F: FnOnce(&mut L, L::Length) -> (Option<L>, Option<L>),
     {
+        debug_assert!(insert_at_offset > L::Length::zero());
+
         let lnode = self.lnode_mut(leaf_idx);
 
         let old_summary = lnode.value().summarize();
@@ -1355,9 +1381,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             _ => unreachable!(),
         };
 
-        self.cursor = if insert_at_offset == L::Length::zero() {
-            None
-        } else if let Some(first_idx) = first_idx {
+        self.cursor = if let Some(first_idx) = first_idx {
             let len = L::Length::len(&new_summary);
 
             let idx_in_parent = self.update_child_idx_after_inserting_after(
@@ -1469,6 +1493,41 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let maybe_split = self.insert_in_inode(
             parent_idx,
             idx_in_parent + 1,
+            NodeIdx::from_leaf(inserted_idx),
+            leaf_summary,
+        );
+
+        let parent = self.inode(parent_idx);
+        let patch = L::Summary::diff(old_summary, parent.summary());
+
+        self.bubble(parent_idx, maybe_split, patch, leaf_patch);
+
+        inserted_idx
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn insert_leaf_before_leaf(
+        &mut self,
+        leaf_idx: LeafIdx<L>,
+        idx_in_parent: ChildIdx,
+        leaf: L,
+    ) -> LeafIdx<L> {
+        let leaf_summary = leaf.summarize();
+
+        let leaf_patch = L::Summary::diff(L::Summary::empty(), leaf_summary);
+
+        let parent_idx = self.lnode(leaf_idx).parent();
+
+        let inserted_idx = self.push_leaf(leaf, parent_idx);
+
+        let parent = self.inode(parent_idx);
+        let old_summary = parent.summary();
+        let idx_in_parent = idx_in_parent;
+
+        let maybe_split = self.insert_in_inode(
+            parent_idx,
+            idx_in_parent,
             NodeIdx::from_leaf(inserted_idx),
             leaf_summary,
         );

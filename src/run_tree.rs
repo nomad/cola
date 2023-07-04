@@ -184,6 +184,22 @@ impl RunTree {
     ) -> (Anchor, InsertionOutcome) {
         debug_assert!(run_len > 0);
 
+        if offset == 0 {
+            let run = EditRun::new(
+                Anchor::origin(),
+                self.this_id,
+                (character_ts..character_ts + run_len).into(),
+                insertion_clock.next(),
+                lamport_clock.next(),
+            );
+
+            let inserted_idx = self.gtree.prepend(run);
+
+            let outcome = InsertionOutcome::InsertedRun { inserted_idx };
+
+            return (Anchor::origin(), outcome);
+        }
+
         let mut split_id = self.this_id;
 
         let mut split_insertion = 0;
@@ -196,49 +212,27 @@ impl RunTree {
             split_id = run.replica_id();
             split_insertion = run.insertion_ts();
             split_at_offset = run.start() + offset;
+            anchor = Anchor::new(run.replica_id(), run.end());
 
             if run.len() == offset
                 && run.replica_id() == self.this_id
                 && run.end() == character_ts
             {
-                anchor = Anchor::new(run.replica_id(), run.end());
                 run.extend(run_len);
                 return (None, None);
             }
 
-            let range = (character_ts..character_ts + run_len).into();
+            let split = run.split(offset);
 
-            let insertion_ts = insertion_clock.next();
+            let new_run = EditRun::new(
+                anchor.clone(),
+                self.this_id,
+                (character_ts..character_ts + run_len).into(),
+                insertion_clock.next(),
+                lamport_clock.next(),
+            );
 
-            let lamport_ts = lamport_clock.next();
-
-            if offset == 0 {
-                let new_run = EditRun::new(
-                    anchor.clone(),
-                    self.this_id,
-                    range,
-                    insertion_ts,
-                    lamport_ts,
-                );
-
-                let this_run = core::mem::replace(run, new_run);
-
-                (Some(this_run), None)
-            } else {
-                let split = run.split(offset);
-
-                anchor = Anchor::new(run.replica_id(), run.end());
-
-                let new_run = EditRun::new(
-                    anchor.clone(),
-                    self.this_id,
-                    range,
-                    insertion_ts,
-                    lamport_ts,
-                );
-
-                (Some(new_run), split)
-            }
+            (Some(new_run), split)
         };
 
         let (inserted_idx, split_idx) = self.gtree.insert(offset, insert_with);
