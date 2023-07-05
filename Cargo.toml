@@ -8,6 +8,9 @@ license = "MIT"
 [features]
 serde = ["dep:serde"]
 
-[dependencies]
-serde = { version = "1.0.163", optional = true }
-uuid = { version = "1.3", features = ["v4"] }
+[dependencies.rand]
+version = "0.8"
+
+[dependencies.serde]
+version = "1.0"
+optional = true

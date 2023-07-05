@@ -1,13 +1,10 @@
 use alloc::collections::VecDeque;
 use core::ops::RangeBounds;
-use std::collections::HashMap;
-
-use uuid::Uuid;
 
 use crate::*;
 
 /// TODO: docs
-pub type VersionVector = HashMap<ReplicaId, Length>;
+pub type VersionVector = ReplicaIdMap<Length>;
 
 /// TODO: docs
 pub struct Replica {
@@ -192,7 +189,7 @@ impl Replica {
             insertion_clock,
             lamport_clock,
             pending: VecDeque::new(),
-            version_vector: VersionVector::new(),
+            version_vector: VersionVector::default(),
         }
     }
 
@@ -321,13 +318,21 @@ impl Replica {
 
 impl core::fmt::Debug for Replica {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        struct DebugHexU64(u64);
+
+        impl core::fmt::Debug for DebugHexU64 {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                write!(f, "{:x}", self.0)
+            }
+        }
+
         // In the public Debug we just print the ReplicaId to avoid leaking
         // our internals.
         //
         // During development the `Replica::debug()` method (which is public
         // but hidden from the API) can be used to obtain a more useful
         // representation.
-        f.debug_tuple("Replica").field(&self.id.0).finish()
+        f.debug_tuple("Replica").field(&DebugHexU64(self.id.as_u64())).finish()
     }
 }
 
@@ -355,39 +360,6 @@ impl Clone for Replica {
             pending: self.pending.clone(),
             version_vector: self.version_vector.clone(),
         }
-    }
-}
-
-/// TODO: docs
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ReplicaId(Uuid);
-
-impl core::fmt::Debug for ReplicaId {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "ReplicaId({:x})", self.as_u32())
-    }
-}
-
-impl ReplicaId {
-    /// TODO: docs
-    #[inline]
-    pub fn as_u32(&self) -> u32 {
-        self.0.as_fields().0
-    }
-
-    /// Creates a new, randomly generated [`ReplicaId`].
-    #[inline]
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-
-    /// Returns the "nil" id, i.e. the id whose bytes are all zeros.
-    ///
-    /// This is used to form the [`EditId`] of the first edit run and should
-    /// never be used in any of the following user-generated insertion.
-    #[inline]
-    pub const fn zero() -> Self {
-        Self(Uuid::nil())
     }
 }
 

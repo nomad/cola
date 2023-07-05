@@ -1,12 +1,9 @@
-use std::collections::HashMap;
-
 use crate::*;
 
 /// TODO: docs
 #[derive(Clone)]
 pub struct RunIndices {
-    map: HashMap<ReplicaId, ReplicaIndices>,
-    this: ReplicaIndices,
+    map: ReplicaIdMap<ReplicaIndices>,
 }
 
 impl core::fmt::Debug for RunIndices {
@@ -36,17 +33,16 @@ impl RunIndices {
 
     /// TODO: docs
     #[inline]
-    pub fn get_mut(&mut self, _id: ReplicaId) -> &mut ReplicaIndices {
-        &mut self.this
-        // self.map.get_mut(&id).unwrap()
+    pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
+        self.map.get_mut(&id).unwrap()
     }
 
     /// TODO: docs
     #[inline]
     pub fn new(id: ReplicaId, idx: LeafIdx<EditRun>, len: Length) -> Self {
-        let mut map = HashMap::new();
+        let mut map = ReplicaIdMap::default();
         map.insert(id, ReplicaIndices::new(idx, len));
-        Self { map, this: ReplicaIndices::new(idx, len) }
+        Self { map }
     }
 }
 
