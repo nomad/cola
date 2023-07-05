@@ -262,7 +262,7 @@ impl RunTree {
 
     #[inline]
     pub fn len(&self) -> Length {
-        self.gtree.summary()
+        self.gtree.len()
     }
 
     #[inline]
@@ -574,11 +574,11 @@ pub enum Diff {
     Subtract(Length),
 }
 
-impl gtree::Summary for Length {
+impl gtree::Length for Length {
     type Diff = Diff;
 
     #[inline]
-    fn empty() -> Self {
+    fn zero() -> Self {
         0
     }
 
@@ -597,27 +597,6 @@ impl gtree::Summary for Length {
             Diff::Add(add) => *self += add,
             Diff::Subtract(sub) => *self -= sub,
         }
-    }
-}
-
-impl gtree::Summarize for EditRun {
-    type Summary = Length;
-
-    #[inline]
-    fn summarize(&self) -> Self::Summary {
-        self.len() * (!self.is_deleted as Length)
-    }
-}
-
-impl gtree::Length<Length> for Length {
-    #[inline]
-    fn zero() -> Self {
-        0
-    }
-
-    #[inline]
-    fn len(this: &Self) -> Self {
-        *this
     }
 }
 
@@ -658,6 +637,11 @@ impl gtree::Delete for EditRun {
 
 impl gtree::Leaf for EditRun {
     type Length = Length;
+
+    #[inline]
+    fn len(&self) -> Self::Length {
+        self.len() * (!self.is_deleted as Length)
+    }
 }
 
 pub type DebugAsBtree<'a> = gtree::DebugAsBtree<'a, RUN_TREE_ARITY, EditRun>;

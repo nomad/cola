@@ -388,13 +388,9 @@ mod run_splits {
 
     impl<const N: usize> gtree::Leaf for InsertionSplits<N> {
         type Length = Length;
-    }
-
-    impl<const N: usize> gtree::Summarize for InsertionSplits<N> {
-        type Summary = Length;
 
         #[inline]
-        fn summarize(&self) -> Self::Summary {
+        fn len(&self) -> Self::Length {
             self.len()
         }
     }
@@ -471,19 +467,15 @@ impl Split {
     }
 }
 
-impl gtree::Summarize for Split {
-    type Summary = Length;
-
-    #[inline]
-    fn summarize(&self) -> Self::Summary {
-        self.len
-    }
-}
-
 impl gtree::Join for Split {}
 
 impl gtree::Leaf for Split {
     type Length = Length;
+
+    #[inline]
+    fn len(&self) -> Self::Length {
+        self.len
+    }
 }
 
 pub use splits::Splits;
