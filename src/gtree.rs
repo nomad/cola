@@ -163,7 +163,8 @@ pub struct LeafIdx<L> {
 }
 
 impl<L> LeafIdx<L> {
-    /// TODO: docs
+    /// Returns a "dangling" index which doesn't point to any leaf of the
+    /// Gtree.
     #[inline]
     pub const fn dangling() -> Self {
         Self::new(usize::MAX)
@@ -193,19 +194,21 @@ impl<L> PartialEq<LeafIdx<L>> for LeafIdx<L> {
 
 /// A cursor into the Gtree.
 ///
-/// The name comes from its ability to identify a particular position between
+/// It's called a "cursor" because it identifies a particular position between
 /// two leaf nodes in the tree, much like a line cursor identifies a position
 /// between two characters in a text editor.
 #[derive(PartialEq, Eq)]
 struct Cursor<L: Leaf> {
-    /// The index of the leaf node that comes *after* the cursor.
+    /// The index of the leaf node that comes *after* the cursor. There always
+    /// is one because the cursor is never parked after the last leafof the
+    /// Gtree.
     leaf_idx: LeafIdx<L>,
 
-    /// The offset of `self.leaf_idx` in the Gtree, *without* taking into
-    /// account the length of the leaf node itself.
+    /// The offset of `leaf_idx` in the Gtree, *without* taking into account
+    /// the length of the leaf node itself.
     offset: L::Length,
 
-    /// The child index of `self.leaf_idx` in its parent.
+    /// The child index of `leaf_idx` within its parent.
     child_idx: ChildIdx,
 }
 
@@ -236,7 +239,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// If this method returns without panicking, then the Gtree is in a
     /// consistent state.
     ///
-    /// This is mostly useful for debugging purposes.
+    /// Only used for debugging.
     pub fn assert_invariants(&self) {
         fn recursively_assert_inode_invariants<const N: usize, L: Leaf>(
             gtree: &Gtree<N, L>,
@@ -269,7 +272,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         (total as f32) / (self.inodes.len() as f32)
     }
 
-    /// TODO: docs
+    /// Appends a new leaf node to the end of the Gtree, returning its newly
+    /// created leaf index.
     #[inline(always)]
     pub fn append(&mut self, leaf: L) -> LeafIdx<L> {
         let (last_leaf_idx, idx_in_parent) = self.last_leaf();
@@ -278,7 +282,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
     /// Returns an `(empty_leaves, total_leaves)` tuple.
     ///
-    /// This is mostly useful for debugging purposes.
+    /// Only used for debugging.
     pub fn count_empty_leaves(&self) -> (usize, usize) {
         let empty_leaves = self
             .lnodes
@@ -290,17 +294,75 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         (empty_leaves, self.lnodes.len())
     }
 
-    /// TODO: docs
+    /// Returns a struct whose `Debug` implementation makes it easy to see the
+    /// structure of the Gtree by printing it as the equivalent Btree.
+    ///
+    /// Note, however, that that is *not* how the Gtree is actually stored in
+    /// memory. See the `debug_as_self()` method for that.
     pub fn debug_as_btree(&self) -> debug::DebugAsBtree<'_, ARITY, L> {
         self.debug_inode_as_btree(self.root_idx)
     }
 
-    /// TODO: docs
+    /// Returns a struct whose `Debug` implementation shows how the Gtree is
+    /// stored in memory.
+    ///
+    /// This however makes it really hard to see the hierarchical structure of
+    /// the Gtree, from the root node down to the leaf nodes. See the
+    /// `debug_as_btree()` method for that.
     pub fn debug_as_self(&self) -> debug::DebugAsSelf<'_, ARITY, L> {
         debug::DebugAsSelf(self)
     }
 
-    /// TODO: docs
+    /// Deletes all the leaves within the given range.
+    ///
+    /// # Range contained within a single leaf node
+    ///
+    /// If the whole range is contained within a single leaf node the
+    /// `delete_range` closure is called with the leaf node and the range,
+    /// where the start and end are relative to the leaf node and will, in
+    /// general, be less than those of the range given to this method (although
+    /// the *length* of the range will be the same).
+    ///
+    /// The closure can then return either a `(None, None)` if the entire leaf
+    /// node was deleted, a `(Some, None)` if the range splits the leaf in 2
+    /// runs, or a `(Some, Some)` if the range splits the leaf in 3 runs, i.e.
+    /// if the start is greater than 0 and the end is less than the leaf's
+    /// length.
+    ///
+    /// Returning a `(None, Some)` is not permitted and will cause a panic.
+    ///
+    /// The leaves returned by the closure (if any) will be inserted in the
+    /// Gtree *after* the leaf node passed to the closure, and this method will
+    /// return the indices of those two new leaves.
+    ///
+    /// In the case the return value of this method is a tuple of the indices
+    /// of the leaves returned by the closure, in that order.
+    ///
+    /// The only exception to this can happen when the closure returns a
+    /// `(Some(new_leaf), None)`:
+    ///
+    /// - if `new_leaf` is empty we'll try to join it with the leaf that comes
+    /// *after* the argument of the closure by calling `Join::prepend()`
+    /// on it. If that succeeds `new_leaf` gets joined to that leaf so
+    /// no new leaves are added to the Gtree, and this methods returns a
+    /// `(None, None)`,
+    ///
+    /// - viceversa, if `new_leaf` is not empty we'll try to join the leaf that
+    /// was passed to the closure with the leaf that comes *before* it by
+    /// calling `Join::append()` on it. Like in the previous case, if that
+    /// succeeds this method returns a `(None, None)`.
+    ///
+    /// # Range that spans multiple leaf nodes
+    ///
+    /// This case is a lot more straightforward: the `delete_from` closure is
+    /// called with the leaf node that contains the start of the range, and the
+    /// `delete_up_to` closure is called with the leaf node that contains the
+    /// end of the range. Like in the previous case the length offsets passed
+    /// to those closure are relative to the leaf nodes.
+    ///
+    /// In this case we don't try to do any joining of the leaf nodes, so we
+    /// always return the leaf index of the leaves returned by `delete_from`
+    /// and `delete_up_to`, in that order.
     #[inline]
     pub fn delete<DelRange, DelFrom, DelUpTo>(
         &mut self,
@@ -348,13 +410,61 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.delete_range(range, delete_range, delete_from, delete_up_to)
     }
 
-    /// TODO: docs
+    /// Creates a new Gtree with from an iterator over some leaves and the total
+    /// length of the all the leaves the iterator will yield.
+    ///
+    /// Panics if the iterator yields more than `ARITY` leaves.
+    #[inline]
+    pub fn from_leaves<I>(leaves: I, tot_len: L::Length) -> Self
+    where
+        I: ExactSizeIterator<Item = L>,
+    {
+        let len = leaves.len();
+
+        let root_idx = InodeIdx(0);
+
+        let mut inode_children = [NodeIdx::dangling(); ARITY];
+
+        let mut lnodes = Vec::with_capacity(leaves.len());
+
+        for (i, child) in leaves.enumerate() {
+            let leaf_idx = LeafIdx::new(i);
+            inode_children[i] = NodeIdx::from_leaf(leaf_idx);
+            lnodes.push(Lnode::new(child, root_idx));
+        }
+
+        let inode = Inode {
+            tot_len,
+            parent: InodeIdx::dangling(),
+            num_children: len,
+            children: inode_children,
+            has_leaves: true,
+        };
+
+        let inodes = vec![inode];
+
+        Self { inodes, lnodes, root_idx: InodeIdx(0), cursor: None }
+    }
+
+    /// Calls the closure with a mutable reference to the last leaf of the
+    /// Gtree.
+    #[inline]
+    pub fn get_last_leaf_mut<F>(&mut self, with_leaf: F)
+    where
+        F: FnOnce(&mut L),
+    {
+        let (last_idx, _) = self.last_leaf();
+        self.get_leaf_mut(last_idx, with_leaf);
+    }
+
+    /// Returns a shared reference to the leaf node at the given index.
     #[inline]
     pub fn get_leaf(&self, leaf_idx: LeafIdx<L>) -> &L {
         self.leaf(leaf_idx)
     }
 
-    /// TODO: docs
+    /// Calls the closure with a mutable reference to the leaf at the given
+    /// index.
     #[inline]
     pub fn get_leaf_mut<F>(&mut self, leaf_idx: LeafIdx<L>, with_leaf: F)
     where
@@ -373,17 +483,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
-    /// TODO: docs
-    #[inline]
-    pub fn get_last_leaf_mut<F>(&mut self, with_leaf: F)
-    where
-        F: FnOnce(&mut L),
-    {
-        let (last_idx, _) = self.last_leaf();
-        self.get_leaf_mut(last_idx, with_leaf);
-    }
-
-    /// TODO: docs
+    /// Returns the index of the leaf that's directly after the leaf at the
+    /// given index. It panics if the given index is that of the last leaf.
     #[inline]
     pub fn get_next_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
         let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
@@ -426,7 +527,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
-    /// TODO: docs
+    /// Returns the index of the leaf that's directly before the leaf at the
+    /// given index. It panics if the given index is that of the first leaf.
     #[inline]
     pub fn get_prev_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
         let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
@@ -469,7 +571,203 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
-    /// TODO: docs
+    /// Initializes the Gtree with the first leaf.
+    ///
+    /// Panics if the Gtree wasn't created by calling `uninit()` or if it was
+    /// but this function has already been called.
+    #[inline]
+    pub fn initialize(&mut self, first_leaf: L) -> LeafIdx<L> {
+        debug_assert!(!self.is_initialized());
+        let len = first_leaf.len();
+        let leaf_idx = self.push_leaf(first_leaf, InodeIdx(0));
+        let root = Inode::from_leaf(leaf_idx, len, InodeIdx::dangling());
+        self.root_idx = self.push_inode(root, InodeIdx::dangling());
+        leaf_idx
+    }
+
+    /// Inserts a leaf at the given offset. The offset must be strictly
+    /// positive, if it's zero consider using `prepend()` instead.
+    ///
+    /// The closure is called with the leaf and the corresponding offset
+    /// relative to the start of the leaf, which is guaranteed to be strictly
+    /// positive.
+    ///
+    /// It the offset falls exactly between two leaves then the closure will be
+    /// called with the leaf preceding the offset.
+    ///
+    /// The closure can return either a `(Some, Some)`, a `(Some, None)`
+    /// or a `(None, None)`. Returning a `(None, Some)` is not permitted and
+    /// will cause a panic.
+    ///
+    /// The leaves returned by the closure (if any) will be inserted in the
+    /// Gtree *after* the leaf node passed to the closure, and this method will
+    /// return their indices in the Gtree.
+    #[inline]
+    pub fn insert<F>(
+        &mut self,
+        offset: L::Length,
+        insert_with: F,
+    ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
+    where
+        F: FnOnce(&mut L, L::Length) -> (Option<L>, Option<L>),
+    {
+        if let Some(cursor) = self.cursor {
+            let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
+
+            if offset > cursor.offset && offset <= cursor_end {
+                return self.insert_at_leaf(
+                    cursor.leaf_idx,
+                    cursor.offset,
+                    cursor.child_idx,
+                    offset - cursor.offset,
+                    insert_with,
+                );
+            }
+        }
+
+        self.insert_at_offset(offset, insert_with)
+    }
+
+    /// Returns `false` if the Gtree was created with [`uninit()`] and has not
+    /// yet been initialized by calling [`initialize()`].
+    #[inline]
+    pub fn is_initialized(&self) -> bool {
+        !self.inodes.is_empty()
+    }
+
+    /// Returns the index of the leaf at the given offset together with the
+    /// offset of that leaf from the start of the Gtree.
+    #[inline]
+    pub fn leaf_at_offset(
+        &self,
+        offset: L::Length,
+    ) -> (LeafIdx<L>, L::Length) {
+        if let Some(cursor) = self.cursor {
+            let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
+
+            if offset > cursor.offset && offset <= cursor_end {
+                return (cursor.leaf_idx, cursor.offset);
+            }
+        }
+
+        let mut leaf_offset = L::Length::zero();
+
+        let mut idx = self.root_idx;
+
+        loop {
+            let (child_idx, child_offset) =
+                self.child_at_offset(idx, offset - leaf_offset);
+
+            leaf_offset += child_offset;
+
+            match self.inode(idx).child(child_idx) {
+                Either::Internal(inode_idx) => {
+                    idx = inode_idx;
+                },
+                Either::Leaf(leaf_idx) => {
+                    return (leaf_idx, leaf_offset);
+                },
+            }
+        }
+    }
+
+    /// Returns an iterator over the leaves of the Gtree.
+    #[inline]
+    pub fn leaves(&self) -> Leaves<'_, ARITY, L> {
+        self.into()
+    }
+
+    /// Returns the combined length of all the leaves in the Gtree.
+    #[inline(always)]
+    pub fn len(&self) -> L::Length {
+        self.root().len()
+    }
+
+    /// Creates a new Gtree with the given leaf as its first leaf.
+    #[inline]
+    pub fn new(first_leaf: L) -> (Self, LeafIdx<L>) {
+        let mut this = Self::uninit();
+        let idx = this.initialize(first_leaf);
+        (this, idx)
+    }
+
+    /// Prepends a new leaf node to start of the Gtree, returning its newly
+    /// created leaf index.
+    #[inline]
+    pub fn prepend(&mut self, leaf: L) -> LeafIdx<L> {
+        let first_leaf_idx = {
+            let mut idx = self.root_idx;
+            loop {
+                match self.inode(idx).children() {
+                    Either::Internal(children) => {
+                        idx = children[0];
+                    },
+                    Either::Leaf(leaf_idx) => {
+                        break leaf_idx[0];
+                    },
+                }
+            }
+        };
+
+        let leaf_idx = self.insert_leaf_before_leaf(first_leaf_idx, 0, leaf);
+
+        self.cursor = Some(Cursor::new(leaf_idx, L::Length::zero(), 0));
+
+        leaf_idx
+    }
+
+    /// Calls the closure with the leaf at the given index. The closure should
+    /// split the into two leaves, returning the the right part of the split.
+    ///
+    /// Panics if the leaf's length before calling this function is not
+    /// equal to the sum of the new length and the length of the returned leaf.
+    #[inline]
+    pub fn split_leaf<F>(
+        &mut self,
+        leaf_idx: LeafIdx<L>,
+        split_with: F,
+    ) -> LeafIdx<L>
+    where
+        F: FnOnce(&mut L) -> L,
+    {
+        let lnode = self.lnode_mut(leaf_idx);
+        let parent_idx = lnode.parent();
+
+        let old_len = lnode.value().len();
+        let split_leaf = split_with(lnode.value_mut());
+        let new_len = lnode.value().len();
+
+        debug_assert!(new_len + split_leaf.len() == old_len);
+
+        if old_len != new_len {
+            let diff = L::Length::diff(old_len, new_len);
+            self.apply_diff(parent_idx, diff);
+        }
+
+        let idx_in_parent = self.inode(parent_idx).idx_of_leaf_child(leaf_idx);
+        self.insert_leaf_after_leaf(leaf_idx, idx_in_parent, split_leaf)
+    }
+
+    /// Returns a new, uninitialized Gtree.
+    ///
+    /// This is useful to create a Gtree when you don't yet have a leaf to
+    /// initialize it with.
+    ///
+    /// Once you have the first leaf makes sure to call [`initialize`] before
+    /// calling any other methods on the Gtree.
+    #[inline]
+    pub fn uninit() -> Self {
+        Self {
+            inodes: Vec::new(),
+            lnodes: Vec::new(),
+            root_idx: InodeIdx::dangling(),
+            cursor: None,
+        }
+    }
+
+    /// Calls the closure with exclusive references to the two leaves the given
+    /// indices. The order of the references passed to the closure matches the
+    /// order of the indices given as arguments.
     #[inline]
     pub fn with_two_mut<F>(
         &mut self,
@@ -505,196 +803,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.apply_diff(first_parent, first_diff);
 
         self.apply_diff(second_parent, second_diff);
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn from_children<I>(children: I, tot_len: L::Length) -> Self
-    where
-        I: ExactSizeIterator<Item = L>,
-    {
-        let len = children.len();
-
-        let root_idx = InodeIdx(0);
-
-        let mut inode_children = [NodeIdx::dangling(); ARITY];
-
-        let mut lnodes = Vec::with_capacity(children.len());
-
-        for (i, child) in children.enumerate() {
-            let leaf_idx = LeafIdx::new(i);
-            inode_children[i] = NodeIdx::from_leaf(leaf_idx);
-            lnodes.push(Lnode::new(child, root_idx));
-        }
-
-        let inode = Inode {
-            tot_len,
-            parent: InodeIdx::dangling(),
-            num_children: len,
-            children: inode_children,
-            has_leaves: true,
-        };
-
-        let inodes = vec![inode];
-
-        Self { inodes, lnodes, root_idx: InodeIdx(0), cursor: None }
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn initialize(&mut self, first_leaf: L) -> LeafIdx<L> {
-        debug_assert!(self.inodes.is_empty());
-        debug_assert!(self.lnodes.is_empty());
-        let len = first_leaf.len();
-        let leaf_idx = self.push_leaf(first_leaf, InodeIdx(0));
-        let root = Inode::from_leaf(leaf_idx, len, InodeIdx::dangling());
-        self.root_idx = self.push_inode(root, InodeIdx::dangling());
-        leaf_idx
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn insert<F>(
-        &mut self,
-        offset: L::Length,
-        insert_with: F,
-    ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
-    where
-        F: FnOnce(&mut L, L::Length) -> (Option<L>, Option<L>),
-    {
-        if let Some(cursor) = self.cursor {
-            let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
-
-            if offset > cursor.offset && offset <= cursor_end {
-                return self.insert_at_leaf(
-                    cursor.leaf_idx,
-                    cursor.offset,
-                    cursor.child_idx,
-                    offset - cursor.offset,
-                    insert_with,
-                );
-            }
-        }
-
-        self.insert_at_offset(offset, insert_with)
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn is_initialized(&self) -> bool {
-        !self.inodes.is_empty()
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn leaf_at_offset(
-        &self,
-        offset: L::Length,
-    ) -> (LeafIdx<L>, L::Length) {
-        if let Some(cursor) = self.cursor {
-            let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
-
-            if offset > cursor.offset && offset <= cursor_end {
-                return (cursor.leaf_idx, cursor.offset);
-            }
-        }
-
-        let mut leaf_offset = L::Length::zero();
-
-        let mut idx = self.root_idx;
-
-        loop {
-            let (child_idx, child_offset) =
-                self.child_at_offset(idx, offset - leaf_offset);
-
-            leaf_offset += child_offset;
-
-            match self.inode(idx).child(child_idx) {
-                Either::Internal(inode_idx) => {
-                    idx = inode_idx;
-                },
-                Either::Leaf(leaf_idx) => {
-                    return (leaf_idx, leaf_offset);
-                },
-            }
-        }
-    }
-
-    #[inline]
-    pub fn leaves(&self) -> Leaves<'_, ARITY, L> {
-        self.into()
-    }
-
-    #[inline(always)]
-    pub fn len(&self) -> L::Length {
-        self.root().len()
-    }
-
-    /// Creates a new Gtree with the given leaf as its first leaf.
-    #[inline]
-    pub fn new(first_leaf: L) -> (Self, LeafIdx<L>) {
-        let mut this = Self::uninit();
-        let idx = this.initialize(first_leaf);
-        (this, idx)
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn prepend(&mut self, leaf: L) -> LeafIdx<L> {
-        let first_leaf_idx = {
-            let mut idx = self.root_idx;
-            loop {
-                match self.inode(idx).children() {
-                    Either::Internal(children) => {
-                        idx = children[0];
-                    },
-                    Either::Leaf(leaf_idx) => {
-                        break leaf_idx[0];
-                    },
-                }
-            }
-        };
-
-        let leaf_idx = self.insert_leaf_before_leaf(first_leaf_idx, 0, leaf);
-
-        self.cursor = Some(Cursor::new(leaf_idx, L::Length::zero(), 0));
-
-        leaf_idx
-    }
-
-    #[inline]
-    pub fn split_leaf<F>(
-        &mut self,
-        leaf_idx: LeafIdx<L>,
-        split_with: F,
-    ) -> LeafIdx<L>
-    where
-        F: FnOnce(&mut L) -> L,
-    {
-        let lnode = self.lnode_mut(leaf_idx);
-        let parent_idx = lnode.parent();
-
-        let old_len = lnode.value().len();
-        let split_leaf = split_with(lnode.value_mut());
-        let new_len = lnode.value().len();
-
-        if old_len != new_len {
-            let diff = L::Length::diff(old_len, new_len);
-            self.apply_diff(parent_idx, diff);
-        }
-
-        let idx_in_parent = self.inode(parent_idx).idx_of_leaf_child(leaf_idx);
-        self.insert_leaf_after_leaf(leaf_idx, idx_in_parent, split_leaf)
-    }
-
-    #[inline]
-    pub fn uninit() -> Self {
-        Self {
-            inodes: Vec::new(),
-            lnodes: Vec::new(),
-            root_idx: InodeIdx::dangling(),
-            cursor: None,
-        }
     }
 }
 

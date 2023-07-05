@@ -363,7 +363,7 @@ mod run_splits {
                         }
                         unreachable!();
                     } else {
-                        let gtree = Gtree::from_children(
+                        let gtree = Gtree::from_leaves(
                             splits.iter().copied(),
                             *total_len,
                         );
