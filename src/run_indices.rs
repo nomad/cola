@@ -216,11 +216,12 @@ impl ReplicaIndices {
 }
 
 /// TODO: docs
-const RUN_SPLITS_INLINE: usize = 4;
+const INSERTION_SPLITS_INLINE: usize = 8;
 
-type InsertionSplits = run_splits::InsertionSplits<RUN_SPLITS_INLINE>;
+type InsertionSplits = run_splits::InsertionSplits<INSERTION_SPLITS_INLINE>;
 
-type RunSplitLeaves<'a> = run_splits::RunSplitLeaves<'a, RUN_SPLITS_INLINE>;
+type RunSplitLeaves<'a> =
+    run_splits::RunSplitLeaves<'a, INSERTION_SPLITS_INLINE>;
 
 mod run_splits {
     use super::*;
