@@ -11,8 +11,8 @@ impl BackLog {
     }
 }
 
-/// An iterator over the backlogged edits that are now ready to be applied to a
-/// `Replica`.
+/// An iterator over the backlogged [`TextEdit`]s that are now ready to be
+/// applied to your buffer.
 ///
 /// This struct is created by the [`backlogged`](Replica::backlogged) method on
 /// [`Replica`]. See its documentation for more.

@@ -1,14 +1,16 @@
 use core::ops::Range;
 
-/// TODO: docs
-pub struct TextEdit {
-    /// TODO: docs
-    pub range: Range<usize>,
-}
+use crate::Length;
 
-impl TextEdit {
-    #[inline]
-    pub(crate) fn _new(range: Range<usize>) -> Self {
-        Self { range }
-    }
+/// TODO: docs
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TextEdit {
+    /// TODO: docs
+    Insertion(Length),
+
+    /// TODO: docs
+    ContiguousDeletion(Range<Length>),
+
+    /// TODO: docs
+    SplitDeletion(Vec<Range<Length>>),
 }

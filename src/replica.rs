@@ -166,39 +166,6 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    pub fn new(len: Length) -> Self {
-        let replica_id = ReplicaId::new();
-
-        let mut insertion_clock = InsertionClock::new();
-
-        let mut lamport_clock = LamportClock::new();
-
-        let origin_run = EditRun::new(
-            Anchor::origin(),
-            replica_id,
-            (0..len).into(),
-            insertion_clock.next(),
-            lamport_clock.next(),
-        );
-
-        let (run_tree, origin_idx) = RunTree::new(replica_id, origin_run);
-
-        let run_indices = RunIndices::new(replica_id, origin_idx, len);
-
-        Self {
-            id: replica_id,
-            run_tree,
-            run_indices,
-            character_clock: len,
-            insertion_clock,
-            lamport_clock,
-            backlog: BackLog::new(),
-            version_vector: VersionVector::default(),
-        }
-    }
-
-    /// TODO: docs
-    #[inline]
     pub fn inserted(&mut self, at_offset: Length, len: Length) -> CrdtEdit {
         if len == 0 {
             return CrdtEdit::no_op();
@@ -302,6 +269,39 @@ impl Replica {
         _version_vector: VersionVector,
     ) -> Option<TextEdit> {
         todo!();
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn new(len: Length) -> Self {
+        let replica_id = ReplicaId::new();
+
+        let mut insertion_clock = InsertionClock::new();
+
+        let mut lamport_clock = LamportClock::new();
+
+        let origin_run = EditRun::new(
+            Anchor::origin(),
+            replica_id,
+            (0..len).into(),
+            insertion_clock.next(),
+            lamport_clock.next(),
+        );
+
+        let (run_tree, origin_idx) = RunTree::new(replica_id, origin_run);
+
+        let run_indices = RunIndices::new(replica_id, origin_idx, len);
+
+        Self {
+            id: replica_id,
+            run_tree,
+            run_indices,
+            character_clock: len,
+            insertion_clock,
+            lamport_clock,
+            backlog: BackLog::new(),
+            version_vector: VersionVector::default(),
+        }
     }
 }
 
