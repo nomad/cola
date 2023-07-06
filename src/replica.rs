@@ -298,12 +298,6 @@ impl Replica {
     ) -> Option<TextEdit> {
         todo!();
     }
-
-    /// TODO: docs
-    #[inline]
-    pub fn undo(&self, _crdt_edit: &CrdtEdit) -> CrdtEdit {
-        todo!();
-    }
 }
 
 impl core::fmt::Debug for Replica {
