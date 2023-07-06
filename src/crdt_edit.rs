@@ -1,6 +1,10 @@
 use crate::*;
 
-/// An opaque object to be fed to [`Replica::merge()`](crate::Replica::merge).
+/// A text edit in CRDT coordinates
+///
+/// opaque object to be fed to [`Replica::merge()`](crate::Replica::merge).
+///
+/// TODO: docs
 #[derive(Debug, Clone)]
 pub struct CrdtEdit {
     kind: CrdtEditKind,

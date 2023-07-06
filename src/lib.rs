@@ -150,7 +150,8 @@ pub use text_edit::TextEdit;
 
 /// The length of a piece of text according to some user-defined metric.
 ///
-/// The meaning of a unit of length is decided by the user of this crate. This
+/// The meaning of a unit of length is decided by you, the user of this
+/// library, depending on the kind of buffer you're using cola with. This
 /// allows cola to work with buffers using a variety of encodings (UTF-8,
 /// UTF-16, etc.) and indexing metrics (bytes, codepoints, graphemes, etc.).
 ///

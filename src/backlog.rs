@@ -1,7 +1,7 @@
 use crate::{Replica, TextEdit};
 
 #[derive(Debug, Clone, Default)]
-pub struct BackLog;
+pub struct BackLog {}
 
 impl BackLog {
     /// Creates a new, empty `BackLog`.

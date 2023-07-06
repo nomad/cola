@@ -164,7 +164,32 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
-    /// TODO: docs
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use cola::{Replica, TextEdit};
+    /// // The buffer at peer 1 is "ab".
+    /// let mut replica1 = Replica::new(2);
+    ///
+    /// let mut replica2 = replica1.clone();
+    ///
+    /// // Peer 1 inserts a '1' between the 'a' and the 'b'.
+    /// let mut insert = replica1.inserted(1, 1);
+    ///
+    /// // At the same time, peer 2 inserts a '2' at the start of the
+    /// // document.
+    /// let _ = replica2.inserted(0, 1);
+    ///
+    /// // Now peer 2 receives the insertion from peer 1. The offset we insert
+    /// // the '1' at should be 2 to account for the '2' that was inserted
+    /// // concurrently.
+    ///
+    /// let Some(TextEdit::Insertion(offset)) = replica2.merge(insert) else {
+    ///     unreachable!();
+    /// };
+    ///
+    /// assert_eq!(offset, 2);
     #[inline]
     pub fn inserted(&mut self, at_offset: Length, len: Length) -> CrdtEdit {
         if len == 0 {
