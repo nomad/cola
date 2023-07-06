@@ -592,8 +592,8 @@ impl gtree::Length for Length {
     }
 
     #[inline]
-    fn apply_diff(&mut self, patch: Diff) {
-        match patch {
+    fn apply_diff(&mut self, diff: Diff) {
+        match diff {
             Diff::Add(add) => *self += add,
             Diff::Subtract(sub) => *self -= sub,
         }
