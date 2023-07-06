@@ -148,7 +148,93 @@ use run_indices::RunIndices;
 use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
 pub use text_edit::TextEdit;
 
-/// TODO: docs
+/// The length of a piece of text according to some user-defined metric.
+///
+/// The meaning of a unit of length is decided by the user of this crate. This
+/// allows cola to work with buffers using a variety of encodings (UTF-8,
+/// UTF-16, etc.) and indexing metrics (bytes, codepoints, graphemes, etc.).
+///
+/// While the particular meaning of a unit of length is up to the user, it is
+/// important that it is consistent across all peers. For example, if one peer
+/// uses bytes as its unit of length, all other peers must also use bytes or
+/// the contents of their buffers will diverge.
+///
+/// # Examples
+///
+/// In this example all peers use the same metric (codepoints) and everything
+/// works as expected:
+///
+/// ```
+/// # use cola::{Replica, TextEdit};
+/// fn insert_at_codepoint(s: &mut String, offset: usize, s: &str) {
+///     let byte_offset = s.chars().take(offset).map(char::len_utf8).sum();
+///     s.insert_str(byte_offset, s);
+/// }
+///
+/// // Peer 1 uses a String as its buffer and codepoints as its unit of
+/// // length.
+/// let mut buf1 = String::from("àc");
+/// let mut replica1 = Replica::new(2); // "àc" has 2 codepoints.
+///
+/// let mut buf2 = buf1.clone();
+/// let mut replica2 = replica1.clone();
+///
+/// // Peer 1 inserts a 'b' between 'à' and 'c' and sends the edit over to the
+/// // other peer.
+/// let b = "b";
+/// insert_at_codepoint(&mut buf1, 1, b);
+/// let insert_b = replica1.inserted(1, 1);
+///
+/// // Peer 2 receives the edit.
+/// let Some(TextEdit::Insertion(offset)) = replica2.merge(insert_b) else {
+///     unreachable!();
+/// };
+///
+/// assert_eq!(offset, 1);
+///
+/// // Peer 2 also uses codepoints as its unit of length, so it inserts the
+/// // 'b' after the 'à' as expected.
+/// insert_at_codepoint(&mut buf2, offset, b);
+///
+/// // If all the peers use the same metric they'll always converge to the
+/// // same state.
+/// assert_eq!(buf1, "àbc");
+/// assert_eq!(buf2, "àbc");
+/// ```
+///
+/// If different peers use different metrics, however, their buffers can
+/// diverge or even cause the program to crash, like in the following example:
+///
+/// ```should_panic
+/// # use cola::{Replica, TextEdit};
+/// # let b = "b";
+/// # let mut buf2 = String::from("àc");
+/// # let mut replica1 = Replica::new(2);
+/// # let mut replica2 = replica1.clone();
+/// # let insert_b = replica1.inserted(1, 1);
+/// // ..same as before.
+///
+/// assert_eq!(buf2, "àc");
+///
+/// // Peer 2 receives the edit.
+/// let Some(TextEdit::Insertion(offset)) = replica2.merge(insert_b) else {
+///     unreachable!();
+/// };
+///
+/// assert_eq!(offset, 1);
+///
+/// // Now let's say peer 2 interprets `offset` as a byte offset even though
+/// // the insertion of the 'b' was done using codepoint offsets on peer 1.
+/// //
+/// // In this case the program just panics because a byte offset of 1 is not a
+/// // valid insertion point in the string "àc" since it falls in the middle of
+/// // the 'à' codepoint, which is 2 bytes long.
+/// //
+/// // In other cases the program might not panic but instead cause the peers
+/// // to silently diverge, which is arguably worse.
+///
+/// buf2.insert_str(offset, b); // 💥 panics!
+/// ```
 pub type Length = u64;
 
 use range::{Range, RangeExt};
