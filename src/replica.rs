@@ -59,7 +59,7 @@ impl Replica {
     #[inline]
     pub fn deleted<R>(&mut self, range: R) -> CrdtEdit
     where
-        R: RangeBounds<usize>,
+        R: RangeBounds<Length>,
     {
         let (start, end) = range_bounds_to_start_end(range, 0, self.len());
 
@@ -67,8 +67,7 @@ impl Replica {
             return CrdtEdit::no_op();
         }
 
-        let deleted_range =
-            Range { start: start as Length, end: end as Length };
+        let deleted_range = (start..end).into();
 
         let (start, end, outcome) = self.run_tree.delete(deleted_range);
 
@@ -195,26 +194,24 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    pub fn inserted(&mut self, offset: usize, len: usize) -> CrdtEdit {
+    pub fn inserted(&mut self, at_offset: Length, len: Length) -> CrdtEdit {
         if len == 0 {
             return CrdtEdit::no_op();
         }
 
-        let run_len = len as Length;
-
         let (anchor, outcome) = self.run_tree.insert(
-            offset as Length,
-            run_len,
+            at_offset,
+            len,
             self.character_clock,
             &mut self.insertion_clock,
             &mut self.lamport_clock,
         );
 
-        self.character_clock += run_len;
+        self.character_clock += len;
 
         match outcome {
             InsertionOutcome::ExtendedLastRun => {
-                self.run_indices.get_mut(self.id).extend_last(run_len)
+                self.run_indices.get_mut(self.id).extend_last(len)
             },
 
             InsertionOutcome::SplitRun {
@@ -224,9 +221,7 @@ impl Replica {
                 split_idx,
                 inserted_idx,
             } => {
-                self.run_indices
-                    .get_mut(self.id)
-                    .append(run_len, inserted_idx);
+                self.run_indices.get_mut(self.id).append(len, inserted_idx);
 
                 self.run_indices.get_mut(split_id).split(
                     split_insertion,
@@ -236,23 +231,18 @@ impl Replica {
             },
 
             InsertionOutcome::InsertedRun { inserted_idx } => {
-                self.run_indices.get_mut(self.id).append(run_len, inserted_idx)
+                self.run_indices.get_mut(self.id).append(len, inserted_idx)
             },
         };
 
-        CrdtEdit::insertion(
-            anchor,
-            self.id,
-            run_len,
-            self.lamport_clock.last(),
-        )
+        CrdtEdit::insertion(anchor, self.id, len, self.lamport_clock.last())
     }
 
     /// TODO: docs
     #[allow(clippy::len_without_is_empty)]
     #[doc(hidden)]
-    pub fn len(&self) -> usize {
-        self.run_tree.len() as _
+    pub fn len(&self) -> Length {
+        self.run_tree.len()
     }
 
     /// TODO: docs
@@ -434,11 +424,11 @@ pub type InsertionTimestamp = u64;
 #[inline(always)]
 fn range_bounds_to_start_end<R>(
     range: R,
-    lo: usize,
-    hi: usize,
-) -> (usize, usize)
+    lo: Length,
+    hi: Length,
+) -> (Length, Length)
 where
-    R: RangeBounds<usize>,
+    R: RangeBounds<Length>,
 {
     use core::ops::Bound;
 
