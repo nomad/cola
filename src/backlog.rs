@@ -15,7 +15,7 @@ impl BackLog {
 /// applied to your buffer.
 ///
 /// This struct is created by the [`backlogged`](Replica::backlogged) method on
-/// [`Replica`]. See its documentation for more.
+/// [`Replica`]. See its documentation for more information.
 pub struct BackLogged<'a> {
     #[allow(unused)]
     replica: &'a mut Replica,

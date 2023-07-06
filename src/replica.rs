@@ -249,9 +249,9 @@ impl Replica {
             CrdtEditKind::Insertion {
                 anchor,
                 replica_id,
-                run_len,
+                len,
                 lamport_ts,
-            } => self.merge_insertion(anchor, replica_id, run_len, lamport_ts),
+            } => self.merge_insertion(anchor, replica_id, len, lamport_ts),
 
             CrdtEditKind::Deletion {
                 start,
