@@ -2356,8 +2356,8 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     #[inline]
     fn idx_of_leaf_child(&self, leaf_idx: LeafIdx<L>) -> ChildIdx {
         let Either::Leaf(idxs) = self.children() else {
-                panic!("this inode contains other inodes");
-            };
+            panic!("this inode contains other inodes");
+        };
 
         idxs.iter()
             .enumerate()
@@ -3294,7 +3294,10 @@ mod tests {
         let (mut gt, _) = TestGtree::<4>::new(first_leaf);
 
         let (Some(second_leaf_idx), _) =
-            gt.insert(1, TestLeaf::insert_with_len(2)) else { panic!() };
+            gt.insert(1, TestLeaf::insert_with_len(2))
+        else {
+            panic!()
+        };
 
         let third_leaf = TestLeaf::new_with_len(3);
 
@@ -3321,7 +3324,10 @@ mod tests {
         let (mut gt, _) = TestGtree::<4>::new(first_leaf);
 
         let (Some(second_leaf_idx), _) =
-            gt.insert(1, TestLeaf::insert_with_len(3)) else { panic!() };
+            gt.insert(1, TestLeaf::insert_with_len(3))
+        else {
+            panic!()
+        };
 
         let third_leaf = TestLeaf::new_with_len(4);
 
