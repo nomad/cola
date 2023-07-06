@@ -507,7 +507,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             let parent = self.inode(parent_idx);
 
             if idx_in_parent + 1 < parent.num_children() {
-                inode_idx = parent.child(idx_in_parent + 1).unwrap_inode();
+                inode_idx = parent.child(idx_in_parent + 1).unwrap_internal();
                 break;
             } else {
                 inode_idx = parent_idx;
@@ -551,7 +551,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             let parent = self.inode(parent_idx);
 
             if idx_in_parent > 0 {
-                inode_idx = parent.child(idx_in_parent - 1).unwrap_inode();
+                inode_idx = parent.child(idx_in_parent - 1).unwrap_internal();
                 break;
             } else {
                 inode_idx = parent_idx;
@@ -1861,10 +1861,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         if idx_in_parent + 1 == parent.num_children() {
             None
-        } else if let Either::Leaf(next) = parent.child(idx_in_parent + 1) {
-            Some(next)
         } else {
-            unreachable!()
+            Some(parent.child(idx_in_parent + 1).unwrap_leaf())
         }
     }
 
@@ -1877,9 +1875,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     ) -> Option<(LeafIdx<L>, ChildIdx)> {
         let parent = self.inode(self.lnode(leaf_idx).parent());
 
-        let Either::Leaf(leaf_idxs) = parent.children() else {
-            unreachable!()
-        };
+        let leaf_idxs = parent.children().unwrap_leaf();
 
         leaf_idxs[idx_in_parent + 1..].iter().enumerate().find_map(
             |(idx, &leaf_idx)| {
@@ -1902,10 +1898,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         if idx_in_parent == 0 {
             None
-        } else if let Either::Leaf(next) = parent.child(idx_in_parent - 1) {
-            Some(next)
         } else {
-            unreachable!()
+            Some(parent.child(idx_in_parent - 1).unwrap_leaf())
         }
     }
 
@@ -1918,9 +1912,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     ) -> Option<(LeafIdx<L>, ChildIdx)> {
         let parent = self.inode(self.lnode(leaf_idx).parent());
 
-        let Either::Leaf(leaf_idxs) = parent.children() else {
-            unreachable!()
-        };
+        let leaf_idxs = parent.children().unwrap_leaf();
 
         leaf_idxs[..idx_in_parent].iter().rev().enumerate().find_map(
             |(idx, &leaf_idx)| {
@@ -2251,7 +2243,7 @@ enum Either<I, L> {
 
 impl<I, L> Either<I, L> {
     #[inline]
-    fn unwrap_inode(self) -> I {
+    fn unwrap_internal(self) -> I {
         match self {
             Self::Internal(inode) => inode,
             Self::Leaf(_) => unreachable!(),
@@ -2339,11 +2331,9 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     /// given `InodeIdx`.
     #[inline]
     fn idx_of_internal_child(&self, inode_idx: InodeIdx) -> ChildIdx {
-        let Either::Internal(idxs) = self.children() else {
-            panic!("this inode contains leaf nodes");
-        };
-
-        idxs.iter()
+        self.children()
+            .unwrap_internal()
+            .iter()
             .enumerate()
             .find_map(|(i, &idx)| (idx == inode_idx).then_some(i))
             .expect("this inode does not contain the given inode idx")
@@ -2355,11 +2345,9 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
     /// `LeafIdx<L>`.
     #[inline]
     fn idx_of_leaf_child(&self, leaf_idx: LeafIdx<L>) -> ChildIdx {
-        let Either::Leaf(idxs) = self.children() else {
-            panic!("this inode contains other inodes");
-        };
-
-        idxs.iter()
+        self.children()
+            .unwrap_leaf()
+            .iter()
             .enumerate()
             .find_map(|(i, &idx)| (idx == leaf_idx).then_some(i))
             .expect("this inode does not contain the given leaf idx")
@@ -3191,8 +3179,11 @@ mod leaves {
 
                 let &(last_idx, child_idx) = self.path.last()?;
 
-                let mut idx =
-                    self.gtree.inode(last_idx).child(child_idx).unwrap_inode();
+                let mut idx = self
+                    .gtree
+                    .inode(last_idx)
+                    .child(child_idx)
+                    .unwrap_internal();
 
                 loop {
                     match self.gtree.inode(idx).children() {
