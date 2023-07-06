@@ -1,4 +1,3 @@
-use alloc::collections::VecDeque;
 use core::ops::RangeBounds;
 
 use crate::*;
@@ -27,7 +26,7 @@ pub struct Replica {
     lamport_clock: LamportClock,
 
     /// TODO: docs
-    pending: VecDeque<CrdtEdit>,
+    backlog: BackLog,
 
     /// TODO: docs
     version_vector: VersionVector,
@@ -43,6 +42,12 @@ impl Replica {
     #[doc(hidden)]
     pub fn average_gtree_inode_occupancy(&self) -> f32 {
         self.run_tree.average_inode_occupancy()
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn backlogged(&mut self) -> BackLogged<'_> {
+        BackLogged::from_replica(self)
     }
 
     #[doc(hidden)]
@@ -187,7 +192,7 @@ impl Replica {
             character_clock: len,
             insertion_clock,
             lamport_clock,
-            pending: VecDeque::new(),
+            backlog: BackLog::new(),
             version_vector: VersionVector::default(),
         }
     }
@@ -341,7 +346,7 @@ impl Clone for Replica {
             run_indices: self.run_indices.clone(),
             insertion_clock: InsertionClock::new(),
             lamport_clock,
-            pending: self.pending.clone(),
+            backlog: self.backlog.clone(),
             version_vector: self.version_vector.clone(),
         }
     }
@@ -501,7 +506,7 @@ mod debug {
                 .field("run_indices", &replica.run_indices)
                 .field("character_clock", &replica.character_clock)
                 .field("lamport_clock", &replica.lamport_clock)
-                .field("pending", &replica.pending)
+                .field("pending", &replica.backlog)
                 .finish()
         }
     }

@@ -124,6 +124,7 @@
 
 extern crate alloc;
 
+mod backlog;
 mod crdt_edit;
 mod gtree;
 mod replica;
@@ -135,6 +136,8 @@ mod text_edit;
 #[cfg(feature = "serde")]
 mod serde;
 
+use backlog::BackLog;
+pub use backlog::BackLogged;
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
 use gtree::{Gtree, LeafIdx};
