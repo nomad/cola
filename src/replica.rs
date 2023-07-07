@@ -204,8 +204,6 @@ impl Replica {
             &mut self.lamport_clock,
         );
 
-        self.character_clock += len;
-
         match outcome {
             InsertionOutcome::ExtendedLastRun => {
                 self.run_indices.get_mut(self.id).extend_last(len)
@@ -232,7 +230,17 @@ impl Replica {
             },
         };
 
-        CrdtEdit::insertion(anchor, self.id, len, self.lamport_clock.last())
+        let character_ts = self.character_clock;
+
+        self.character_clock += len;
+
+        CrdtEdit::insertion(
+            anchor,
+            self.id,
+            character_ts,
+            self.lamport_clock.last(),
+            len,
+        )
     }
 
     /// TODO: docs
@@ -251,6 +259,7 @@ impl Replica {
                 replica_id,
                 len,
                 lamport_ts,
+                ..
             } => self.merge_insertion(anchor, replica_id, len, lamport_ts),
 
             CrdtEditKind::Deletion {
@@ -296,7 +305,41 @@ impl Replica {
         todo!();
     }
 
-    /// TODO: docs
+    /// Creates a new `Replica` from the initial [`Length`] of your buffer.
+    ///
+    /// Note that if you have multiple peers working on the same document you
+    /// should only use this constructor on the first peer, usually the one
+    /// that starts the collaboration session.
+    ///
+    /// The other peers should get their `Replica` from another `Replica`
+    /// already in the session by either:
+    ///
+    /// a) `clone()`ing it if the collaboration happens all in the same process
+    /// (e.g. a text editor with plugins running on separate threads),
+    ///
+    /// b) serializing it and sending it over the network if the collaboration
+    /// is between different processes or machines.
+    ///
+    /// # Example
+    /// ```
+    /// # use std::thread;
+    /// # use cola::Replica;
+    /// // A text editor initializes a new Replica on the main thread where the
+    /// // buffer is "foo".
+    /// let replica_main = Replica::new(3);
+    ///
+    /// // It then starts a plugin on a separate thread and wants to give it a
+    /// // Replica to keep its buffer synchronized with the one on the main
+    /// // thread. It does *not* call `new()` again, but instead clones the
+    /// // existing Replica and sends it to the new thread.
+    /// let replica_plugin = replica_main.clone();
+    ///
+    /// thread::spawn(move || {
+    ///     // The plugin can now use its Replica to exchange edits with the
+    ///     // main thread.
+    ///     println!("{replica_plugin:?}");
+    /// });
+    /// ```
     #[inline]
     pub fn new(len: Length) -> Self {
         let replica_id = ReplicaId::new();
