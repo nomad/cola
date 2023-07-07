@@ -5,7 +5,39 @@ use crate::*;
 /// TODO: docs
 pub type VersionVector = ReplicaIdMap<Length>;
 
-/// TODO: docs
+/// A CRDT for text.
+///
+/// Like all other text CRDTs it allows multiple peers on a distributed
+/// network to concurrently edit the same text document, making sure that they
+/// all converge to the same final state without relying on any central server
+/// to coordinate the edits.
+///
+/// However, unlike many other CRDTs, a `Replica` doesn't actually store the
+/// text contents itself. This allows to decouple the text buffer from the CRDT
+/// machinery needed to guarantee convergence in the face of concurrency.
+///
+/// Put another way, a `Replica` is a pure CRDT that doesn't know anything
+/// about where the text is actually stored. This is great because it makes it
+/// very easy to use it in conjuction with any text data structure of your
+/// choice: simple `String`s, gap buffers, piece tables, ropes, etc.
+///
+/// When starting a new collaborative editing session, the first peer
+/// initializes its `Replica` via the [`new`](Self::new) method and sends it
+/// over to the other peers.
+///
+/// Then, every time a peer performs an edit on their local buffer they inform
+/// their `Replica` by calling either [`inserted`](Self::inserted) or
+/// [`deleted`](Self::deleted). This produces a [`CrdtEdit`] which can be sent
+/// over to the other peers.
+///
+/// When a peer receives a `CrdtEdit` they can integrate it into their own
+/// `Replica` by calling the [`merge`](Self::merge) method. This produces a
+/// [`TextEdit`] which informs them *where* in their local buffer they should
+/// apply the edit, taking into account all the other edits that have happened
+/// concurrently.
+///
+/// Basically, you tell your `Replica` how your buffer changes, and it tells
+/// you how your buffer *should* change when receiving edits from other peers.
 pub struct Replica {
     /// TODO: docs
     id: ReplicaId,
@@ -243,7 +275,6 @@ impl Replica {
         )
     }
 
-    /// TODO: docs
     #[allow(clippy::len_without_is_empty)]
     #[doc(hidden)]
     pub fn len(&self) -> Length {
