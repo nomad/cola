@@ -76,7 +76,62 @@ impl Replica {
         self.run_tree.average_inode_occupancy()
     }
 
-    /// TODO: docs
+    /// Sometimes the [`merge`](Replica::merge) method is not able to produce a
+    /// `TextEdit` for the given `CrdtEdit` at the time it is called. This is
+    /// usually because the `CrdtEdit` is itself dependent on some context that
+    /// your `Replica` may not have yet.
+    ///
+    /// When this happens, the `Replica` stores the `CrdtEdit` in an internal
+    /// backlog of edits that can't be processed yet, but may be in the future.
+    ///
+    /// This method returns an iterator over all the backlogged edits which are
+    /// now ready to be applied to your buffer.
+    ///
+    /// The [`BackLogged`] iterator yields [`TextEdit`]s. It's very important
+    /// that you apply every `TextEdit` to your buffer in the *exact same*
+    /// order in which they were yielded by the iterator. If you don't your
+    /// buffer could permanently diverge from the other peers.
+    ///
+    /// # Example
+    /// ```
+    /// # use cola::{Replica, TextEdit};
+    /// // The buffer at peer 1 is "ab".
+    /// let mut replica1 = Replica::new(2);
+    ///
+    /// // A second peer joins the session.
+    /// let mut replica2 = replica1.clone();
+    ///
+    /// // Peer 1 inserts 'c', 'd', 'e' and 'f' at the end of the buffer.
+    /// let insert_c = replica1.inserted(2, 1);
+    /// let insert_d = replica1.inserted(3, 1);
+    /// let insert_e = replica1.inserted(4, 1);
+    /// let insert_f = replica1.inserted(5, 1);
+    ///
+    /// // For some reason, the network layer messes up the order of the edits
+    /// // and they get to the second peer in the opposite order. Because each
+    /// // edit depends on the previous one, peer 2 can't merge the insertions
+    /// // of the 'd', 'e' and 'f' until it sees the 'c'.
+    /// let none_f = replica2.merge(insert_f);
+    /// let none_e = replica2.merge(insert_e);
+    /// let none_d = replica2.merge(insert_d);
+    ///
+    /// assert!(none_f.is_none());
+    /// assert!(none_e.is_none());
+    /// assert!(none_d.is_none());
+    ///
+    /// // Finally, peer 2 receives the 'c' and it's able merge it right away.
+    /// let Some(TextEdit::Insertion(offset_c)) = replica2.merge(insert_c);
+    ///
+    /// assert_eq!(offset_c, 2);
+    ///
+    /// // Peer 2 now has all the context it needs to merge the rest of the
+    /// // edits that were previously backlogged.
+    /// let mut backlogged = replica2.backlogged();
+    ///
+    /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(3)));
+    /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(4)));
+    /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(5)));
+    /// ```
     #[inline]
     pub fn backlogged(&mut self) -> BackLogged<'_> {
         BackLogged::from_replica(self)
