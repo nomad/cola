@@ -92,7 +92,31 @@ impl Replica {
         self.into()
     }
 
-    /// TODO: docs
+    /// Informs your `Replica` that you have deleted the characters in the
+    /// given offset range.
+    ///
+    /// This produces a [`CrdtEdit`] which can be sent to all the other peers
+    /// to integrate the deletion into their own `Replica`s.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the start of the range is greater than the end or if the end
+    /// is out of bounds (i.e. greater than the current length of your buffer).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use cola::{Replica, TextEdit};
+    /// // The buffer at peer 1 is "Hello World".
+    /// let mut replica1 = Replica::new(11);
+    ///
+    /// let mut replica2 = replica1.clone();
+    ///
+    /// // Peer 1 deletes "Hello ". This produces a `CrdtEdit` which can be
+    /// // sent to the peer who owns `replica2` to merge the deletion into
+    /// // their buffer.
+    /// let edit: CrdtEdit = replica1.deleted(..6);
+    /// ```
     #[inline]
     pub fn deleted<R>(&mut self, range: R) -> CrdtEdit
     where
@@ -200,7 +224,7 @@ impl Replica {
     /// given offset.
     ///
     /// This produces a [`CrdtEdit`] which can be sent to all the other peers
-    /// to integrate this insertion into their own `Replica`s.
+    /// to integrate the insertion into their own `Replica`s.
     ///
     /// # Panics
     ///
@@ -216,10 +240,10 @@ impl Replica {
     ///
     /// let mut replica2 = replica1.clone();
     ///
-    /// // Peer 1 inserts a single character between the 'a' and the 'b'. You
-    /// // can send the `edit` to the peer who owns `replica2` to merge the
-    /// // insertion into their buffer.
-    /// let edit: CrdtEdit = replica1.inserted(1, 1);
+    /// // Peer 1 inserts two characters between the 'a' and the 'b'. This
+    /// // produces a `CrdtEdit` which can be sent to the peer who owns
+    /// // `replica2` to merge the insertion into their buffer.
+    /// let edit: CrdtEdit = replica1.inserted(1, 2);
     /// ```
     #[inline]
     pub fn inserted(&mut self, at_offset: Length, len: Length) -> CrdtEdit {
