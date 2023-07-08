@@ -101,26 +101,25 @@ impl Replica {
     /// // A second peer joins the session.
     /// let mut replica2 = replica1.clone();
     ///
-    /// // Peer 1 inserts 'c', 'd', 'e' and 'f' at the end of the buffer.
+    /// // Peer 1 inserts 'c', 'd' and 'e' at the end of the buffer.
     /// let insert_c = replica1.inserted(2, 1);
     /// let insert_d = replica1.inserted(3, 1);
     /// let insert_e = replica1.inserted(4, 1);
-    /// let insert_f = replica1.inserted(5, 1);
     ///
     /// // For some reason, the network layer messes up the order of the edits
     /// // and they get to the second peer in the opposite order. Because each
     /// // edit depends on the previous one, peer 2 can't merge the insertions
-    /// // of the 'd', 'e' and 'f' until it sees the 'c'.
-    /// let none_f = replica2.merge(insert_f);
+    /// // of the 'd' and the 'e' until it sees the 'c'.
     /// let none_e = replica2.merge(insert_e);
     /// let none_d = replica2.merge(insert_d);
     ///
-    /// assert!(none_f.is_none());
     /// assert!(none_e.is_none());
     /// assert!(none_d.is_none());
     ///
     /// // Finally, peer 2 receives the 'c' and it's able merge it right away.
-    /// let Some(TextEdit::Insertion(offset_c)) = replica2.merge(insert_c);
+    /// let Some(TextEdit::Insertion(offset_c)) = replica2.merge(insert_c) else {
+    ///     unreachable!()
+    /// };
     ///
     /// assert_eq!(offset_c, 2);
     ///
@@ -130,7 +129,6 @@ impl Replica {
     ///
     /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(3)));
     /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(4)));
-    /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(5)));
     /// ```
     #[inline]
     pub fn backlogged(&mut self) -> BackLogged<'_> {
