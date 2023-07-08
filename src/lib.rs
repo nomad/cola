@@ -1,4 +1,4 @@
-//! cola is a Confict-free Replicated Data Type ([CRDT]) specialized for
+//! cola is a Conflict-free Replicated Data Type ([CRDT]) specialized for
 //! real-time collaborative editing of plain text documents.
 //!
 //! CRDTs can be roughly divided into two categories: state-based and
