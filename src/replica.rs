@@ -28,7 +28,7 @@ pub type VersionVector = ReplicaIdMap<Length>;
 /// Then, every time a peer performs an edit on their local buffer they inform
 /// their `Replica` by calling either [`inserted`](Self::inserted) or
 /// [`deleted`](Self::deleted). This produces a [`CrdtEdit`] which can be sent
-/// over to the other peers.
+/// over to the other peers using the network layer of your choice.
 ///
 /// When a peer receives a `CrdtEdit` they can integrate it into their own
 /// `Replica` by calling the [`merge`](Self::merge) method. This produces a
