@@ -196,6 +196,16 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
+    /// Informs your `Replica` that you have inserted `len` characters at the
+    /// given offset.
+    ///
+    /// This produces a [`CrdtEdit`] which can be sent to all the other peers
+    /// to integrate this insertion into their own `Replica`s.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the offset is out of bounds (i.e. greater than the current
+    /// length of your buffer).
     ///
     /// # Example
     ///
@@ -206,22 +216,11 @@ impl Replica {
     ///
     /// let mut replica2 = replica1.clone();
     ///
-    /// // Peer 1 inserts a '1' between the 'a' and the 'b'.
-    /// let mut insert = replica1.inserted(1, 1);
-    ///
-    /// // At the same time, peer 2 inserts a '2' at the start of the
-    /// // document.
-    /// let _ = replica2.inserted(0, 1);
-    ///
-    /// // Now peer 2 receives the insertion from peer 1. The offset we insert
-    /// // the '1' at should be 2 to account for the '2' that was inserted
-    /// // concurrently.
-    ///
-    /// let Some(TextEdit::Insertion(offset)) = replica2.merge(insert) else {
-    ///     unreachable!();
-    /// };
-    ///
-    /// assert_eq!(offset, 2);
+    /// // Peer 1 inserts a single character between the 'a' and the 'b'. You
+    /// // can send the `edit` to the peer who owns `replica2` to merge the
+    /// // insertion into their buffer.
+    /// let edit: CrdtEdit = replica1.inserted(1, 1);
+    /// ```
     #[inline]
     pub fn inserted(&mut self, at_offset: Length, len: Length) -> CrdtEdit {
         if len == 0 {
