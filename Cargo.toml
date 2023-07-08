@@ -1,9 +1,12 @@
 [package]
-name = "cola"
+name = "cola-crdt"
 version = "0.1.0"
 edition = "2021"
 authors = ["Riccardo Mazzarini <me@noib3.dev>"]
 license = "MIT"
+
+[lib]
+name = "cola"
 
 [features]
 serde = ["dep:serde"]

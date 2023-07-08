@@ -1,12 +1,12 @@
 # 🥤 cola
 
-[![Latest version]](https://crates.io/crates/cola)
+[![Latest version]](https://crates.io/crates/cola-crdt)
 [![CI]](https://github.com/nomad/cola/actions)
-[![Docs]](https://docs.rs/cola)
+[![Docs]](https://docs.rs/cola-crdt)
 
-[Latest version]: https://img.shields.io/crates/v/cola.svg
+[Latest version]: https://img.shields.io/crates/v/cola-crdt.svg
 [CI]: https://github.com/nomad/cola/actions/workflows/ci.yml/badge.svg
-[Docs]: https://docs.rs/cola/badge.svg
+[Docs]: https://docs.rs/cola-crdt/badge.svg
 
 cola is a Conflict-free Replicated Data Type ([CRDT]) specialized for real-time
 collaborative editing of plain text documents.
@@ -17,6 +17,33 @@ without relying on any central server to coordinate the edits.
 
 Check out [the docs][docs] to learn about cola's API, or [this blog post][cola]
 for a deeper dive into cola's design and implementation.
+
+# A note on the crate's naming choices
+
+cola's `package.name` is `cola-crdt`, while its `lib.name` is simply `cola`.
+This is because the package name has to be unique in order to be published to
+[crates.io](crates.io), but unfortunately `cola` is already taken by a crate
+squatter.
+
+What this means practically for you, the user of the library, is that you
+should import cola as `cola-crdt` in your `Cargo.toml`, and `use` it as
+`cola` in your source code.
+
+For example:
+
+```toml
+# `Cargo.toml`
+cola-crdt = { version = "0.1", features = ["serde"] }
+```
+
+```rust
+// `main.rs`
+use cola::Replica;
+
+fn main() {
+    println!("{:?}", Replica::default());
+}
+```
 
 [CRDT]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
 [docs]: https://docs.rs/cola
