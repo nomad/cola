@@ -1,38 +1,42 @@
 //! cola is a Confict-free Replicated Data Type ([CRDT]) specialized for
 //! real-time collaborative editing of plain text documents.
 //!
-//! CRDTs can be roughly divided into two categories: state-based CRDTs and
-//! operation-based CRDTs. cola falls in the latter category.
+//! CRDTs can be roughly divided into two categories: state-based and
+//! operation-based. cola falls in the latter category.
 //!
-//! The basic idea behind an Operation-based CRDT (also known as *Commutative*
-//! Replicated Data Type or CmRDT) is to design the core data structure and
-//! the operations applied to it in such a way that they *commute*, i.e. the
-//! order in which they're applied doesn't matter.
+//! The basic idea behind an Operation-based CRDT (also known as a
+//! *Commutative* Replicated Data Type or CmRDT) is to design the core data
+//! structure and the operations applied to it in such a way that they
+//! *commute*, i.e. the order in which they're applied doesn't matter.
 //!
-//! By doing this we ensure that the final state of the data structure is only
-//! a function of its initial state and the *set* of operations applied to it,
-//! but *not* the order in which they were applied.
+//! Commutativity makes the final state of the data structure only a function
+//! of its initial state and the *set* of operations applied to it, but *not*
+//! of the order in which they were applied.
 //!
 //! In turn, this ensures *eventual consistency*, meaning that once all peers
 //! have received all operations from all other peers they're guaranteed to
 //! converge to the same final state.
 //!
-//! For a deeper dive into cola's design and implementation, check out [this
-//! blog post][cola].
+//! In cola, the core data structure which represents the state of the document
+//! at each peer is the [`Replica`], and the operations which the peers
+//! exchange to communicate their local edits are represented by [`CrdtEdit`]s.
 //!
-//! # cola's API
+//! If you're new to this crate, reading the docs for those two structs would
+//! be a good place to start.
 //!
-//! In cola the core data structure which is kept in sync across all peers is
-//! the [`Replica`], and the operation which the peers exchange to communicate
-//! their edits is the [`CrdtEdit`].
+//! For a deeper dive into cola's design and implementation you can check out
+//! [this blog post][cola].
 //!
-//! If you're new to cola reading the docs for those two structs would be a
-//! good place to start.
+//! # Code tour of cola's API
+//!
+//! ```
+//! # use cola::{Replica, TextEdit};
+//! ```
 //!
 //! # Feature flags
 //!
 //! - `serde`: enables the [`Serialize`] and [`Deserialize`] impls for
-//! [`Replica`] and [`CrdtEdit`] (disabled by default).
+//! `Replica` and `CrdtEdit` (disabled by default).
 //!
 //! [CRDT]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
 //! [cola]: https://www.nomad.foo/blog/cola

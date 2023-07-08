@@ -7,11 +7,11 @@ use crate::*;
 /// [`inserted`](crate::Replica::inserted) on the [`Replica`](crate::Replica)
 /// at the peer that originally created the edit, and its only purpose is to be
 /// [`merge`](crate::Replica::merge)d by all the other
-/// [`Replica`](crate::Replica)s in the same network to create [`TextEdit`]s,
-/// which can then be applied to their local text buffers.
+/// [`Replica`](crate::Replica)s in the same editing session to create
+/// [`TextEdit`]s, which can then be applied to their local text buffers.
 ///
-/// See the [crate-level](crate) documentation or the documentation of any of
-/// the methods mentioned above for more information.
+/// See the the documentation of any of the methods mentioned above for more
+/// information.
 #[derive(Debug, Clone)]
 pub struct CrdtEdit {
     kind: CrdtEditKind,
