@@ -9,8 +9,8 @@ pub type VersionVector = ReplicaIdMap<Length>;
 ///
 /// Like all other text CRDTs it allows multiple peers on a distributed
 /// network to concurrently edit the same text document, making sure that they
-/// all converge to the same final state without relying on any central server
-/// to coordinate the edits.
+/// all converge to the same final state without relying on a central server to
+/// coordinate the edits.
 ///
 /// However, unlike many other CRDTs, a `Replica` doesn't actually store the
 /// text contents itself. This allows to decouple the text buffer from the CRDT
