@@ -51,7 +51,7 @@ pub enum TextEdit {
     /// // Now peer 2 receives the deletion from peer 1. Since the previous
     /// // insertion was outside of the deleted region the latter is still
     /// // contiguous at this peer.
-    /// let Some(TextEdit::ContiguousDeletion(range)) = replica2.merge(deletion)
+    /// let Some(TextEdit::ContiguousDeletion(range)) = replica2.merge(&deletion)
     /// else {
     ///     unreachable!();
     /// };
@@ -93,7 +93,7 @@ pub enum TextEdit {
     /// // Now peer 2 receives the deletion from peer 1. Since the previous
     /// // insertion was inside the deleted range, the latter has now been
     /// // split into two separate ranges.
-    /// let Some(TextEdit::SplitDeletion(ranges)) = replica2.merge(deletion)
+    /// let Some(TextEdit::SplitDeletion(ranges)) = replica2.merge(&deletion)
     /// else {
     ///     unreachable!();
     /// };

@@ -55,8 +55,8 @@ impl CrdtEdit {
     }
 
     #[inline]
-    pub(super) fn kind(self) -> CrdtEditKind {
-        self.kind
+    pub(super) fn kind(&self) -> &CrdtEditKind {
+        &self.kind
     }
 
     #[inline]

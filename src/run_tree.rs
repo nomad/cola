@@ -536,7 +536,7 @@ impl EditRun {
 }
 
 /// TODO: docs
-#[derive(Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Anchor {
     /// TODO: docs
     replica_id: ReplicaId,

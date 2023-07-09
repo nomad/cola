@@ -79,7 +79,7 @@ impl Replica {
     /// Sometimes the [`merge`](Replica::merge) method is not able to produce a
     /// `TextEdit` for the given `CrdtEdit` at the time it is called. This is
     /// usually because the `CrdtEdit` is itself dependent on some context that
-    /// your `Replica` may not have yet.
+    /// the `Replica` may not have yet.
     ///
     /// When this happens, the `Replica` stores the `CrdtEdit` in an internal
     /// backlog of edits that can't be processed yet, but may be in the future.
@@ -145,8 +145,8 @@ impl Replica {
         self.into()
     }
 
-    /// Informs your `Replica` that you have deleted the characters in the
-    /// given offset range.
+    /// Informs the `Replica` that you have deleted the characters in the given
+    /// offset range.
     ///
     /// This produces a [`CrdtEdit`] which can be sent to all the other peers
     /// to integrate the deletion into their own `Replica`s.
@@ -273,7 +273,7 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
-    /// Informs your `Replica` that you have inserted `len` characters at the
+    /// Informs the `Replica` that you have inserted `len` characters at the
     /// given offset.
     ///
     /// This produces a [`CrdtEdit`] which can be sent to all the other peers
@@ -357,9 +357,72 @@ impl Replica {
         self.run_tree.len()
     }
 
-    /// TODO: docs
+    /// Merges a [`CrdtEdit`] created by another peer into this `Replica`,
+    /// optionally producing a [`TextEdit`] which can be applied to your
+    /// buffer.
+    ///
+    /// There can be multiple reasons why this method returns `None`, for
+    /// example:
+    ///
+    /// - the `CrdtEdit` is a no-op, like inserting zero characters or deleting
+    /// an empty range;
+    ///
+    /// - the `CrdtEdit` was created by the same `Replica` that's now trying to
+    /// merge it (i.e. you're trying to merge your own edits);
+    ///
+    /// - the same `CrdtEdit` has already been merged by this `Replica`
+    /// (merging the same edit multiple times is idempotent);
+    ///
+    /// - the `CrdtEdit` depends on some context that the `Replica` doesn't yet
+    /// have (see the [`backlogged`](Replica::backlogged) method which handles
+    /// this case);
+    ///
+    /// - etc.
+    ///
+    /// If you do get a `Some` value, it's very important to apply the returned
+    /// `TextEdit` to your buffer *before* processing any other edits (both
+    /// remote and local). This is because `TextEdit`s refer to the state of
+    /// the buffer at the time they were created. If the state changes before
+    /// you apply a `TextEdit`, its coordinates might no longer be valid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use cola::{Replica, TextEdit};
+    /// // Peer 1 starts with a buffer containing "abcd" and sends it over to a
+    /// // second peer.
+    /// let mut replica1 = Replica::new(4);
+    /// let mut replica2 = replica1.clone();
+    ///
+    /// // Peer 1 inserts a character between the 'b' and the 'c'.
+    /// let insertion_at_1 = replica1.inserted(2, 1);
+    ///
+    /// // Concurrently with the insertion, peer 2 deletes the 'b'.
+    /// let deletion_at_2 = replica2.deleted(1..2);
+    ///
+    /// // The two peers exchange their edits.
+    ///
+    /// // The deletion arrives at the first peer. There have not been any
+    /// // insertions or deletions *before* the 'b', so its offset range should
+    /// // still be 1..2.
+    /// let Some(TextEdit::ContiguousDeletion(range_b)) = replica1.merge(&deletion_at_2) else {
+    ///     unreachable!();
+    /// }
+    ///
+    /// assert_eq!(range_b, 1..2);
+    ///
+    /// // Finally, the insertion arrives at the second peer. Here the 'b' has
+    /// // been deleted, so the offset at which we should insert the new
+    /// // character is not 2, but 1. This is because the *intent* of the first
+    /// // peer was to insert the character between the 'b' and the 'c'.
+    /// let Some(TextEdit::Insertion(offset)) = replica2.merge(&insertion_at_1) else {
+    ///     unreachable!();
+    /// };
+    ///
+    /// assert_eq!(offset, 1);
+    /// ```
     #[inline]
-    pub fn merge(&mut self, crdt_edit: CrdtEdit) -> Option<TextEdit> {
+    pub fn merge(&mut self, crdt_edit: &CrdtEdit) -> Option<TextEdit> {
         match crdt_edit.kind() {
             CrdtEditKind::Insertion {
                 anchor,
@@ -367,7 +430,7 @@ impl Replica {
                 len,
                 lamport_ts,
                 ..
-            } => self.merge_insertion(anchor, replica_id, len, lamport_ts),
+            } => self.merge_insertion(*anchor, *replica_id, *len, *lamport_ts),
 
             CrdtEditKind::Deletion {
                 start,
@@ -376,10 +439,10 @@ impl Replica {
                 character_ts,
                 version_vector,
             } => self.merge_deletion(
-                start,
-                end,
-                replica_id,
-                character_ts,
+                *start,
+                *end,
+                *replica_id,
+                *character_ts,
                 version_vector,
             ),
 
@@ -407,7 +470,7 @@ impl Replica {
         _end: Anchor,
         _replica: ReplicaId,
         _character_ts: Length,
-        _version_vector: VersionVector,
+        _version_vector: &VersionVector,
     ) -> Option<TextEdit> {
         todo!();
     }
@@ -421,7 +484,7 @@ impl Replica {
     /// The other peers should get their `Replica` from another `Replica`
     /// already in the session by either:
     ///
-    /// a) `clone()`ing it if the collaboration happens all in the same process
+    /// a) `clone`ing it if the collaboration happens all in the same process
     /// (e.g. a text editor with plugins running on separate threads),
     ///
     /// b) serializing it and sending it over the network if the collaboration
