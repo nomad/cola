@@ -59,6 +59,7 @@ mod replica;
 mod replica_id;
 mod run_indices;
 mod run_tree;
+mod text;
 mod text_edit;
 
 #[cfg(feature = "serde")]
@@ -75,6 +76,7 @@ pub use replica_id::ReplicaId;
 use replica_id::ReplicaIdMap;
 use run_indices::RunIndices;
 use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
+pub use text::Text;
 pub use text_edit::TextEdit;
 
 /// The length of a piece of text according to some user-defined metric.
@@ -174,7 +176,7 @@ mod range {
     use core::fmt::{Debug, Formatter, Result as FmtResult};
     use core::ops::{Add, Range as StdRange, Sub};
 
-    #[derive(Clone, Copy, PartialEq, Eq)]
+    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
     pub struct Range<T> {
         pub start: T,
         pub end: T,
@@ -190,6 +192,13 @@ mod range {
         #[inline]
         fn from(range: StdRange<T>) -> Self {
             Range { start: range.start, end: range.end }
+        }
+    }
+
+    impl<T> From<Range<T>> for StdRange<T> {
+        #[inline]
+        fn from(range: Range<T>) -> Self {
+            StdRange { start: range.start, end: range.end }
         }
     }
 

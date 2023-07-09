@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-use crate::Length;
+use crate::{Length, Text};
 
 /// A plain text edit to be applied to a buffer.
 ///
@@ -19,7 +19,7 @@ pub enum TextEdit {
     /// You, as the user of the library, are responsible for sending the text
     /// from the peer that performed the insertion to the peer that received
     /// this enum using the transport layer of your choice.
-    Insertion(Length),
+    Insertion(Length, Text),
 
     /// This variant represents an offset range to be deleted.
     ///
