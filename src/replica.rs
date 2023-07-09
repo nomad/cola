@@ -110,14 +110,15 @@ impl Replica {
     /// // and they get to the second peer in the opposite order. Because each
     /// // edit depends on the previous one, peer 2 can't merge the insertions
     /// // of the 'd' and the 'e' until it sees the 'c'.
-    /// let none_e = replica2.merge(insert_e);
-    /// let none_d = replica2.merge(insert_d);
+    /// let none_e = replica2.merge(&insert_e);
+    /// let none_d = replica2.merge(&insert_d);
     ///
     /// assert!(none_e.is_none());
     /// assert!(none_d.is_none());
     ///
     /// // Finally, peer 2 receives the 'c' and it's able merge it right away.
-    /// let Some(TextEdit::Insertion(offset_c)) = replica2.merge(insert_c) else {
+    /// let Some(TextEdit::Insertion(offset_c, _)) = replica2.merge(&insert_c)
+    /// else {
     ///     unreachable!()
     /// };
     ///
@@ -127,8 +128,8 @@ impl Replica {
     /// // edits that were previously backlogged.
     /// let mut backlogged = replica2.backlogged();
     ///
-    /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(3)));
-    /// assert_eq!(backlogged.next(), Some(TextEdit::Insertion(4)));
+    /// assert!(matches!(backlogged.next(), Some(TextEdit::Insertion(3, _))));
+    /// assert!(matches!(backlogged.next(), Some(TextEdit::Insertion(4, _))));
     /// ```
     #[inline]
     pub fn backlogged(&mut self) -> BackLogged<'_> {
@@ -163,11 +164,7 @@ impl Replica {
     /// // The buffer at peer 1 is "Hello World".
     /// let mut replica1 = Replica::new(11);
     ///
-    /// let mut replica2 = replica1.clone();
-    ///
-    /// // Peer 1 deletes "Hello ". This produces a `CrdtEdit` which can be
-    /// // sent to the peer who owns `replica2` to merge the deletion into
-    /// // their buffer.
+    /// // Peer 1 deletes "Hello ".
     /// let edit: CrdtEdit = replica1.deleted(..6);
     /// ```
     #[inline]
@@ -297,11 +294,7 @@ impl Replica {
     /// // The buffer at peer 1 is "ab".
     /// let mut replica1 = Replica::new(2);
     ///
-    /// let mut replica2 = replica1.clone();
-    ///
-    /// // Peer 1 inserts two characters between the 'a' and the 'b'. This
-    /// // produces a `CrdtEdit` which can be sent to the peer who owns
-    /// // `replica2` to merge the insertion into their buffer.
+    /// // Peer 1 inserts two characters between the 'a' and the 'b'.
     /// let edit: CrdtEdit = replica1.inserted(1, 2);
     /// ```
     #[inline]
@@ -425,7 +418,7 @@ impl Replica {
     /// // been deleted, so the offset at which we should insert the new
     /// // character is not 2, but 1. This is because the *intent* of the first
     /// // peer was to insert the character between the 'b' and the 'c'.
-    /// let Some(TextEdit::Insertion(offset)) = replica2.merge(&insertion_at_1) else {
+    /// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insertion_at_1) else {
     ///     unreachable!();
     /// };
     ///
