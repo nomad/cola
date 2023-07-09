@@ -10,15 +10,16 @@ use crate::{Length, Text};
 /// more.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TextEdit {
-    /// This variant represents the offset at which to perform an insertion.
+    /// This variant represents the offset at which to perform an insertion and
+    /// the corresponding `Text`.
     ///
-    /// Note that this variant doesn't actually store the text to be inserted
-    /// (nor does a [`Replica`](crate::Replica) ask for it when calling
-    /// [`inserted`](crate::Replica::inserted)).
+    /// Note that this variant doesn't actually store the text string to be
+    /// inserted into your buffer (nor does a [`Replica`](crate::Replica) ask
+    /// for it when calling [`inserted`](crate::Replica::inserted)).
     ///
-    /// You, as the user of the library, are responsible for sending the text
-    /// from the peer that performed the insertion to the peer that received
-    /// this enum using the transport layer of your choice.
+    /// You, as the user of the library, are responsible for sending the
+    /// inserted contents from the peer that performed the insertion to the
+    /// peer that received this enum using the transport layer of your choice.
     Insertion(Length, Text),
 
     /// This variant represents an offset range to be deleted.
