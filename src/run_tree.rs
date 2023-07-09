@@ -177,18 +177,16 @@ impl RunTree {
     pub fn insert(
         &mut self,
         offset: Length,
-        run_len: Length,
-        character_ts: Length,
+        text: Text,
         insertion_clock: &mut InsertionClock,
         lamport_clock: &mut LamportClock,
     ) -> (Anchor, InsertionOutcome) {
-        debug_assert!(run_len > 0);
+        debug_assert!(text.range.len() > 0);
 
         if offset == 0 {
             let run = EditRun::new(
                 Anchor::origin(),
-                self.this_id,
-                (character_ts..character_ts + run_len).into(),
+                text,
                 insertion_clock.next(),
                 lamport_clock.next(),
             );
@@ -215,10 +213,10 @@ impl RunTree {
             anchor = Anchor::new(run.replica_id(), run.end());
 
             if run.len() == offset
-                && run.replica_id() == self.this_id
-                && run.end() == character_ts
+                && run.replica_id() == text.inserted_by()
+                && run.end() == text.range.start
             {
-                run.extend(run_len);
+                run.extend(text.range.len());
                 return (None, None);
             }
 
@@ -226,8 +224,7 @@ impl RunTree {
 
             let new_run = EditRun::new(
                 anchor.clone(),
-                self.this_id,
-                (character_ts..character_ts + run_len).into(),
+                text,
                 insertion_clock.next(),
                 lamport_clock.next(),
             );
@@ -348,10 +345,7 @@ pub struct EditRun {
     inserted_at: Anchor,
 
     /// TODO: docs
-    inserted_by: ReplicaId,
-
-    /// TODO: docs
-    character_range: Range<Length>,
+    text: Text,
 
     /// TODO: docs
     insertion_ts: InsertionTimestamp,
@@ -367,9 +361,8 @@ impl core::fmt::Debug for EditRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:x}.{:?} |@ {:?} - L({}) I({}){}",
-            self.inserted_by.as_u32(),
-            self.character_range,
+            "{:?} |@ {:?} - L({}) I({}){}",
+            self.text,
             self.inserted_at,
             self.lamport_ts,
             self.insertion_ts,
@@ -402,17 +395,17 @@ impl PartialOrd for EditRun {
 impl EditRun {
     #[inline(always)]
     pub fn end(&self) -> Length {
-        self.range().end
+        self.text.range.end
     }
 
     #[inline(always)]
     fn end_mut(&mut self) -> &mut Length {
-        &mut self.range_mut().end
+        &mut self.text.range.end
     }
 
     #[inline(always)]
     pub fn extend(&mut self, extend_by: Length) {
-        self.character_range.end += extend_by;
+        self.text.range.end += extend_by;
     }
 
     #[inline]
@@ -481,34 +474,16 @@ impl EditRun {
     #[inline]
     pub fn new(
         inserted_at: Anchor,
-        inserted_by: ReplicaId,
-        character_range: Range<Length>,
+        text: Text,
         insertion_ts: InsertionTimestamp,
         lamport_ts: LamportTimestamp,
     ) -> Self {
-        Self {
-            inserted_at,
-            inserted_by,
-            character_range,
-            insertion_ts,
-            lamport_ts,
-            is_deleted: false,
-        }
-    }
-
-    #[inline(always)]
-    fn range(&self) -> &Range<Length> {
-        &self.character_range
-    }
-
-    #[inline(always)]
-    fn range_mut(&mut self) -> &mut Range<Length> {
-        &mut self.character_range
+        Self { inserted_at, text, insertion_ts, lamport_ts, is_deleted: false }
     }
 
     #[inline(always)]
     pub fn replica_id(&self) -> ReplicaId {
-        self.inserted_by
+        self.text.inserted_by()
     }
 
     /// TODO: docs
@@ -518,20 +493,20 @@ impl EditRun {
             None
         } else {
             let mut split = self.clone();
-            split.character_range.start += at_offset;
-            self.character_range.end = split.character_range.start;
+            split.text.range.start += at_offset;
+            self.text.range.end = split.text.range.start;
             Some(split)
         }
     }
 
     #[inline(always)]
     pub fn start(&self) -> Length {
-        self.range().start
+        self.text.range.start
     }
 
     #[inline(always)]
     fn start_mut(&mut self) -> &mut Length {
-        &mut self.range_mut().start
+        &mut self.text.range.start
     }
 }
 

@@ -310,10 +310,14 @@ impl Replica {
             return CrdtEdit::no_op();
         }
 
+        let text = Text::new(
+            self.id,
+            (self.character_clock..self.character_clock + len).into(),
+        );
+
         let (anchor, outcome) = self.run_tree.insert(
             at_offset,
-            len,
-            self.character_clock,
+            text,
             &mut self.insertion_clock,
             &mut self.lamport_clock,
         );
@@ -524,10 +528,11 @@ impl Replica {
 
         let mut lamport_clock = LamportClock::new();
 
+        let initial_text = Text::new(replica_id, (0..len).into());
+
         let origin_run = EditRun::new(
             Anchor::origin(),
-            replica_id,
-            (0..len).into(),
+            initial_text,
             insertion_clock.next(),
             lamport_clock.next(),
         );

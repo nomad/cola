@@ -3,10 +3,16 @@ use core::ops::Range;
 use crate::{Length, ReplicaId};
 
 /// TODO: docs
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Text {
-    inserted_by: ReplicaId,
-    range: crate::Range<Length>,
+    pub(crate) inserted_by: ReplicaId,
+    pub(crate) range: crate::Range<Length>,
+}
+
+impl core::fmt::Debug for Text {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:x}.{:?}", self.inserted_by.as_u32(), self.range)
+    }
 }
 
 impl Text {
@@ -17,7 +23,7 @@ impl Text {
     }
 
     #[inline]
-    pub(crate) fn _new(
+    pub(crate) fn new(
         inserted_by: ReplicaId,
         range: crate::Range<Length>,
     ) -> Self {
