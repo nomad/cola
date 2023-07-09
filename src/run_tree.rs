@@ -10,9 +10,6 @@ const RUN_TREE_ARITY: usize = 32;
 pub struct RunTree {
     /// TODO: docs
     gtree: Gtree<RUN_TREE_ARITY, EditRun>,
-
-    /// TODO: docs
-    this_id: ReplicaId,
 }
 
 impl RunTree {
@@ -198,7 +195,7 @@ impl RunTree {
             return (Anchor::origin(), outcome);
         }
 
-        let mut split_id = self.this_id;
+        let mut split_id = ReplicaId::zero();
 
         let mut split_insertion = 0;
 
@@ -263,12 +260,9 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn new(
-        this_id: ReplicaId,
-        first_run: EditRun,
-    ) -> (Self, LeafIdx<EditRun>) {
+    pub fn new(first_run: EditRun) -> (Self, LeafIdx<EditRun>) {
         let (gtree, idx) = Gtree::new(first_run);
-        (Self { this_id, gtree }, idx)
+        (Self { gtree }, idx)
     }
 }
 

@@ -537,7 +537,7 @@ impl Replica {
             lamport_clock.next(),
         );
 
-        let (run_tree, origin_idx) = RunTree::new(replica_id, origin_run);
+        let (run_tree, origin_idx) = RunTree::new(origin_run);
 
         let run_indices = RunIndices::new(replica_id, origin_idx, len);
 
