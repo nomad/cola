@@ -4,7 +4,18 @@ use std::collections::HashMap;
 pub type ReplicaIdMap<T> =
     HashMap<ReplicaId, T, BuildHasherDefault<ReplicaIdHasher>>;
 
-/// TODO: docs
+/// A unique[^unique] identifier for a `Replica`.
+///
+/// Internally this is just a 64-bit integer that is randomly-generated every
+/// time a `Replica` is created via the [`new`](crate::Replica::new) method,
+/// `clone`d or `Deserialize`d.
+///
+/// [^unique]: you'd have to have almost [200k peers][table] in the same
+/// editing session to reach a one-in-a-billion chance of a single collision,
+/// which is more than good enough for the kind of use cases this library is
+/// designed for.
+///
+/// [table]: https://en.wikipedia.org/wiki/Birthday_problem#Probability_table
 #[derive(Copy, Clone, PartialEq, PartialOrd, Ord)]
 pub struct ReplicaId(u64);
 
@@ -25,18 +36,18 @@ impl core::hash::Hash for ReplicaId {
 
 impl ReplicaId {
     #[inline]
-    pub fn as_u32(self) -> u32 {
+    pub(crate) fn as_u32(self) -> u32 {
         self.0 as u32
     }
 
     #[inline]
-    pub fn as_u64(self) -> u64 {
+    pub(crate) fn as_u64(self) -> u64 {
         self.0
     }
 
     /// Creates a new, randomly generated [`ReplicaId`].
     #[inline]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(rand::random())
     }
 
@@ -45,7 +56,7 @@ impl ReplicaId {
     /// This is used to form the [`EditId`] of the first edit run and should
     /// never be used in any of the following user-generated insertion.
     #[inline]
-    pub const fn zero() -> Self {
+    pub(crate) const fn zero() -> Self {
         Self(0)
     }
 }

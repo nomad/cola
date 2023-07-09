@@ -273,6 +273,12 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
+    /// Returns the id of the `Replica`.
+    #[inline]
+    pub fn id(&self) -> ReplicaId {
+        self.id
+    }
+
     /// Informs the `Replica` that you have inserted `len` characters at the
     /// given offset.
     ///
