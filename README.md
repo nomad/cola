@@ -1,11 +1,11 @@
 # 🥤 cola
 
-[![Latest version]](https://crates.io/crates/cola-crdt)
 [![CI]](https://github.com/nomad/cola/actions)
+[![Latest version]](https://crates.io/crates/cola-crdt)
 [![Docs badge]][docs]
 
-[Latest version]: https://img.shields.io/crates/v/cola-crdt.svg
 [CI]: https://github.com/nomad/cola/actions/workflows/ci.yml/badge.svg
+[Latest version]: https://img.shields.io/crates/v/cola-crdt.svg
 [Docs badge]: https://docs.rs/cola-crdt/badge.svg
 
 cola is a Conflict-free Replicated Data Type specialized for real-time
