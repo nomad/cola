@@ -21,9 +21,10 @@ fn test_trace(trace: &traces::TestData) {
             }
         }
 
-        if i == 0 {
-            assert_eq!(replica.len(), trace.end_content.len() as Length);
-        }
+        assert_eq!(
+            replica.len(),
+            (trace.end_content.len() * (i + 1)) as Length
+        );
     }
 }
 
