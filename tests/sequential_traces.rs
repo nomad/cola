@@ -1,7 +1,9 @@
 use cola::{Length, Replica};
-use traces::TestPatch;
+use traces::{TestData, TestPatch};
 
-fn test_trace(trace: &traces::TestData) {
+fn test_trace(trace: &TestData) {
+    let trace = trace.chars_to_bytes();
+
     let mut replica = Replica::new(trace.start_content.len() as Length);
 
     for i in 0..1 {
@@ -30,20 +32,20 @@ fn test_trace(trace: &traces::TestData) {
 
 #[test]
 fn trace_automerge() {
-    test_trace(&traces::automerge().chars_to_bytes());
+    test_trace(&traces::automerge());
 }
 
 #[test]
 fn trace_rustcode() {
-    test_trace(&traces::rustcode().chars_to_bytes());
+    test_trace(&traces::rustcode());
 }
 
 #[test]
 fn trace_seph_blog() {
-    test_trace(&traces::seph_blog().chars_to_bytes());
+    test_trace(&traces::seph_blog());
 }
 
 #[test]
 fn trace_sveltecomponent() {
-    test_trace(&traces::sveltecomponent().chars_to_bytes());
+    test_trace(&traces::sveltecomponent());
 }
