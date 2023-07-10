@@ -1,0 +1,10 @@
+[package]
+name = "traces"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+crdt-testdata = { git = "https://github.com/josephg/jumprope-rs" }
+flate2 = { version = "1.0", features = ["zlib-ng-compat"], default-features = false }
+serde_json = "1.0"
