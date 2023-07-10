@@ -18,7 +18,7 @@ without relying on a central server to coordinate the edits.
 Check out [the docs][docs] to learn about cola's API, or [this blog post][cola]
 for a deeper dive into its design and implementation.
 
-# A note on the crate's naming choices
+# A note on the crate's naming scheme
 
 cola's `package.name` is `cola-crdt`, while its `lib.name` is simply `cola`.
 This is because the package name has to be unique in order to be published to
