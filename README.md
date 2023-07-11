@@ -32,6 +32,7 @@ For example:
 
 ```toml
 # Cargo.toml
+[dependencies]
 cola-crdt = "0.1"
 ```
 
@@ -40,7 +41,7 @@ cola-crdt = "0.1"
 use cola::Replica;
 
 fn main() {
-    println!("{:?}", Replica::default());
+    println!("{:?}", Replica::new(0, 0));
 }
 ```
 
