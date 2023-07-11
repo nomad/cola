@@ -536,17 +536,17 @@ impl Replica {
     /// });
     /// ```
     #[inline]
-    pub fn new<Id>(replica_id: Id, len: Length) -> Self
+    pub fn new<Id>(id: Id, len: Length) -> Self
     where
         Id: Into<ReplicaId>,
     {
-        let replica_id = replica_id.into();
+        let id = id.into();
 
         let mut insertion_clock = InsertionClock::new();
 
         let mut lamport_clock = LamportClock::new();
 
-        let initial_text = Text::new(replica_id, (0..len).into());
+        let initial_text = Text::new(id, (0..len).into());
 
         let origin_run = EditRun::new(
             Anchor::origin(),
@@ -557,10 +557,10 @@ impl Replica {
 
         let (run_tree, origin_idx) = RunTree::new(origin_run);
 
-        let run_indices = RunIndices::new(replica_id, origin_idx, len);
+        let run_indices = RunIndices::new(id, origin_idx, len);
 
         Self {
-            id: replica_id,
+            id,
             run_tree,
             run_indices,
             character_clock: len,
