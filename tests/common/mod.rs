@@ -1,9 +1,8 @@
 use std::fmt::Debug;
 use std::ops::Range;
 
-use cola::{CrdtEdit, Length, TextEdit};
+use cola::{CrdtEdit, Length, ReplicaId, TextEdit};
 
-#[derive(Clone)]
 pub struct Replica {
     pub buffer: String,
     pub crdt: cola::Replica,
@@ -40,6 +39,10 @@ impl Replica {
         self.crdt.deleted(byte_range.start as Length..byte_range.end as Length)
     }
 
+    pub fn fork(&self, id: impl Into<ReplicaId>) -> Self {
+        Self { buffer: self.buffer.clone(), crdt: self.crdt.fork(id) }
+    }
+
     pub fn insert<T: Into<String>>(
         &mut self,
         byte_offset: usize,
@@ -59,9 +62,9 @@ impl Replica {
         }
     }
 
-    pub fn new<T: Into<String>>(text: T) -> Self {
+    pub fn new<T: Into<String>>(id: impl Into<ReplicaId>, text: T) -> Self {
         let buffer = text.into();
-        let crdt = cola::Replica::new(buffer.len() as Length);
+        let crdt = cola::Replica::new(id, buffer.len() as Length);
         Self { buffer, crdt }
     }
 }
@@ -70,11 +73,11 @@ impl traces::Crdt for Replica {
     type EDIT = CrdtEdit;
 
     fn from_str(s: &str) -> Self {
-        Self::new(s)
+        Self::new(rand::random::<u64>(), s)
     }
 
     fn fork(&self) -> Self {
-        self.clone()
+        self.fork(rand::random::<u64>())
     }
 
     fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT {

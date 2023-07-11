@@ -21,7 +21,7 @@ fn bench(
     group.bench_function(name, |b| {
         b.iter(|| {
             let mut replica =
-                Replica::new(trace.start_content().len() as Length);
+                Replica::new(0, trace.start_content().len() as Length);
 
             for (start, end, text) in trace.edits() {
                 let start = start as Length;

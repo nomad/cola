@@ -96,10 +96,10 @@ impl Replica {
     /// ```
     /// # use cola::{Replica, TextEdit};
     /// // The buffer at peer 1 is "ab".
-    /// let mut replica1 = Replica::new(2);
+    /// let mut replica1 = Replica::new(1, 2);
     ///
     /// // A second peer joins the session.
-    /// let mut replica2 = replica1.clone();
+    /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 inserts 'c', 'd' and 'e' at the end of the buffer.
     /// let insert_c = replica1.inserted(2, 1);
@@ -162,7 +162,7 @@ impl Replica {
     /// ```
     /// # use cola::{Replica, TextEdit};
     /// // The buffer at peer 1 is "Hello World".
-    /// let mut replica1 = Replica::new(11);
+    /// let mut replica1 = Replica::new(1, 11);
     ///
     /// // Peer 1 deletes "Hello ".
     /// let edit: CrdtEdit = replica1.deleted(..6);
@@ -270,6 +270,28 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
+    /// TODO: docs
+    #[inline]
+    pub fn fork<Id>(&self, new_id: Id) -> Self
+    where
+        Id: Into<ReplicaId>,
+    {
+        let mut lamport_clock = self.lamport_clock;
+
+        lamport_clock.next();
+
+        Self {
+            id: new_id.into(),
+            run_tree: self.run_tree.clone(),
+            character_clock: 0,
+            run_indices: self.run_indices.clone(),
+            insertion_clock: InsertionClock::new(),
+            lamport_clock,
+            backlog: self.backlog.clone(),
+            version_vector: self.version_vector.clone(),
+        }
+    }
+
     /// Returns the id of the `Replica`.
     #[inline]
     pub fn id(&self) -> ReplicaId {
@@ -292,7 +314,7 @@ impl Replica {
     /// ```
     /// # use cola::{Replica, TextEdit};
     /// // The buffer at peer 1 is "ab".
-    /// let mut replica1 = Replica::new(2);
+    /// let mut replica1 = Replica::new(1, 2);
     ///
     /// // Peer 1 inserts two characters between the 'a' and the 'b'.
     /// let edit: CrdtEdit = replica1.inserted(1, 2);
@@ -394,8 +416,8 @@ impl Replica {
     /// # use cola::{Replica, TextEdit};
     /// // Peer 1 starts with a buffer containing "abcd" and sends it over to a
     /// // second peer.
-    /// let mut replica1 = Replica::new(4);
-    /// let mut replica2 = replica1.clone();
+    /// let mut replica1 = Replica::new(1, 4);
+    /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 inserts a character between the 'b' and the 'c'.
     /// let insertion_at_1 = replica1.inserted(2, 1);
@@ -487,7 +509,7 @@ impl Replica {
     /// The other peers should get their `Replica` from another `Replica`
     /// already in the session by either:
     ///
-    /// a) `clone`ing it if the collaboration happens all in the same process
+    /// a) `forking`ing it if the collaboration happens all in the same process
     /// (e.g. a text editor with plugins running on separate threads),
     ///
     /// b) serializing it and sending it over the network if the collaboration
@@ -499,13 +521,13 @@ impl Replica {
     /// # use cola::Replica;
     /// // A text editor initializes a new Replica on the main thread where the
     /// // buffer is "foo".
-    /// let replica_main = Replica::new(3);
+    /// let replica_main = Replica::new(0, 3);
     ///
     /// // It then starts a plugin on a separate thread and wants to give it a
     /// // Replica to keep its buffer synchronized with the one on the main
     /// // thread. It does *not* call `new()` again, but instead clones the
     /// // existing Replica and sends it to the new thread.
-    /// let replica_plugin = replica_main.clone();
+    /// let replica_plugin = replica_main.fork(1);
     ///
     /// thread::spawn(move || {
     ///     // The plugin can now use its Replica to exchange edits with the
@@ -514,8 +536,11 @@ impl Replica {
     /// });
     /// ```
     #[inline]
-    pub fn new(len: Length) -> Self {
-        let replica_id = ReplicaId::new();
+    pub fn new<Id>(replica_id: Id, len: Length) -> Self
+    where
+        Id: Into<ReplicaId>,
+    {
+        let replica_id = replica_id.into();
 
         let mut insertion_clock = InsertionClock::new();
 
@@ -564,33 +589,6 @@ impl core::fmt::Debug for Replica {
         // but hidden from the API) can be used to obtain a more useful
         // representation.
         f.debug_tuple("Replica").field(&DebugHexU64(self.id.as_u64())).finish()
-    }
-}
-
-impl Default for Replica {
-    #[inline]
-    fn default() -> Self {
-        Self::new(0)
-    }
-}
-
-impl Clone for Replica {
-    #[inline(always)]
-    fn clone(&self) -> Self {
-        let mut lamport_clock = self.lamport_clock;
-
-        lamport_clock.next();
-
-        Self {
-            id: ReplicaId::new(),
-            run_tree: self.run_tree.clone(),
-            character_clock: 0,
-            run_indices: self.run_indices.clone(),
-            insertion_clock: InsertionClock::new(),
-            lamport_clock,
-            backlog: self.backlog.clone(),
-            version_vector: self.version_vector.clone(),
-        }
     }
 }
 

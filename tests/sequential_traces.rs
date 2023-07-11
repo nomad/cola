@@ -4,7 +4,7 @@ use traces::SequentialTrace;
 fn test_trace(trace: &SequentialTrace) {
     let trace = trace.chars_to_bytes();
 
-    let mut replica = Replica::new(trace.start_content().len() as Length);
+    let mut replica = Replica::new(0, trace.start_content().len() as Length);
 
     for i in 0..1 {
         for (start, end, text) in trace.edits() {

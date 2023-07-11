@@ -6,9 +6,9 @@ use common::Replica;
 /// paper.
 #[test]
 fn woot_figure_2() {
-    let mut peer1 = Replica::new("ab");
-    let mut peer2 = peer1.clone();
-    let mut peer3 = peer1.clone();
+    let mut peer1 = Replica::new(1, "ab");
+    let mut peer2 = peer1.fork(2);
+    let mut peer3 = peer1.fork(3);
 
     // Peer 1 inserts '1' between 'a' and 'b'.
     let op1 = peer1.insert(1, '1');

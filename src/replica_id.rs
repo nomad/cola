@@ -25,6 +25,13 @@ impl core::fmt::Debug for ReplicaId {
     }
 }
 
+impl From<u64> for ReplicaId {
+    #[inline]
+    fn from(id: u64) -> Self {
+        Self(id)
+    }
+}
+
 impl core::cmp::Eq for ReplicaId {}
 
 impl core::hash::Hash for ReplicaId {
@@ -43,12 +50,6 @@ impl ReplicaId {
     #[inline]
     pub(crate) fn as_u64(self) -> u64 {
         self.0
-    }
-
-    /// Creates a new, randomly generated [`ReplicaId`].
-    #[inline]
-    pub(crate) fn new() -> Self {
-        Self(rand::random())
     }
 
     /// Returns the "nil" id, i.e. the id whose bytes are all zeros.

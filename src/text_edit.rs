@@ -38,9 +38,9 @@ pub enum TextEdit {
     /// ```
     /// # use cola::{Replica, TextEdit};
     /// // Peer 1 starts with the text "abcd", and sends it to a second peer.
-    /// let mut replica1 = Replica::new(4);
+    /// let mut replica1 = Replica::new(1, 4);
     ///
-    /// let mut replica2 = replica1.clone();
+    /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 deletes the "bc" in "abcd".
     /// let deletion = replica1.delete(1..3);
@@ -80,9 +80,9 @@ pub enum TextEdit {
     /// ```
     /// # use cola::{Replica, TextEdit};
     /// // Peer 1 starts with the text "abcd", and sends it to a second peer.
-    /// let mut replica1 = Replica::new(4);
+    /// let mut replica1 = Replica::new(1, 4);
     ///
-    /// let mut replica2 = replica1.clone();
+    /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 deletes the "bc" in "abcd".
     /// let deletion = replica1.delete(1..3);

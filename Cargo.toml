@@ -11,15 +11,12 @@ name = "cola"
 [features]
 serde = ["dep:serde"]
 
-[dependencies.rand]
-version = "0.8"
-
-[dependencies.serde]
-version = "1.0"
-optional = true
+[dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
+rand = "0.8"
 traces = { path = "./traces" }
 
 [[bench]]

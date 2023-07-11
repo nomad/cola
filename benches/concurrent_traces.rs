@@ -15,11 +15,11 @@ impl Crdt for Replica {
     type EDIT = CrdtEdit;
 
     fn from_str(s: &str) -> Self {
-        Self(cola::Replica::new(s.len() as Length))
+        Self(cola::Replica::new(rand::random::<u64>(), s.len() as Length))
     }
 
     fn fork(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0.fork(rand::random::<u64>()))
     }
 
     fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT {
