@@ -23,5 +23,9 @@ criterion = "0.5"
 traces = { path = "./traces" }
 
 [[bench]]
+name = "concurrent_traces"
+harness = false
+
+[[bench]]
 name = "sequential_traces"
 harness = false

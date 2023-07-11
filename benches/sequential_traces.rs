@@ -32,22 +32,22 @@ fn bench(group: &mut BenchmarkGroup<WallTime>, trace: &TestData, name: &str) {
 }
 
 fn automerge(c: &mut Criterion) {
-    let mut group = c.benchmark_group("traces");
+    let mut group = c.benchmark_group("sequential");
     bench(&mut group, &traces::automerge(), "automerge");
 }
 
 fn rustcode(c: &mut Criterion) {
-    let mut group = c.benchmark_group("traces");
+    let mut group = c.benchmark_group("sequential");
     bench(&mut group, &traces::rustcode(), "rustcode");
 }
 
 fn seph_blog(c: &mut Criterion) {
-    let mut group = c.benchmark_group("traces");
+    let mut group = c.benchmark_group("sequential");
     bench(&mut group, &traces::seph_blog(), "seph_blog");
 }
 
 fn sveltecomponent(c: &mut Criterion) {
-    let mut group = c.benchmark_group("traces");
+    let mut group = c.benchmark_group("sequential");
     bench(&mut group, &traces::sveltecomponent(), "sveltecomponent");
 }
 

@@ -1,20 +1,15 @@
 use std::fmt::Debug;
 use std::ops::Range;
 
-use cola::{CrdtEdit, TextEdit};
+use cola::{CrdtEdit, Length, TextEdit};
 
-pub struct Replica<B: Buffer> {
-    buffer: B,
-    crdt: cola::Replica,
+#[derive(Clone)]
+pub struct Replica {
+    pub buffer: String,
+    pub crdt: cola::Replica,
 }
 
-impl<B: Buffer + Clone> Clone for Replica<B> {
-    fn clone(&self) -> Self {
-        Self { buffer: self.buffer.clone(), crdt: self.crdt.clone() }
-    }
-}
-
-impl<B: Buffer + Debug> Debug for Replica<B> {
+impl Debug for Replica {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Replica")
             .field("buffer", &self.buffer)
@@ -23,22 +18,26 @@ impl<B: Buffer + Debug> Debug for Replica<B> {
     }
 }
 
-impl<B: Buffer + for<'a> PartialEq<&'a str>> PartialEq<&str> for Replica<B> {
+impl PartialEq<&str> for Replica {
     fn eq(&self, rhs: &&str) -> bool {
-        self.buffer == rhs
+        self.buffer == *rhs
     }
 }
 
-impl<B: Buffer + for<'a> PartialEq<&'a str>> PartialEq<Replica<B>> for &str {
-    fn eq(&self, rhs: &Replica<B>) -> bool {
-        rhs.buffer == self
+impl PartialEq<Replica> for &str {
+    fn eq(&self, rhs: &Replica) -> bool {
+        rhs.buffer == *self
     }
 }
 
-impl<B: Buffer> Replica<B> {
+impl Replica {
+    pub fn as_btree(&self) -> DebugAsBtree<'_> {
+        DebugAsBtree(self)
+    }
+
     pub fn delete(&mut self, byte_range: Range<usize>) -> CrdtEdit {
-        self.buffer.delete(byte_range.clone());
-        self.crdt.deleted(byte_range.start as u64..byte_range.end as u64)
+        self.buffer.replace_range(byte_range.clone(), "");
+        self.crdt.deleted(byte_range.start as Length..byte_range.end as Length)
     }
 
     pub fn insert<T: Into<String>>(
@@ -47,8 +46,8 @@ impl<B: Buffer> Replica<B> {
         text: T,
     ) -> CrdtEdit {
         let text = text.into();
-        self.buffer.insert(byte_offset, text.as_str());
-        self.crdt.inserted(byte_offset as u64, text.len() as u64)
+        self.buffer.insert_str(byte_offset, text.as_str());
+        self.crdt.inserted(byte_offset as Length, text.len() as Length)
     }
 
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) {
@@ -60,54 +59,40 @@ impl<B: Buffer> Replica<B> {
         }
     }
 
-    pub fn new<T: Into<B>>(text: T) -> Self {
+    pub fn new<T: Into<String>>(text: T) -> Self {
         let buffer = text.into();
-        let crdt = cola::Replica::new(buffer.measure());
+        let crdt = cola::Replica::new(buffer.len() as Length);
         Self { buffer, crdt }
     }
 }
 
-impl<B: Buffer + Debug> Replica<B> {
-    pub fn as_btree(&self) -> DebugAsBtree<'_, B> {
-        DebugAsBtree(self)
+impl traces::Crdt for Replica {
+    type EDIT = CrdtEdit;
+
+    fn from_str(s: &str) -> Self {
+        Self::new(s)
+    }
+
+    fn fork(&self) -> Self {
+        self.clone()
+    }
+
+    fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT {
+        self.insert(offset, text)
+    }
+
+    fn local_delete(&mut self, start: usize, end: usize) -> Self::EDIT {
+        self.delete(start..end)
+    }
+
+    fn merge(&mut self, remote_edit: &Self::EDIT) {
+        self.merge(remote_edit)
     }
 }
 
-pub trait Buffer {
-    fn measure(&self) -> u64;
+pub struct DebugAsBtree<'a>(&'a Replica);
 
-    fn insert(&mut self, byte_offset: usize, text: &str);
-
-    fn delete(&mut self, byte_range: Range<usize>);
-
-    fn replace(&mut self, byte_range: Range<usize>, text: &str) {
-        let start = byte_range.start;
-        self.delete(byte_range);
-        self.insert(start, text);
-    }
-}
-
-impl Buffer for String {
-    fn measure(&self) -> u64 {
-        self.len() as _
-    }
-
-    fn insert(&mut self, byte_offset: usize, text: &str) {
-        self.insert_str(byte_offset, text);
-    }
-
-    fn delete(&mut self, byte_range: Range<usize>) {
-        self.replace_range(byte_range, "");
-    }
-
-    fn replace(&mut self, byte_range: Range<usize>, text: &str) {
-        self.replace_range(byte_range, text);
-    }
-}
-
-pub struct DebugAsBtree<'a, B: Buffer + Debug>(&'a Replica<B>);
-
-impl<B: Buffer + Debug> Debug for DebugAsBtree<'_, B> {
+impl Debug for DebugAsBtree<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let replica = self.0;
 

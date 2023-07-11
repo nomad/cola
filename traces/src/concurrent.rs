@@ -76,6 +76,10 @@ pub enum Edit<C: Crdt> {
 }
 
 impl<const NUM_PEERS: usize, C: Crdt> ReplayableConcurrentTrace<NUM_PEERS, C> {
+    pub fn edits(&self) -> impl Iterator<Item = &Edit<C>> {
+        self.edits.iter()
+    }
+
     fn from_txns(txns: Vec<Transaction>) -> (Self, Vec<C>) {
         let mut edits = Vec::new();
 
@@ -136,7 +140,7 @@ impl<const NUM_PEERS: usize, C: Crdt> ReplayableConcurrentTrace<NUM_PEERS, C> {
         peers
     }
 
-    pub fn edits(self) -> impl Iterator<Item = Edit<C>> {
-        self.edits.into_iter()
+    pub fn len(&self) -> usize {
+        self.edits.len()
     }
 }
