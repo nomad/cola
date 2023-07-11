@@ -17,6 +17,7 @@ pub type ReplicaIdMap<T> =
 ///
 /// [table]: https://en.wikipedia.org/wiki/Birthday_problem#Probability_table
 #[derive(Copy, Clone, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ReplicaId(u64);
 
 impl core::fmt::Debug for ReplicaId {

@@ -13,7 +13,9 @@ use crate::*;
 /// See the the documentation of any of the methods mentioned above for more
 /// information.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CrdtEdit {
+    #[cfg_attr(feature = "serde", serde(flatten))]
     kind: CrdtEditKind,
 }
 
@@ -66,6 +68,7 @@ impl CrdtEdit {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CrdtEditKind {
     /// TODO: docs
     Deletion {

@@ -506,6 +506,7 @@ impl EditRun {
 
 /// TODO: docs
 #[derive(Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Anchor {
     /// TODO: docs
     replica_id: ReplicaId,
