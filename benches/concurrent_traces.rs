@@ -42,7 +42,7 @@ fn bench<const N: usize>(
 ) {
     let ConcurrentTraceInfos { trace, mut peers, .. } = trace;
 
-    group.throughput(Throughput::Elements(trace.len() as u64));
+    group.throughput(Throughput::Elements(trace.num_edits() as u64));
 
     group.bench_function(name, |b| {
         b.iter(|| {

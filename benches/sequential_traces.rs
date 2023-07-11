@@ -7,25 +7,26 @@ use criterion::{
     Criterion,
     Throughput,
 };
-use traces::{TestData, TestPatch};
+use traces::SequentialTrace;
 
-fn bench(group: &mut BenchmarkGroup<WallTime>, trace: &TestData, name: &str) {
+fn bench(
+    group: &mut BenchmarkGroup<WallTime>,
+    trace: &SequentialTrace,
+    name: &str,
+) {
     let trace = trace.chars_to_bytes();
 
-    group.throughput(Throughput::Elements(trace.len() as u64));
+    group.throughput(Throughput::Elements(trace.num_edits() as u64));
 
     group.bench_function(name, |b| {
         b.iter(|| {
             let mut replica =
-                Replica::new(trace.start_content.len() as Length);
+                Replica::new(trace.start_content().len() as Length);
 
-            for txn in &trace.txns {
-                for &TestPatch(pos, del, ref ins) in &txn.patches {
-                    let start = pos as Length;
-                    let end = start + del as Length;
-                    replica.deleted(start..end);
-                    replica.inserted(start, ins.len() as Length);
-                }
+            for (start, end, text) in trace.edits() {
+                let start = start as Length;
+                replica.deleted(start..end as Length);
+                replica.inserted(start, text.len() as Length);
             }
         })
     });

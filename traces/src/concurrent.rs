@@ -10,7 +10,7 @@ type TxnIdx = usize;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConcurrentDataSet {
+pub(crate) struct ConcurrentDataSet {
     kind: String,
     end_content: String,
     num_agents: usize,
@@ -51,21 +51,21 @@ pub trait Crdt: Sized {
 }
 
 pub struct ConcurrentTraceInfos<const NUM_PEERS: usize, C: Crdt> {
-    pub trace: ReplayableConcurrentTrace<NUM_PEERS, C>,
+    pub trace: ConcurrentTrace<NUM_PEERS, C>,
     pub peers: Vec<C>,
     pub final_content: String,
 }
 
 impl<const NUM_PEERS: usize, C: Crdt> ConcurrentTraceInfos<NUM_PEERS, C> {
-    pub fn from_data_set(data: ConcurrentDataSet) -> Self {
+    pub(crate) fn from_data_set(data: ConcurrentDataSet) -> Self {
         let ConcurrentDataSet { end_content, num_agents, txns, .. } = data;
         assert_eq!(num_agents, NUM_PEERS);
-        let (trace, peers) = ReplayableConcurrentTrace::from_txns(txns);
+        let (trace, peers) = ConcurrentTrace::from_txns(txns);
         Self { trace, peers, final_content: end_content }
     }
 }
 
-pub struct ReplayableConcurrentTrace<const NUM_PEERS: usize, C: Crdt> {
+pub struct ConcurrentTrace<const NUM_PEERS: usize, C: Crdt> {
     edits: Vec<Edit<C>>,
 }
 
@@ -75,7 +75,7 @@ pub enum Edit<C: Crdt> {
     Merge(AgentIdx, C::EDIT),
 }
 
-impl<const NUM_PEERS: usize, C: Crdt> ReplayableConcurrentTrace<NUM_PEERS, C> {
+impl<const NUM_PEERS: usize, C: Crdt> ConcurrentTrace<NUM_PEERS, C> {
     pub fn edits(&self) -> impl Iterator<Item = &Edit<C>> {
         self.edits.iter()
     }
@@ -140,7 +140,21 @@ impl<const NUM_PEERS: usize, C: Crdt> ReplayableConcurrentTrace<NUM_PEERS, C> {
         peers
     }
 
-    pub fn len(&self) -> usize {
+    pub fn num_edits(&self) -> usize {
         self.edits.len()
+    }
+}
+
+pub use traces::*;
+
+mod traces {
+    use super::*;
+
+    static FRIENDS_FOREVER: &[u8] =
+        include_bytes!("../concurrent/friendsforever.json.gz");
+
+    pub fn friends_forever<C: Crdt>() -> ConcurrentTraceInfos<2, C> {
+        let set = ConcurrentDataSet::decode_from_gzipped_json(FRIENDS_FOREVER);
+        ConcurrentTraceInfos::from_data_set(set)
     }
 }
