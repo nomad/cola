@@ -36,7 +36,7 @@
 //! # Feature flags
 //!
 //! - `serde`: enables the [`Serialize`] and [`Deserialize`] impls for
-//! `Replica` and `CrdtEdit` (disabled by default).
+//! `EncodedReplica` and `CrdtEdit` (disabled by default).
 //!
 //! [CRDT]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
 //! [cola]: https://www.nomad.foo/blog/cola
@@ -60,7 +60,6 @@ mod replica;
 mod replica_id;
 mod run_indices;
 mod run_tree;
-mod text;
 mod text_edit;
 mod utils;
 
@@ -76,8 +75,7 @@ pub use replica_id::ReplicaId;
 use replica_id::ReplicaIdMap;
 use run_indices::RunIndices;
 use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
-pub use text::Text;
-pub use text_edit::TextEdit;
+pub use text_edit::{Text, TextEdit};
 use utils::*;
 
 /// TODO: docs
