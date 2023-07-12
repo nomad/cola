@@ -8,22 +8,27 @@ pub struct EncodedReplica {
     bytes: Vec<u8>,
 }
 
-/// TODO: docs
+/// The type of error that can occur when [`decode`](Replica::decode)ing an
+/// [`EncodedReplica`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DecodeError {
-    /// TODO: docs
-    Checksum {
-        /// TODO: docs
-        expected: (),
-        /// TODO: docs
-        actual: (),
-    },
+    /// This error occurs when the internal checksum of the [`EncodedReplica`]
+    /// fails.
+    ///
+    /// This typically means that the [`EncodedReplica`] was corrupted during
+    /// transmission.
+    ChecksumFailed,
 
-    /// TODO: docs
-    ProtocolVersion {
-        /// TODO: docs
+    /// This error occurs when the machine that created the [`EncodedReplica`]
+    /// and the one that is trying to [`decode`](Replica::decode) it are using
+    /// two incompatible versions of cola.
+    DifferentProtocol {
+        /// The `ProtocolVersion` of cola on the machine that created the
+        /// `EncodedReplica`.
         encoded_on: ProtocolVersion,
-        /// TODO: docs
+
+        /// The `ProtocolVersion` of cola on the machine that is trying to
+        /// decode the `EncodedReplica`.
         decoding_on: ProtocolVersion,
     },
 }

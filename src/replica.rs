@@ -143,7 +143,21 @@ impl Replica {
         self.into()
     }
 
-    /// TODO: docs
+    /// Creates a new `Replica` with the given id by decoding the contents of
+    /// the [`EncodedReplica`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use cola::{Replica, EncodedReplica};
+    /// let replica1 = Replica::new(1, 42);
+    ///
+    /// let encoded: EncodedReplica = replica1.encode();
+    ///
+    /// let replica2 = Replica::decode(2, &encoded).unwrap();
+    ///
+    /// assert_eq!(replica2.id(), ReplicaId::from(2));
+    /// ```
     #[inline]
     pub fn decode<Id>(
         id: Id,
@@ -281,13 +295,37 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
-    /// TODO: docs
+    /// Encodes the `Replica` in a custom binary format.
+    ///
+    /// This can be used to send a `Replica` to another peer over the network.
+    /// Once they have received the [`EncodedReplica`] they can decode it via
+    /// the [`decode`](Replica::decode) method.
+    ///
+    /// Note that if you want to collaborate within a single process you can
+    /// just [`fork`](Replica::fork) the `Replica` without having to encode it
+    /// and decode it again.
     #[inline]
     pub fn encode(&self) -> EncodedReplica {
         todo!();
     }
 
-    /// TODO: docs
+    /// Creates a new `Replica` with the given id but with the same internal
+    /// state as this one.
+    ///
+    /// Note that this method should be used when the collaborative session is
+    /// limited to a single process (e.g. multiple threads working on the same
+    /// document). If you want to collaborate across different processes or
+    /// machines you should [`encode`](Replica::encode) the `Replica` and send
+    /// the result to the other peers.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use cola::Replica;
+    /// let replica1 = Replica::new(1, 0);
+    /// let replica2 = replica1.fork(2);
+    /// assert_eq!(replica2.id(), ReplicaId::from(2))
+    /// ```
     #[inline]
     pub fn fork<Id>(&self, new_id: Id) -> Self
     where
@@ -517,7 +555,8 @@ impl Replica {
         todo!();
     }
 
-    /// Creates a new `Replica` from the initial [`Length`] of your buffer.
+    /// Creates a new `Replica` with the given id from the initial [`Length`]
+    /// of your buffer.
     ///
     /// Note that if you have multiple peers working on the same document you
     /// should only use this constructor on the first peer, usually the one
@@ -526,11 +565,13 @@ impl Replica {
     /// The other peers should get their `Replica` from another `Replica`
     /// already in the session by either:
     ///
-    /// a) `forking`ing it if the collaboration happens all in the same process
-    /// (e.g. a text editor with plugins running on separate threads),
+    /// a) [`fork`](Replica::fork)ing it if the collaboration happens all in
+    /// the same process (e.g. a text editor with plugins running on separate
+    /// threads),
     ///
-    /// b) serializing it and sending it over the network if the collaboration
-    /// is between different processes or machines.
+    /// b) [`encode`](Replica::encode)ing it and sending the result over the
+    /// network if the collaboration is between different processes or
+    /// machines.
     ///
     /// # Example
     /// ```
