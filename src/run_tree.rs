@@ -7,7 +7,7 @@ use crate::*;
 const RUN_TREE_ARITY: usize = 32;
 
 #[derive(Clone, Debug)]
-pub struct RunTree {
+pub(crate) struct RunTree {
     /// TODO: docs
     gtree: Gtree<RUN_TREE_ARITY, EditRun>,
 }
@@ -220,7 +220,7 @@ impl RunTree {
             let split = run.split(offset);
 
             let new_run = EditRun::new(
-                anchor.clone(),
+                anchor,
                 text,
                 insertion_clock.next(),
                 lamport_clock.next(),
@@ -268,7 +268,7 @@ impl RunTree {
 
 /// TODO: docs
 #[allow(clippy::enum_variant_names)]
-pub enum InsertionOutcome {
+pub(crate) enum InsertionOutcome {
     /// TODO: docs
     ExtendedLastRun,
 
@@ -286,7 +286,7 @@ pub enum InsertionOutcome {
 }
 
 /// TODO: docs
-pub enum DeletionOutcome {
+pub(crate) enum DeletionOutcome {
     /// TODO: docs
     DeletedAcrossRuns {
         split_start:

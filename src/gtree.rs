@@ -100,7 +100,7 @@ const _NODE_IDX_LAYOUT_CHECK: usize = {
 ///
 /// TODO: finish describing the data structure.
 #[derive(Clone)]
-pub struct Gtree<const ARITY: usize, L: Leaf> {
+pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     /// The internal nodes of the Gtree.
     ///
     /// The order in which the inodes appear in this vector doesn't have any

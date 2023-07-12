@@ -677,32 +677,6 @@ impl InsertionClock {
 /// TODO: docs
 pub type InsertionTimestamp = u64;
 
-#[inline(always)]
-fn range_bounds_to_start_end<R>(
-    range: R,
-    lo: Length,
-    hi: Length,
-) -> (Length, Length)
-where
-    R: RangeBounds<Length>,
-{
-    use core::ops::Bound;
-
-    let start = match range.start_bound() {
-        Bound::Included(&n) => n,
-        Bound::Excluded(&n) => n + 1,
-        Bound::Unbounded => lo,
-    };
-
-    let end = match range.end_bound() {
-        Bound::Included(&n) => n + 1,
-        Bound::Excluded(&n) => n,
-        Bound::Unbounded => hi,
-    };
-
-    (start, end)
-}
-
 mod debug {
     use core::fmt::Debug;
 

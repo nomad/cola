@@ -2,7 +2,7 @@ use crate::*;
 
 /// TODO: docs
 #[derive(Clone)]
-pub struct RunIndices {
+pub(crate) struct RunIndices {
     map: ReplicaIdMap<ReplicaIndices>,
 }
 
