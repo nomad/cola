@@ -20,7 +20,7 @@ use crate::*;
 ///
 /// When starting a new collaborative editing session, the first peer
 /// initializes its `Replica` via the [`new`](Self::new) method and sends it
-/// over to the other peers.
+/// to the other peers in the session.
 ///
 /// Then, every time a peer performs an edit on their local buffer they inform
 /// their `Replica` by calling either [`inserted`](Self::inserted) or
@@ -29,12 +29,12 @@ use crate::*;
 ///
 /// When a peer receives a `CrdtEdit` they can integrate it into their own
 /// `Replica` by calling the [`merge`](Self::merge) method. This produces a
-/// [`TextEdit`] which informs them *where* in their local buffer they should
+/// [`TextEdit`] which tells them *where* in their local buffer they should
 /// apply the edit, taking into account all the other edits that have happened
 /// concurrently.
 ///
 /// Basically, you tell your `Replica` how your buffer changes, and it tells
-/// you how your buffer *should* change when receiving edits from other peers.
+/// you how your buffer *should* change when receiving remote edits.
 pub struct Replica {
     /// TODO: docs
     id: ReplicaId,
