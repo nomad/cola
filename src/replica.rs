@@ -2,9 +2,6 @@ use core::ops::RangeBounds;
 
 use crate::*;
 
-/// TODO: docs
-pub type VersionVector = ReplicaIdMap<Length>;
-
 /// A CRDT for text.
 ///
 /// Like all other text CRDTs it allows multiple peers on a distributed
@@ -146,6 +143,20 @@ impl Replica {
         self.into()
     }
 
+    /// TODO: docs
+    #[inline]
+    pub fn decode<Id>(
+        id: Id,
+        encoded: &EncodedReplica,
+    ) -> Result<Self, DecodeError>
+    where
+        Id: Into<ReplicaId>,
+    {
+        // TODO: check protocol version and checksum.
+
+        todo!();
+    }
+
     /// Informs the `Replica` that you have deleted the characters in the given
     /// offset range.
     ///
@@ -268,6 +279,12 @@ impl Replica {
     #[doc(hidden)]
     pub fn empty_leaves(&self) -> (usize, usize) {
         self.run_tree.count_empty_leaves()
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn encode(&self) -> EncodedReplica {
+        todo!();
     }
 
     /// TODO: docs

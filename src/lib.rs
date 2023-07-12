@@ -54,6 +54,7 @@ extern crate alloc;
 
 mod backlog;
 mod crdt_edit;
+mod encode;
 mod gtree;
 mod replica;
 mod replica_id;
@@ -62,13 +63,11 @@ mod run_tree;
 mod text;
 mod text_edit;
 
-#[cfg(feature = "serde")]
-mod serde;
-
 use backlog::BackLog;
 pub use backlog::BackLogged;
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::CrdtEditKind;
+pub use encode::{DecodeError, EncodedReplica};
 use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
 use replica::*;
@@ -78,6 +77,9 @@ use run_indices::RunIndices;
 use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
 pub use text::Text;
 pub use text_edit::TextEdit;
+
+/// TODO: docs
+pub type ProtocolVersion = u64;
 
 /// The length of a piece of text according to some user-defined metric.
 ///
@@ -168,6 +170,12 @@ pub use text_edit::TextEdit;
 /// buf2.insert_str(offset, b); // 💥 panics!
 /// ```
 pub type Length = u64;
+
+/// TODO: docs
+type VersionVector = ReplicaIdMap<Length>;
+
+/// TODO: docs
+const PROTOCOL_VERSION: ProtocolVersion = 0;
 
 use range::{Range, RangeExt};
 
