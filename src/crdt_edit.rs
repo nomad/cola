@@ -28,13 +28,13 @@ impl CrdtEdit {
         this_character_ts: Length,
         version_vector: VersionVector,
     ) -> Self {
-        let kind = CrdtEditKind::Deletion {
+        let kind = CrdtEditKind::Deletion(Deletion {
             start,
             end,
             replica_id: this_id,
             character_ts: this_character_ts,
             version_vector,
-        };
+        });
         Self { kind }
     }
 
@@ -46,13 +46,13 @@ impl CrdtEdit {
         lamport_ts: LamportTimestamp,
         len: Length,
     ) -> Self {
-        let kind = CrdtEditKind::Insertion {
+        let kind = CrdtEditKind::Insertion(Insertion {
             anchor,
             replica_id: this_id,
             character_ts,
             len,
             lamport_ts,
-        };
+        });
         Self { kind }
     }
 
@@ -70,23 +70,29 @@ impl CrdtEdit {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CrdtEditKind {
-    /// TODO: docs
-    Deletion {
-        start: Anchor,
-        end: Anchor,
-        replica_id: ReplicaId,
-        character_ts: Length,
-        version_vector: VersionVector,
-    },
-
-    /// TODO: docs
-    Insertion {
-        anchor: Anchor,
-        replica_id: ReplicaId,
-        character_ts: Length,
-        lamport_ts: LamportTimestamp,
-        len: Length,
-    },
-
+    Deletion(Deletion),
+    Insertion(Insertion),
     NoOp,
+}
+
+/// TODO: docs
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Insertion {
+    pub(crate) anchor: Anchor,
+    pub(crate) replica_id: ReplicaId,
+    pub(crate) character_ts: Length,
+    pub(crate) lamport_ts: LamportTimestamp,
+    pub(crate) len: Length,
+}
+
+/// TODO: docs
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Deletion {
+    pub(crate) start: Anchor,
+    pub(crate) end: Anchor,
+    pub(crate) replica_id: ReplicaId,
+    pub(crate) character_ts: Length,
+    pub(crate) version_vector: VersionVector,
 }

@@ -66,7 +66,7 @@ mod utils;
 use backlog::BackLog;
 pub use backlog::BackLogged;
 pub use crdt_edit::CrdtEdit;
-use crdt_edit::CrdtEditKind;
+use crdt_edit::{CrdtEditKind, Deletion, Insertion};
 pub use encode::{DecodeError, EncodedReplica};
 use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;

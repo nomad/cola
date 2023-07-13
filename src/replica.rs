@@ -504,54 +504,43 @@ impl Replica {
     #[inline]
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) -> Option<TextEdit> {
         match crdt_edit.kind() {
-            CrdtEditKind::Insertion {
-                anchor,
-                replica_id,
-                len,
-                lamport_ts,
-                ..
-            } => self.merge_insertion(*anchor, *replica_id, *len, *lamport_ts),
+            CrdtEditKind::Insertion(insertion) => {
+                Some(self.merge_insertion(insertion))
+            },
 
-            CrdtEditKind::Deletion {
-                start,
-                end,
-                replica_id,
-                character_ts,
-                version_vector,
-            } => self.merge_deletion(
-                *start,
-                *end,
-                *replica_id,
-                *character_ts,
-                version_vector,
-            ),
+            CrdtEditKind::Deletion(deletion) => self.merge_deletion(deletion),
 
             CrdtEditKind::NoOp => None,
         }
     }
 
+    /// TODO: docs
     #[inline]
-    fn merge_insertion(
-        &mut self,
-        _anchor: Anchor,
-        _replica: ReplicaId,
-        _len: Length,
-        lamport_ts: LamportTimestamp,
-    ) -> Option<TextEdit> {
-        self.lamport_clock.update(lamport_ts);
-
+    fn merge_deletion(&mut self, _deletion: &Deletion) -> Option<TextEdit> {
         todo!();
     }
 
+    /// TODO: docs
     #[inline]
-    fn merge_deletion(
+    fn merge_insertion(&mut self, _insertion: &Insertion) -> TextEdit {
+        todo!();
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn merge_unchecked_deletion(
         &mut self,
-        _start: Anchor,
-        _end: Anchor,
-        _replica: ReplicaId,
-        _character_ts: Length,
-        _version_vector: &VersionVector,
+        _deletion: &Deletion,
     ) -> Option<TextEdit> {
+        todo!();
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn merge_unchecked_insertion(
+        &mut self,
+        _insertion: &Insertion,
+    ) -> TextEdit {
         todo!();
     }
 
