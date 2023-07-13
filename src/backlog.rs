@@ -1,14 +1,42 @@
-use crate::{Replica, TextEdit};
+use crate::{Deletion, Insertion, Replica, ReplicaIdMap, TextEdit};
 
+/// TODO: docs
 #[derive(Debug, Clone, Default)]
-pub struct BackLog {}
+pub struct BackLog {
+    insertions: ReplicaIdMap<InsertionsBackLog>,
+    deletions: ReplicaIdMap<DeletionsBackLog>,
+}
 
 impl BackLog {
+    /// TODO: docs
+    #[inline]
+    pub fn add_deletion(&mut self, deletion: Deletion) {
+        todo!();
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn add_insertion(&mut self, insertion: Insertion) {
+        todo!();
+    }
+
     /// Creates a new, empty `BackLog`.
     #[inline]
     pub fn new() -> Self {
         Self::default()
     }
+}
+
+/// TODO: docs
+#[derive(Debug, Clone, Default)]
+struct InsertionsBackLog {
+    vec: Vec<Insertion>,
+}
+
+/// TODO: docs
+#[derive(Debug, Clone, Default)]
+struct DeletionsBackLog {
+    vec: Vec<Deletion>,
 }
 
 /// An iterator over the backlogged [`TextEdit`]s that are now ready to be

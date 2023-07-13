@@ -1,8 +1,46 @@
 use core::cmp::Ord;
+use core::cmp::{Ordering, PartialOrd};
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::ops::{Add, Range as StdRange, RangeBounds, Sub};
 
-use crate::Length;
+use crate::{Length, ReplicaId, ReplicaIdMap};
+
+/// TODO: docs
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct VersionMap {
+    #[cfg_attr(feature = "serde", serde(flatten))]
+    map: ReplicaIdMap<Length>,
+}
+
+impl PartialOrd for VersionMap {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        todo!();
+    }
+}
+
+impl VersionMap {
+    #[inline]
+    pub fn insert(&mut self, replica_id: ReplicaId, value: Length) {
+        self.map.insert(replica_id, value);
+    }
+
+    #[inline]
+    pub fn get(&self, replica_id: ReplicaId) -> Option<Length> {
+        self.map.get(&replica_id).copied()
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self, replica_id: ReplicaId) -> Option<&mut Length> {
+        self.map.get_mut(&replica_id)
+    }
+
+    #[inline]
+    pub fn new() -> Self {
+        Self { map: ReplicaIdMap::default() }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Range<T> {

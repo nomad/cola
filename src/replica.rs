@@ -58,7 +58,7 @@ pub struct Replica {
     backlog: BackLog,
 
     /// TODO: docs
-    version_vector: VersionVector,
+    version_map: VersionMap,
 }
 
 impl Replica {
@@ -131,6 +131,58 @@ impl Replica {
     #[inline]
     pub fn backlogged(&mut self) -> BackLogged<'_> {
         BackLogged::from_replica(self)
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn can_merge_deletion(&self, deletion: &Deletion) -> bool {
+        debug_assert!(!self.has_merged_deletion(deletion));
+
+        (
+            // TODO: docs
+            // self.deletion_clock_of_replica(deletion.replica_id) ==
+            // deletion.deletion_ts
+            true
+        ) && (
+            // TODO: docs
+            self.character_clock_of_replica(deletion.replica_id)
+                >= deletion.character_ts
+                && self.version_map >= deletion.version_map
+        )
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn can_merge_insertion(&self, insertion: &Insertion) -> bool {
+        debug_assert!(!self.has_merged_insertion(insertion));
+
+        (
+            // Makes sure that we merge insertions in the same order they were
+            // created.
+            //
+            // This is technically not needed to merge a single insertion (all
+            // that matters is that we know where to anchor the insertion), but
+            // it's needed to correctly increment the chararacter clock inside
+            // this `Replica`'s `VersionMap` without skipping any temporal
+            // range.
+            self.character_clock_of_replica(insertion.replica_id)
+                == insertion.character_ts
+        ) && (
+            // Makes sure that we have already merged the insertion containing
+            // the anchor of this insertion.
+            self.character_clock_of_replica(insertion.anchor.replica_id())
+                >= insertion.anchor.character_ts()
+        )
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn character_clock_of_replica(&self, id: ReplicaId) -> Length {
+        if self.id == id {
+            self.character_clock
+        } else {
+            self.version_map.get(id).unwrap_or(0)
+        }
     }
 
     #[doc(hidden)]
@@ -286,7 +338,7 @@ impl Replica {
             end,
             self.id,
             self.character_clock,
-            self.version_vector.clone(),
+            self.version_map.clone(),
         )
     }
 
@@ -343,8 +395,22 @@ impl Replica {
             insertion_clock: InsertionClock::new(),
             lamport_clock,
             backlog: self.backlog.clone(),
-            version_vector: self.version_vector.clone(),
+            version_map: self.version_map.clone(),
         }
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
+        self.id == deletion.replica_id || false // TODO: add deletion clocks
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn has_merged_insertion(&self, insertion: &Insertion) -> bool {
+        self.id == insertion.replica_id
+            || self.character_clock_of_replica(insertion.replica_id)
+                > insertion.character_ts
     }
 
     /// Returns the id of the `Replica`.
@@ -505,10 +571,18 @@ impl Replica {
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) -> Option<TextEdit> {
         match crdt_edit.kind() {
             CrdtEditKind::Insertion(insertion) => {
-                Some(self.merge_insertion(insertion))
+                if self.has_merged_insertion(insertion) {
+                    return None;
+                }
+                self.merge_insertion(insertion)
             },
 
-            CrdtEditKind::Deletion(deletion) => self.merge_deletion(deletion),
+            CrdtEditKind::Deletion(deletion) => {
+                if self.has_merged_deletion(deletion) {
+                    return None;
+                }
+                self.merge_deletion(deletion)
+            },
 
             CrdtEditKind::NoOp => None,
         }
@@ -516,14 +590,28 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    fn merge_deletion(&mut self, _deletion: &Deletion) -> Option<TextEdit> {
-        todo!();
+    fn merge_deletion(&mut self, deletion: &Deletion) -> Option<TextEdit> {
+        debug_assert!(!self.has_merged_deletion(deletion));
+
+        if self.can_merge_deletion(deletion) {
+            self.merge_unchecked_deletion(deletion)
+        } else {
+            self.backlog.add_deletion(deletion.clone());
+            None
+        }
     }
 
     /// TODO: docs
     #[inline]
-    fn merge_insertion(&mut self, _insertion: &Insertion) -> TextEdit {
-        todo!();
+    fn merge_insertion(&mut self, insertion: &Insertion) -> Option<TextEdit> {
+        debug_assert!(!self.has_merged_insertion(insertion));
+
+        if self.can_merge_insertion(insertion) {
+            Some(self.merge_unchecked_insertion(insertion))
+        } else {
+            self.backlog.add_insertion(insertion.clone());
+            None
+        }
     }
 
     /// TODO: docs
@@ -614,7 +702,7 @@ impl Replica {
             insertion_clock,
             lamport_clock,
             backlog: BackLog::new(),
-            version_vector: VersionVector::default(),
+            version_map: VersionMap::new(),
         }
     }
 }

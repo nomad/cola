@@ -526,6 +526,11 @@ impl core::fmt::Debug for Anchor {
 }
 
 impl Anchor {
+    #[inline]
+    pub fn character_ts(&self) -> Length {
+        self.offset
+    }
+
     #[inline(always)]
     pub fn new(replica_id: ReplicaId, offset: Length) -> Self {
         Self { replica_id, offset }
@@ -535,6 +540,11 @@ impl Anchor {
     #[inline]
     pub const fn origin() -> Self {
         Self { replica_id: ReplicaId::zero(), offset: 0 }
+    }
+
+    #[inline]
+    pub fn replica_id(&self) -> ReplicaId {
+        self.replica_id
     }
 }
 

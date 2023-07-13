@@ -188,7 +188,4 @@ pub type ProtocolVersion = u64;
 pub type Length = u64;
 
 /// TODO: docs
-type VersionVector = ReplicaIdMap<Length>;
-
-/// TODO: docs
 const PROTOCOL_VERSION: ProtocolVersion = 0;
