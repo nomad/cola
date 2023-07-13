@@ -4,13 +4,26 @@ use std::collections::HashMap;
 pub type ReplicaIdMap<T> =
     HashMap<ReplicaId, T, BuildHasherDefault<ReplicaIdHasher>>;
 
-/// A unique[^unique] identifier for a `Replica`.
+/// A unique identifier for a `Replica`.
 ///
-/// Internally this is just a 64-bit integer that is randomly-generated every
-/// time a `Replica` is created via the [`new`](crate::Replica::new) method,
-/// `clone`d or `Deserialize`d.
+/// Internally this is a newtype around 64-bit integer and can be created via
+/// its [`From<u64>`](ReplicaId#impl-From<u64>-for-ReplicaId) implementation.
 ///
-/// [^unique]: you'd have to have almost [200k peers][table] in the same
+/// It's very important that all `Replica`s in the same collaborative session
+/// have unique `ReplicaId`s as this type is used to distinguish between them
+/// when [`merge`](crate::Replica::merge)ing edits.
+///
+/// Guaranteeing uniqueness is up to you.
+///
+/// If the session is proxied through a server you control you can use that to
+/// centrally assign ids and increment a counter every time a new peer joins
+/// the session.
+///
+/// If not, you can generate a random `u64` every time a new `Replica` is
+/// created and be reasonably[^collisions] sure that there won't be any
+/// collisions.
+///
+/// [^collisions]: you'd have to have almost [200k peers][table] in the same
 /// editing session to reach a one-in-a-billion chance of a single collision,
 /// which is more than good enough for the kind of use cases this library is
 /// designed for.

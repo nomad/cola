@@ -78,7 +78,23 @@ use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
 pub use text_edit::{Text, TextEdit};
 use utils::*;
 
-/// TODO: docs
+/// The version of the protocol cola uses to represent `EncodedReplica`s and
+/// `CrdtEdit`s.
+///
+/// You can think of this as a version number for cola's internal
+/// representation of the subset of its data structures that are exchanged
+/// between peers.
+///
+/// If different peers are using versions of cola with the same protocol number
+/// they're compatible. If not, decoding `EncodedReplica`s and deserializing
+/// `CrdtEdit`s will fail.
+///
+/// # Protocol stability
+///
+/// cola is still far away from reaching stability, and until that happens its
+/// internal `ProtocolVersion` might change very frequently. After the 1.0
+/// release the protocol version will only be allowed to be incremented in
+/// major releases (if at all).
 pub type ProtocolVersion = u64;
 
 /// The length of a piece of text according to some user-defined metric.

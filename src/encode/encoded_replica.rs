@@ -1,6 +1,11 @@
 use crate::*;
 
-/// TODO: docs
+/// A `Replica` encoded into a very compact binary format suitable for
+/// transmission over the network.
+///
+/// This struct is created by the [`encode`](Replica::encode) method and can be
+/// decoded back into a `Replica` by calling [`decode`](Replica::decode). See
+/// the documentation of those methods for more information.
 #[derive(Clone, PartialEq, Eq)]
 pub struct EncodedReplica {
     protocol_version: ProtocolVersion,
@@ -31,6 +36,20 @@ pub enum DecodeError {
         /// decode the `EncodedReplica`.
         decoding_on: ProtocolVersion,
     },
+
+    /// This error is an umbrella variant that encompasses all other errors
+    /// that can occur when the binary data wrapped by the [`EncodedReplica`]
+    /// cannot be decoded into a `Replica`.
+    ///
+    /// This is returned when the checksum and protocol version checks both
+    /// succeed, *and yet* the data is still invalid. The only way this can
+    /// occur in practice is if the `EncodedReplica` passed to
+    /// [`decode`](Replica::decode) was deserialized from a byte vector that
+    /// was not the result of serializing an `EncodedReplica`.
+    ///
+    /// As long as you're not doing that (and you shouldn't be) this variant
+    /// can be ignored.
+    InvalidData,
 }
 
 #[cfg(feature = "serde")]
