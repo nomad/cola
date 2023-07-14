@@ -11,13 +11,16 @@ impl BackLog {
     /// TODO: docs
     #[inline]
     pub fn add_deletion(&mut self, deletion: Deletion) {
-        todo!();
+        self.deletions.entry(deletion.deleted_by()).or_default().add(deletion);
     }
 
     /// TODO: docs
     #[inline]
     pub fn add_insertion(&mut self, insertion: Insertion) {
-        todo!();
+        self.insertions
+            .entry(insertion.inserted_by())
+            .or_default()
+            .add(insertion);
     }
 
     /// Creates a new, empty `BackLog`.
@@ -33,10 +36,47 @@ struct InsertionsBackLog {
     vec: Vec<Insertion>,
 }
 
+impl InsertionsBackLog {
+    /// TODO: docs
+    #[inline]
+    fn add(&mut self, insertion: Insertion) {
+        let Err(insert_at_offset) = self
+            .vec
+            .binary_search_by(|probe| probe.start_ts.cmp(&insertion.start_ts))
+        else {
+            unreachable!(
+                "the start of the insertions produced by a given Replica \
+                 form a strictly monotonic sequence so the binary search can \
+                 never find an exact match"
+            )
+        };
+
+        self.vec.insert(insert_at_offset, insertion);
+    }
+}
+
 /// TODO: docs
 #[derive(Debug, Clone, Default)]
 struct DeletionsBackLog {
     vec: Vec<Deletion>,
+}
+
+impl DeletionsBackLog {
+    /// TODO: docs
+    #[inline]
+    fn add(&mut self, deletion: Deletion) {
+        let Err(insert_at_offset) = self.vec.binary_search_by(|probe| {
+            probe.deletion_ts.cmp(&deletion.deletion_ts)
+        }) else {
+            unreachable!(
+                "the deletion timestamps produced by a given Replica form a \
+                 strictly monotonic sequence so the binary search can never \
+                 find an exact match"
+            )
+        };
+
+        self.vec.insert(insert_at_offset, deletion);
+    }
 }
 
 /// An iterator over the backlogged [`TextEdit`]s that are now ready to be

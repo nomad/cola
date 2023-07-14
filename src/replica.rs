@@ -162,8 +162,7 @@ impl Replica {
             // it's needed to correctly increment the chararacter clock inside
             // this `Replica`'s `VersionMap` without skipping any temporal
             // range.
-            self.version_map.get(insertion.inserted_by())
-                == insertion.character_ts
+            self.version_map.get(insertion.inserted_by()) == insertion.start_ts
         ) && (
             // Makes sure that we have already merged the insertion containing
             // the anchor of this insertion.
@@ -391,7 +390,7 @@ impl Replica {
     /// TODO: docs
     #[inline]
     fn has_merged_insertion(&self, insertion: &Insertion) -> bool {
-        self.version_map.get(insertion.inserted_by()) > insertion.character_ts
+        self.version_map.get(insertion.inserted_by()) > insertion.start_ts
     }
 
     /// Returns the id of the `Replica`.

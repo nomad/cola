@@ -40,14 +40,14 @@ impl CrdtEdit {
     pub(super) fn insertion(
         anchor: Anchor,
         this_id: ReplicaId,
-        character_ts: Length,
+        start_ts: Length,
         lamport_ts: LamportTimestamp,
         len: Length,
     ) -> Self {
         let kind = CrdtEditKind::Insertion(Insertion {
             anchor,
             replica_id: this_id,
-            character_ts,
+            start_ts,
             len,
             lamport_ts,
         });
@@ -79,7 +79,7 @@ pub enum CrdtEditKind {
 pub struct Insertion {
     pub(crate) anchor: Anchor,
     pub(crate) replica_id: ReplicaId,
-    pub(crate) character_ts: Length,
+    pub(crate) start_ts: Length,
     pub(crate) lamport_ts: LamportTimestamp,
     pub(crate) len: Length,
 }
