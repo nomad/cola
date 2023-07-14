@@ -62,6 +62,7 @@ mod run_indices;
 mod run_tree;
 mod text_edit;
 mod utils;
+mod version_map;
 
 use backlog::BackLog;
 pub use backlog::BackLogged;
@@ -77,6 +78,7 @@ use run_indices::RunIndices;
 use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
 pub use text_edit::{Text, TextEdit};
 use utils::*;
+use version_map::{DeletionMap, VersionMap};
 
 /// The version of the protocol cola uses to represent `EncodedReplica`s and
 /// `CrdtEdit`s.

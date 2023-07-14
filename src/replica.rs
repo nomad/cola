@@ -46,19 +46,16 @@ pub struct Replica {
     run_indices: RunIndices,
 
     /// TODO: docs
-    insertion_clock: InsertionClock,
-
-    /// TODO: docs
-    deletion_clock: DeletionClock,
-
-    /// TODO: docs
     lamport_clock: LamportClock,
+
+    /// TODO: docs
+    insertion_clock: InsertionClock,
 
     /// TODO: docs
     version_map: VersionMap,
 
     /// TODO: docs
-    deletion_map: ReplicaIdMap<DeletionClock>,
+    deletion_map: DeletionMap,
 
     /// TODO: docs
     backlog: BackLog,
@@ -143,7 +140,7 @@ impl Replica {
 
         (
             // TODO: docs
-            self.deletion_clock_of_replica(deletion.deleted_by()) + 1
+            self.deletion_map.get(deletion.deleted_by()) + 1
                 == deletion.deletion_ts
         ) && (
             // TODO: docs
@@ -173,16 +170,6 @@ impl Replica {
             self.version_map.get(insertion.anchor.replica_id())
                 >= insertion.anchor.character_ts()
         )
-    }
-
-    /// TODO: docs
-    #[inline]
-    fn deletion_clock_of_replica(&self, id: ReplicaId) -> DeletionClock {
-        if self.id == id {
-            self.deletion_clock
-        } else {
-            self.deletion_map.get(&id).copied().unwrap_or(0)
-        }
     }
 
     #[doc(hidden)]
@@ -333,9 +320,9 @@ impl Replica {
             DeletionOutcome::DeletedWholeRun => {},
         }
 
-        let deletion_ts = self.deletion_clock;
+        let deletion_ts = self.deletion_map.this();
 
-        self.deletion_clock += 1;
+        *self.deletion_map.this_mut() += 1;
 
         CrdtEdit::deletion(start, end, self.version_map.clone(), deletion_ts)
     }
@@ -388,10 +375,9 @@ impl Replica {
             run_tree: self.run_tree.clone(),
             run_indices: self.run_indices.clone(),
             insertion_clock: InsertionClock::new(),
-            deletion_clock: 0,
             lamport_clock: self.lamport_clock.fork(),
-            version_map: self.version_map.fork(new_id),
-            deletion_map: self.deletion_map.clone(),
+            version_map: self.version_map.fork(new_id, 0),
+            deletion_map: self.deletion_map.fork(new_id, 1),
             backlog: self.backlog.clone(),
         }
     }
@@ -399,8 +385,7 @@ impl Replica {
     /// TODO: docs
     #[inline]
     fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
-        self.deletion_clock_of_replica(deletion.deleted_by())
-            > deletion.deletion_ts
+        self.deletion_map.get(deletion.deleted_by()) > deletion.deletion_ts
     }
 
     /// TODO: docs
@@ -442,11 +427,11 @@ impl Replica {
             return CrdtEdit::no_op();
         }
 
-        let start = self.version_map.this_ts();
+        let start = self.version_map.this();
 
-        *self.version_map.this_ts_mut() += len;
+        *self.version_map.this_mut() += len;
 
-        let end = self.version_map.this_ts();
+        let end = self.version_map.this();
 
         let text = Text::new(self.id, (start..end).into());
 
@@ -694,10 +679,9 @@ impl Replica {
             run_tree,
             run_indices,
             insertion_clock,
-            deletion_clock: 1,
             lamport_clock,
             version_map: VersionMap::new(id, len),
-            deletion_map: ReplicaIdMap::default(),
+            deletion_map: DeletionMap::new(id, 1),
             backlog: BackLog::new(),
         }
     }
@@ -861,7 +845,10 @@ mod debug {
                 .field("run_tree", &self.debug_run_tree)
                 .field("run_indices", &replica.run_indices)
                 .field("lamport_clock", &replica.lamport_clock)
-                .field("pending", &replica.backlog)
+                .field("insertion_clock", &replica.insertion_clock)
+                .field("version_map", &replica.version_map)
+                .field("deletion_map", &replica.deletion_map)
+                .field("backlog", &replica.backlog)
                 .finish()
         }
     }
