@@ -24,18 +24,14 @@ impl CrdtEdit {
     pub(super) fn deletion(
         start: Anchor,
         end: Anchor,
-        this_id: ReplicaId,
-        this_character_ts: Length,
-        deletion_ts: DeletionTs,
         version_map: VersionMap,
+        deletion_ts: DeletionTs,
     ) -> Self {
         let kind = CrdtEditKind::Deletion(Deletion {
             start,
             end,
-            replica_id: this_id,
-            character_ts: this_character_ts,
-            deletion_ts,
             version_map,
+            deletion_ts,
         });
         Self { kind }
     }
@@ -88,14 +84,26 @@ pub struct Insertion {
     pub(crate) len: Length,
 }
 
+impl Insertion {
+    #[inline]
+    pub fn inserted_by(&self) -> ReplicaId {
+        self.replica_id
+    }
+}
+
 /// TODO: docs
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Deletion {
     pub(crate) start: Anchor,
     pub(crate) end: Anchor,
-    pub(crate) replica_id: ReplicaId,
-    pub(crate) character_ts: Length,
-    pub(crate) deletion_ts: DeletionTs,
     pub(crate) version_map: VersionMap,
+    pub(crate) deletion_ts: DeletionTs,
+}
+
+impl Deletion {
+    #[inline]
+    pub fn deleted_by(&self) -> ReplicaId {
+        self.version_map.this_id()
+    }
 }

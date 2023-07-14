@@ -9,36 +9,190 @@ use crate::{Length, ReplicaId, ReplicaIdMap};
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VersionMap {
-    #[cfg_attr(feature = "serde", serde(flatten))]
-    map: ReplicaIdMap<Length>,
+    /// TODO: docs
+    this_id: ReplicaId,
+
+    /// TODO: docs
+    this_ts: Length,
+
+    /// TODO: docs
+    rest: ReplicaIdMap<Length>,
 }
 
 impl PartialOrd for VersionMap {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        todo!();
+        fn confirm_left_greater(
+            left: &VersionMap,
+            right: &VersionMap,
+        ) -> bool {
+            let mut checked = 0;
+
+            if let Some(&right_ts) = right.rest.get(&left.this_id) {
+                if right_ts > left.this_ts {
+                    return false;
+                }
+                checked += 1;
+            }
+
+            for (&id, &left_ts) in &left.rest {
+                if let Some(right_ts) = right.get_opt(id) {
+                    if right_ts > left_ts {
+                        return false;
+                    }
+                    checked += 1;
+                }
+            }
+
+            checked == right.rest.len()
+        }
+
+        match self.rest.len().cmp(&other.rest.len()) {
+            Ordering::Greater => {
+                return if confirm_left_greater(self, other) {
+                    Some(Ordering::Greater)
+                } else {
+                    None
+                };
+            },
+
+            Ordering::Less => {
+                return if confirm_left_greater(other, self) {
+                    Some(Ordering::Less)
+                } else {
+                    None
+                };
+            },
+
+            Ordering::Equal => {},
+        }
+
+        match self.this_ts.cmp(&other.get(self.this_id)) {
+            Ordering::Greater => {
+                return if confirm_left_greater(self, other) {
+                    Some(Ordering::Greater)
+                } else {
+                    None
+                };
+            },
+
+            Ordering::Less => {
+                return if confirm_left_greater(other, self) {
+                    Some(Ordering::Less)
+                } else {
+                    None
+                };
+            },
+
+            Ordering::Equal => {},
+        }
+
+        let mut cmp = Ordering::Equal;
+
+        let mut checked = 0;
+
+        for (id, this_ts) in &self.rest {
+            if let Some(other_ts) = other.rest.get(id) {
+                match this_ts.cmp(other_ts) {
+                    Ordering::Greater => {
+                        if cmp == Ordering::Less {
+                            return None;
+                        } else {
+                            cmp = Ordering::Greater;
+                        }
+                    },
+
+                    Ordering::Less => {
+                        if cmp == Ordering::Greater {
+                            return None;
+                        } else {
+                            cmp = Ordering::Less;
+                        }
+                    },
+
+                    Ordering::Equal => {},
+                }
+                checked += 1;
+            } else if cmp == Ordering::Less {
+                return None;
+            } else {
+                cmp = Ordering::Greater;
+            }
+        }
+
+        if checked < other.rest.len() {
+            if cmp == Ordering::Greater {
+                None
+            } else {
+                Some(Ordering::Less)
+            }
+        } else {
+            debug_assert_eq!(checked, other.rest.len());
+            Some(cmp)
+        }
     }
 }
 
 impl VersionMap {
     #[inline]
+    pub fn get(&self, replica_id: ReplicaId) -> Length {
+        if replica_id == self.this_id {
+            self.this_ts
+        } else {
+            self.rest.get(&replica_id).copied().unwrap_or(0)
+        }
+    }
+
+    #[inline]
+    pub fn get_opt(&self, replica_id: ReplicaId) -> Option<Length> {
+        if replica_id == self.this_id {
+            Some(self.this_ts)
+        } else {
+            self.rest.get(&replica_id).copied()
+        }
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self, replica_id: ReplicaId) -> &mut Length {
+        if replica_id == self.this_id {
+            &mut self.this_ts
+        } else {
+            self.rest.entry(replica_id).or_insert(0)
+        }
+    }
+
+    #[inline]
+    pub fn fork(&self, new_id: ReplicaId) -> Self {
+        let mut forked = self.clone();
+        forked.insert(self.this_id, self.this_ts);
+        forked.this_id = new_id;
+        forked.this_ts = 0;
+        forked
+    }
+
+    #[inline]
     pub fn insert(&mut self, replica_id: ReplicaId, value: Length) {
-        self.map.insert(replica_id, value);
+        self.rest.insert(replica_id, value);
     }
 
     #[inline]
-    pub fn get(&self, replica_id: ReplicaId) -> Option<Length> {
-        self.map.get(&replica_id).copied()
+    pub fn new(this_id: ReplicaId, first_run_len: Length) -> Self {
+        Self { this_id, this_ts: first_run_len, rest: ReplicaIdMap::default() }
     }
 
     #[inline]
-    pub fn get_mut(&mut self, replica_id: ReplicaId) -> Option<&mut Length> {
-        self.map.get_mut(&replica_id)
+    pub fn this_id(&self) -> ReplicaId {
+        self.this_id
     }
 
     #[inline]
-    pub fn new() -> Self {
-        Self { map: ReplicaIdMap::default() }
+    pub fn this_ts(&self) -> Length {
+        self.this_ts
+    }
+
+    #[inline]
+    pub fn this_ts_mut(&mut self) -> &mut Length {
+        &mut self.this_ts
     }
 }
 

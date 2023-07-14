@@ -46,22 +46,22 @@ pub struct Replica {
     run_indices: RunIndices,
 
     /// TODO: docs
-    character_clock: Length,
+    insertion_clock: InsertionClock,
 
     /// TODO: docs
     deletion_clock: DeletionClock,
 
     /// TODO: docs
-    insertion_clock: InsertionClock,
-
-    /// TODO: docs
     lamport_clock: LamportClock,
 
     /// TODO: docs
-    backlog: BackLog,
+    version_map: VersionMap,
 
     /// TODO: docs
-    version_map: VersionMap,
+    deletion_map: ReplicaIdMap<DeletionClock>,
+
+    /// TODO: docs
+    backlog: BackLog,
 }
 
 impl Replica {
@@ -143,14 +143,11 @@ impl Replica {
 
         (
             // TODO: docs
-            // self.deletion_clock_of_replica(deletion.replica_id) ==
-            // deletion.deletion_ts
-            true
+            self.deletion_clock_of_replica(deletion.deleted_by()) + 1
+                == deletion.deletion_ts
         ) && (
             // TODO: docs
-            self.character_clock_of_replica(deletion.replica_id)
-                >= deletion.character_ts
-                && self.version_map >= deletion.version_map
+            self.version_map >= deletion.version_map
         )
     }
 
@@ -168,23 +165,23 @@ impl Replica {
             // it's needed to correctly increment the chararacter clock inside
             // this `Replica`'s `VersionMap` without skipping any temporal
             // range.
-            self.character_clock_of_replica(insertion.replica_id)
+            self.version_map.get(insertion.inserted_by())
                 == insertion.character_ts
         ) && (
             // Makes sure that we have already merged the insertion containing
             // the anchor of this insertion.
-            self.character_clock_of_replica(insertion.anchor.replica_id())
+            self.version_map.get(insertion.anchor.replica_id())
                 >= insertion.anchor.character_ts()
         )
     }
 
     /// TODO: docs
     #[inline]
-    fn character_clock_of_replica(&self, id: ReplicaId) -> Length {
+    fn deletion_clock_of_replica(&self, id: ReplicaId) -> DeletionClock {
         if self.id == id {
-            self.character_clock
+            self.deletion_clock
         } else {
-            self.version_map.get(id).unwrap_or(0)
+            self.deletion_map.get(&id).copied().unwrap_or(0)
         }
     }
 
@@ -340,14 +337,7 @@ impl Replica {
 
         self.deletion_clock += 1;
 
-        CrdtEdit::deletion(
-            start,
-            end,
-            self.id,
-            self.character_clock,
-            deletion_ts,
-            self.version_map.clone(),
-        )
+        CrdtEdit::deletion(start, end, self.version_map.clone(), deletion_ts)
     }
 
     #[doc(hidden)]
@@ -391,35 +381,32 @@ impl Replica {
     where
         Id: Into<ReplicaId>,
     {
-        let mut lamport_clock = self.lamport_clock;
-
-        lamport_clock.next();
+        let new_id = new_id.into();
 
         Self {
-            id: new_id.into(),
+            id: new_id,
             run_tree: self.run_tree.clone(),
             run_indices: self.run_indices.clone(),
-            character_clock: 0,
-            deletion_clock: 0,
             insertion_clock: InsertionClock::new(),
-            lamport_clock,
+            deletion_clock: 0,
+            lamport_clock: self.lamport_clock.fork(),
+            version_map: self.version_map.fork(new_id),
+            deletion_map: self.deletion_map.clone(),
             backlog: self.backlog.clone(),
-            version_map: self.version_map.clone(),
         }
     }
 
     /// TODO: docs
     #[inline]
     fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
-        self.id == deletion.replica_id || false // TODO: add deletion clocks
+        self.deletion_clock_of_replica(deletion.deleted_by())
+            > deletion.deletion_ts
     }
 
     /// TODO: docs
     #[inline]
     fn has_merged_insertion(&self, insertion: &Insertion) -> bool {
-        self.id == insertion.replica_id
-            || self.character_clock_of_replica(insertion.replica_id)
-                > insertion.character_ts
+        self.version_map.get(insertion.inserted_by()) > insertion.character_ts
     }
 
     /// Returns the id of the `Replica`.
@@ -455,10 +442,13 @@ impl Replica {
             return CrdtEdit::no_op();
         }
 
-        let text = Text::new(
-            self.id,
-            (self.character_clock..self.character_clock + len).into(),
-        );
+        let start = self.version_map.this_ts();
+
+        *self.version_map.this_ts_mut() += len;
+
+        let end = self.version_map.this_ts();
+
+        let text = Text::new(self.id, (start..end).into());
 
         let (anchor, outcome) = self.run_tree.insert(
             at_offset,
@@ -493,14 +483,10 @@ impl Replica {
             },
         };
 
-        let character_ts = self.character_clock;
-
-        self.character_clock += len;
-
         CrdtEdit::insertion(
             anchor,
             self.id,
-            character_ts,
+            start,
             self.lamport_clock.last(),
             len,
         )
@@ -707,12 +693,12 @@ impl Replica {
             id,
             run_tree,
             run_indices,
-            character_clock: len,
-            deletion_clock: 0,
             insertion_clock,
+            deletion_clock: 1,
             lamport_clock,
+            version_map: VersionMap::new(id, len),
+            deletion_map: ReplicaIdMap::default(),
             backlog: BackLog::new(),
-            version_map: VersionMap::new(),
         }
     }
 }
@@ -748,6 +734,11 @@ impl core::fmt::Debug for LamportClock {
 }
 
 impl LamportClock {
+    #[inline]
+    fn fork(&self) -> Self {
+        Self(self.0 + 1)
+    }
+
     #[inline]
     fn last(&self) -> LamportTimestamp {
         self.0.saturating_sub(1)
@@ -869,7 +860,6 @@ mod debug {
                 .field("id", &replica.id)
                 .field("run_tree", &self.debug_run_tree)
                 .field("run_indices", &replica.run_indices)
-                .field("character_clock", &replica.character_clock)
                 .field("lamport_clock", &replica.lamport_clock)
                 .field("pending", &replica.backlog)
                 .finish()
