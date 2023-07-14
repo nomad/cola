@@ -596,8 +596,11 @@ impl Replica {
     #[inline]
     fn merge_unchecked_deletion(
         &mut self,
-        _deletion: &Deletion,
+        deletion: &Deletion,
     ) -> Option<TextEdit> {
+        *self.deletion_map.get_mut(deletion.deleted_by()) =
+            deletion.deletion_ts;
+
         todo!();
     }
 
