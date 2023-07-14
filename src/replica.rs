@@ -212,8 +212,8 @@ impl Replica {
     /// ```
     #[inline]
     pub fn decode<Id>(
-        id: Id,
-        encoded: &EncodedReplica,
+        _id: Id,
+        _encoded: &EncodedReplica,
     ) -> Result<Self, DecodeError>
     where
         Id: Into<ReplicaId>,
@@ -565,21 +565,19 @@ impl Replica {
     #[inline]
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) -> Option<TextEdit> {
         match crdt_edit.kind() {
-            CrdtEditKind::Insertion(insertion) => {
-                if self.has_merged_insertion(insertion) {
-                    return None;
-                }
+            CrdtEditKind::Insertion(insertion)
+                if !self.has_merged_insertion(insertion) =>
+            {
                 self.merge_insertion(insertion)
             },
 
-            CrdtEditKind::Deletion(deletion) => {
-                if self.has_merged_deletion(deletion) {
-                    return None;
-                }
+            CrdtEditKind::Deletion(deletion)
+                if !self.has_merged_deletion(deletion) =>
+            {
                 self.merge_deletion(deletion)
             },
 
-            CrdtEditKind::NoOp => None,
+            _ => None,
         }
     }
 
@@ -622,8 +620,10 @@ impl Replica {
     #[inline]
     fn merge_unchecked_insertion(
         &mut self,
-        _insertion: &Insertion,
+        insertion: &Insertion,
     ) -> TextEdit {
+        *self.version_map.get_mut(insertion.inserted_by()) += insertion.len;
+
         todo!();
     }
 
@@ -759,7 +759,7 @@ impl LamportClock {
 
     /// TODO: docs
     #[inline]
-    fn update(&mut self, other: LamportTimestamp) -> LamportTimestamp {
+    fn _update(&mut self, other: LamportTimestamp) -> LamportTimestamp {
         self.0 = self.0.max(other) + 1;
         self.0
     }
