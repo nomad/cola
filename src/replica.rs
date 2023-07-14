@@ -133,9 +133,15 @@ impl Replica {
         BackLogged::from_replica(self)
     }
 
+    /// TOOD: docs
+    #[inline]
+    pub(crate) fn backlog_mut(&mut self) -> &mut BackLog {
+        &mut self.backlog
+    }
+
     /// TODO: docs
     #[inline]
-    pub fn can_merge_deletion(&self, deletion: &Deletion) -> bool {
+    pub(crate) fn can_merge_deletion(&self, deletion: &Deletion) -> bool {
         debug_assert!(!self.has_merged_deletion(deletion));
 
         (
@@ -150,7 +156,7 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    fn can_merge_insertion(&self, insertion: &Insertion) -> bool {
+    pub(crate) fn can_merge_insertion(&self, insertion: &Insertion) -> bool {
         debug_assert!(!self.has_merged_insertion(insertion));
 
         (
@@ -593,7 +599,7 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    fn merge_unchecked_deletion(
+    pub(crate) fn merge_unchecked_deletion(
         &mut self,
         deletion: &Deletion,
     ) -> Option<TextEdit> {
@@ -605,7 +611,7 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    fn merge_unchecked_insertion(
+    pub(crate) fn merge_unchecked_insertion(
         &mut self,
         insertion: &Insertion,
     ) -> TextEdit {
@@ -686,6 +692,11 @@ impl Replica {
             deletion_map: DeletionMap::new(id, 1),
             backlog: BackLog::new(),
         }
+    }
+
+    #[inline]
+    pub(crate) fn version_map(&self) -> &VersionMap {
+        &self.version_map
     }
 }
 

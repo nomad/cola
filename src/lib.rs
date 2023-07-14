@@ -73,7 +73,7 @@ use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
 use replica::*;
 pub use replica_id::ReplicaId;
-use replica_id::ReplicaIdMap;
+use replica_id::{ReplicaIdMap, ReplicaIdMapValuesMut};
 use run_indices::RunIndices;
 use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
 pub use text_edit::{Text, TextEdit};

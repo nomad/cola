@@ -4,6 +4,9 @@ use std::collections::HashMap;
 pub type ReplicaIdMap<T> =
     HashMap<ReplicaId, T, BuildHasherDefault<ReplicaIdHasher>>;
 
+pub type ReplicaIdMapValuesMut<'a, T> =
+    std::collections::hash_map::ValuesMut<'a, ReplicaId, T>;
+
 /// A unique identifier for a `Replica`.
 ///
 /// Internally this is a newtype around 64-bit integer and can be created via

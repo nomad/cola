@@ -1,4 +1,4 @@
-use crate::{Deletion, Insertion, Replica, ReplicaIdMap, TextEdit};
+use crate::*;
 
 /// TODO: docs
 #[derive(Debug, Clone, Default)]
@@ -85,13 +85,48 @@ impl DeletionsBackLog {
 /// This struct is created by the [`backlogged`](Replica::backlogged) method on
 /// [`Replica`]. See its documentation for more information.
 pub struct BackLogged<'a> {
-    #[allow(unused)]
     replica: &'a mut Replica,
+    iter: BackLogIter<'a>,
+    deletions: Option<ReplicaIdMapValuesMut<'a, DeletionsBackLog>>,
+}
+
+/// TODO: docs
+enum BackLogIter<'a> {
+    Insertions {
+        current: Option<&'a mut InsertionsBackLog>,
+        iter: ReplicaIdMapValuesMut<'a, InsertionsBackLog>,
+    },
+
+    Deletions {
+        current: Option<&'a mut DeletionsBackLog>,
+        iter: ReplicaIdMapValuesMut<'a, DeletionsBackLog>,
+    },
 }
 
 impl<'a> BackLogged<'a> {
+    #[inline]
     pub(crate) fn from_replica(replica: &'a mut Replica) -> Self {
-        Self { replica }
+        let backlog = replica.backlog_mut();
+
+        // We transmute the exclusive reference to the backlog into the same
+        // type to get around the borrow checker.
+        //
+        // SAFETY: this is safe because in the `Iterator` implementation we
+        // will never access the backlog through the `Replica` again, neither
+        // directly nor by calling any methods on `Replica` that would access
+        // the backlog.
+        let backlog =
+            unsafe { core::mem::transmute::<_, &mut BackLog>(backlog) };
+
+        let mut iter = backlog.insertions.values_mut();
+
+        let deletions = backlog.deletions.values_mut();
+
+        let current = iter.next();
+
+        let iter = BackLogIter::Insertions { current, iter };
+
+        Self { replica, iter, deletions: Some(deletions) }
     }
 }
 
@@ -100,6 +135,53 @@ impl Iterator for BackLogged<'_> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        todo!();
+        match &mut self.iter {
+            BackLogIter::Insertions { current, iter } => {
+                let Some(insertions) = current else {
+                    let mut iter = self.deletions.take().unwrap();
+                    let current = iter.next();
+                    self.iter = BackLogIter::Deletions { current, iter };
+                    return self.next();
+                };
+
+                let Some(first) = insertions.vec.first() else {
+                    *current = iter.next();
+                    return self.next();
+                };
+
+                if self.replica.can_merge_insertion(first) {
+                    let first = insertions.vec.remove(0);
+                    let edit = self.replica.merge_unchecked_insertion(&first);
+                    Some(edit)
+                } else {
+                    *current = iter.next();
+                    self.next()
+                }
+            },
+
+            BackLogIter::Deletions { current, iter } => {
+                let deletions = current.as_mut()?;
+
+                let Some(first) = deletions.vec.first() else {
+                    *current = iter.next();
+                    return self.next();
+                };
+
+                if self.replica.can_merge_deletion(first) {
+                    let first = deletions.vec.remove(0);
+                    let edit = self.replica.merge_unchecked_deletion(&first);
+                    if edit.is_some() {
+                        edit
+                    } else {
+                        self.next()
+                    }
+                } else {
+                    *current = iter.next();
+                    self.next()
+                }
+            },
+        }
     }
 }
+
+impl core::iter::FusedIterator for BackLogged<'_> {}
