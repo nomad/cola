@@ -49,6 +49,9 @@ pub struct Replica {
     character_clock: Length,
 
     /// TODO: docs
+    deletion_clock: DeletionClock,
+
+    /// TODO: docs
     insertion_clock: InsertionClock,
 
     /// TODO: docs
@@ -333,11 +336,16 @@ impl Replica {
             DeletionOutcome::DeletedWholeRun => {},
         }
 
+        let deletion_ts = self.deletion_clock;
+
+        self.deletion_clock += 1;
+
         CrdtEdit::deletion(
             start,
             end,
             self.id,
             self.character_clock,
+            deletion_ts,
             self.version_map.clone(),
         )
     }
@@ -390,8 +398,9 @@ impl Replica {
         Self {
             id: new_id.into(),
             run_tree: self.run_tree.clone(),
-            character_clock: 0,
             run_indices: self.run_indices.clone(),
+            character_clock: 0,
+            deletion_clock: 0,
             insertion_clock: InsertionClock::new(),
             lamport_clock,
             backlog: self.backlog.clone(),
@@ -699,6 +708,7 @@ impl Replica {
             run_tree,
             run_indices,
             character_clock: len,
+            deletion_clock: 0,
             insertion_clock,
             lamport_clock,
             backlog: BackLog::new(),
@@ -794,6 +804,12 @@ impl InsertionClock {
 
 /// TODO: docs
 pub type InsertionTimestamp = u64;
+
+/// TODO: docs
+pub type DeletionClock = u64;
+
+/// TODO: docs
+pub type DeletionTs = DeletionClock;
 
 mod debug {
     use core::fmt::Debug;

@@ -26,6 +26,7 @@ impl CrdtEdit {
         end: Anchor,
         this_id: ReplicaId,
         this_character_ts: Length,
+        deletion_ts: DeletionTs,
         version_map: VersionMap,
     ) -> Self {
         let kind = CrdtEditKind::Deletion(Deletion {
@@ -33,6 +34,7 @@ impl CrdtEdit {
             end,
             replica_id: this_id,
             character_ts: this_character_ts,
+            deletion_ts,
             version_map,
         });
         Self { kind }
@@ -94,5 +96,6 @@ pub struct Deletion {
     pub(crate) end: Anchor,
     pub(crate) replica_id: ReplicaId,
     pub(crate) character_ts: Length,
+    pub(crate) deletion_ts: DeletionTs,
     pub(crate) version_map: VersionMap,
 }
