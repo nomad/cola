@@ -202,14 +202,27 @@ impl Replica {
     ///
     /// assert_eq!(replica2.id(), ReplicaId::from(2));
     /// ```
+    #[cfg(feature = "encode")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[inline]
     pub fn decode<Id>(
         _id: Id,
-        _encoded: &EncodedReplica,
+        encoded: &EncodedReplica,
     ) -> Result<Self, DecodeError>
     where
         Id: Into<ReplicaId>,
     {
+        if encoded.protocol_version() != PROTOCOL_VERSION {
+            return Err(DecodeError::DifferentProtocol {
+                encoded_on: encoded.protocol_version(),
+                decoding_on: PROTOCOL_VERSION,
+            });
+        }
+
+        if encoded.checksum() != &checksum(encoded.bytes()) {
+            return Err(DecodeError::ChecksumFailed);
+        }
+
         // TODO: check protocol version and checksum.
 
         todo!();
@@ -346,9 +359,15 @@ impl Replica {
     /// Note that if you want to collaborate within a single process you can
     /// just [`fork`](Replica::fork) the `Replica` without having to encode it
     /// and decode it again.
+    #[cfg(feature = "encode")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[inline]
     pub fn encode(&self) -> EncodedReplica {
-        todo!();
+        let bytes: Vec<u8> = todo!();
+
+        let checksum = checksum(&bytes);
+
+        EncodedReplica::new(PROTOCOL_VERSION, checksum, bytes)
     }
 
     /// Creates a new `Replica` with the given id but with the same internal

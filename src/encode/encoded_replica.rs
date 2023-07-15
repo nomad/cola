@@ -6,15 +6,43 @@ use crate::*;
 /// This struct is created by the [`encode`](Replica::encode) method and can be
 /// decoded back into a `Replica` by calling [`decode`](Replica::decode). See
 /// the documentation of those methods for more information.
+#[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
 #[derive(Clone, PartialEq, Eq)]
 pub struct EncodedReplica {
     protocol_version: ProtocolVersion,
-    checksum: (),
+    checksum: Checksum,
     bytes: Vec<u8>,
+}
+
+impl EncodedReplica {
+    #[inline]
+    pub(crate) fn bytes(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+
+    #[inline]
+    pub(crate) fn checksum(&self) -> &Checksum {
+        &self.checksum
+    }
+
+    #[inline]
+    pub(crate) fn new(
+        protocol_version: ProtocolVersion,
+        checksum: Checksum,
+        bytes: Vec<u8>,
+    ) -> Self {
+        Self { protocol_version, checksum, bytes }
+    }
+
+    #[inline]
+    pub(crate) fn protocol_version(&self) -> ProtocolVersion {
+        self.protocol_version
+    }
 }
 
 /// The type of error that can occur when [`decode`](Replica::decode)ing an
 /// [`EncodedReplica`].
+#[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DecodeError {
     /// This error occurs when the internal checksum of the [`EncodedReplica`]

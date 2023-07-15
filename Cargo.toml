@@ -9,10 +9,12 @@ license = "MIT"
 name = "cola"
 
 [features]
+encode = ["dep:sha2"]
 serde = ["dep:serde"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"], optional = true }
+sha2 = { version = "0.10", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"

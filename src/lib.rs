@@ -54,7 +54,6 @@ extern crate alloc;
 
 mod backlog;
 mod crdt_edit;
-mod encode;
 mod gtree;
 mod replica;
 mod replica_id;
@@ -68,7 +67,6 @@ use backlog::BackLog;
 pub use backlog::BackLogged;
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::{CrdtEditKind, Deletion, Insertion};
-pub use encode::{DecodeError, EncodedReplica};
 use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
 use replica::*;
@@ -79,6 +77,13 @@ use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
 pub use text_edit::{Text, TextEdit};
 use utils::*;
 use version_map::{DeletionMap, VersionMap};
+
+#[cfg(feature = "encode")]
+mod encode;
+#[cfg(feature = "encode")]
+use encode::{checksum, Checksum};
+#[cfg(feature = "encode")]
+pub use encode::{DecodeError, EncodedReplica};
 
 /// The version of the protocol cola uses to represent `EncodedReplica`s and
 /// `CrdtEdit`s.
