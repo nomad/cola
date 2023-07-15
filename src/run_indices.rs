@@ -2,7 +2,9 @@ use crate::*;
 
 /// TODO: docs
 #[derive(Clone)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunIndices {
+    #[cfg_attr(feature = "encode", serde(flatten))]
     map: ReplicaIdMap<ReplicaIndices>,
 }
 
@@ -48,6 +50,7 @@ impl RunIndices {
 
 /// TODO: docs
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct ReplicaIndices {
     /// TODO: docs
     insertion_runs: Gtree<32, InsertionSplits>,
@@ -96,18 +99,7 @@ impl ReplicaIndices {
 
     #[inline]
     pub fn extend_last(&mut self, extend_by: Length) {
-        match &mut self.last_run {
-            InsertionSplits::Array { splits, len, total_len } => {
-                splits[*len - 1].len += extend_by;
-                *total_len += extend_by;
-            },
-
-            InsertionSplits::Gtree(splits) => {
-                splits.get_last_leaf_mut(|last| {
-                    last.len += extend_by;
-                });
-            },
-        }
+        self.last_run.extend(extend_by);
     }
 
     #[inline]
@@ -224,9 +216,13 @@ mod run_splits {
 
     /// TODO: docs
     #[derive(Clone)]
+    #[cfg_attr(
+        feature = "encode",
+        derive(serde::Serialize, serde::Deserialize)
+    )]
     pub(super) enum InsertionSplits<const INLINE: usize> {
         /// TODO: docs
-        Array { splits: [Split; INLINE], len: usize, total_len: Length },
+        Array(Array<INLINE>),
 
         /// TODO: docs
         Gtree(Gtree<INLINE, Split>),
@@ -235,17 +231,33 @@ mod run_splits {
     impl<const N: usize> core::fmt::Debug for InsertionSplits<N> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             match self {
-                Self::Array { splits, len, .. } => splits[..*len].fmt(f),
-                Self::Gtree(splits) => splits.fmt(f),
+                Self::Array(array) => array.fmt(f),
+                Self::Gtree(gtree) => gtree.fmt(f),
             }
         }
     }
 
     impl<const INLINE: usize> InsertionSplits<INLINE> {
         #[inline]
+        pub fn extend(&mut self, extend_by: Length) {
+            match self {
+                InsertionSplits::Array(Array { splits, len, total_len }) => {
+                    splits[*len - 1].len += extend_by;
+                    *total_len += extend_by;
+                },
+
+                InsertionSplits::Gtree(splits) => {
+                    splits.get_last_leaf_mut(|last| {
+                        last.len += extend_by;
+                    });
+                },
+            }
+        }
+
+        #[inline]
         pub fn len(&self) -> Length {
             match self {
-                Self::Array { total_len, .. } => *total_len,
+                Self::Array(array) => array.total_len,
                 Self::Gtree(splits) => splits.len(),
             }
         }
@@ -260,7 +272,7 @@ mod run_splits {
             debug_assert!(len_move > 0);
 
             match self {
-                Self::Array { splits, .. } => {
+                Self::Array(Array { splits, .. }) => {
                     let mut leaf_idx = 0;
                     let mut next_idx = 0;
                     let mut offset = 0;
@@ -299,7 +311,7 @@ mod run_splits {
             debug_assert!(len_move > 0);
 
             match self {
-                Self::Array { splits, .. } => {
+                Self::Array(Array { splits, .. }) => {
                     let mut prev_idx = 0;
                     let mut leaf_idx = 0;
                     let mut offset = 0;
@@ -333,7 +345,7 @@ mod run_splits {
             let mut array = [Split::null(); INLINE];
             let total_len = first_split.len;
             array[0] = first_split;
-            Self::Array { splits: array, len: 1, total_len }
+            Self::Array(Array { splits: array, len: 1, total_len })
         }
 
         #[inline]
@@ -343,7 +355,7 @@ mod run_splits {
             right_idx: LeafIdx<EditRun>,
         ) {
             match self {
-                InsertionSplits::Array { splits, len, total_len } => {
+                InsertionSplits::Array(Array { splits, len, total_len }) => {
                     if *len < INLINE {
                         let mut offset = 0;
                         for (idx, split) in splits.iter_mut().enumerate() {
@@ -384,6 +396,50 @@ mod run_splits {
         }
     }
 
+    #[derive(Clone)]
+    pub(super) struct Array<const N: usize> {
+        splits: [Split; N],
+        len: usize,
+        total_len: Length,
+    }
+
+    impl<const N: usize> core::fmt::Debug for Array<N> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            self.splits().fmt(f)
+        }
+    }
+
+    impl<const N: usize> Array<N> {
+        #[inline]
+        fn splits(&self) -> &[Split] {
+            &self.splits[..self.len]
+        }
+    }
+
+    #[cfg(feature = "encode")]
+    mod array_serde {
+        use serde::{de, ser};
+
+        use super::*;
+
+        impl<const N: usize> ser::Serialize for Array<N> {
+            fn serialize<S: ser::Serializer>(
+                &self,
+                serializer: S,
+            ) -> Result<S::Ok, S::Error> {
+                todo!();
+            }
+        }
+
+        impl<'de, const N: usize> de::Deserialize<'de> for Array<N> {
+            fn deserialize<D: de::Deserializer<'de>>(
+                deserializer: D,
+            ) -> Result<Self, D::Error> {
+                todo!();
+            }
+        }
+    }
+
     impl<const N: usize> gtree::Join for InsertionSplits<N> {}
 
     impl<const N: usize> gtree::Leaf for InsertionSplits<N> {
@@ -399,12 +455,12 @@ mod run_splits {
         #[inline]
         pub fn leaves(&self) -> RunSplitLeaves<'_, N> {
             match self {
-                Self::Array { splits, len, .. } => {
-                    RunSplitLeaves::OverArray(splits[..*len].iter())
+                Self::Array(array) => {
+                    RunSplitLeaves::OverArray(array.splits().iter())
                 },
 
-                Self::Gtree(splits) => {
-                    RunSplitLeaves::OverGtree(splits.leaves())
+                Self::Gtree(gtree) => {
+                    RunSplitLeaves::OverGtree(gtree.leaves())
                 },
             }
         }
@@ -429,6 +485,7 @@ mod run_splits {
 
 /// TODO: docs
 #[derive(Copy, Clone)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct Split {
     /// TODO: docs
     len: Length,

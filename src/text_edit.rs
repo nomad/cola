@@ -112,6 +112,7 @@ pub enum TextEdit {
 /// [`inserted_by`](Text::inserted_by) and
 /// [`temporal_range`](Text::temporal_range) methods respectively.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct Text {
     pub(crate) inserted_by: ReplicaId,
     pub(crate) range: crate::Range<Length>,

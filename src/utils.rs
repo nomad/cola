@@ -5,6 +5,7 @@ use core::ops::{Add, Range as StdRange, RangeBounds, Sub};
 use crate::Length;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Range<T> {
     pub start: T,
     pub end: T,

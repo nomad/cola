@@ -100,6 +100,7 @@ const _NODE_IDX_LAYOUT_CHECK: usize = {
 ///
 /// TODO: finish describing the data structure.
 #[derive(Clone)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     /// The internal nodes of the Gtree.
     ///
@@ -121,6 +122,8 @@ pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     ///
     /// Saving this allows to make repeated edits at the same cursor position
     /// fast af.
+    #[serde(bound(serialize = "L::Length : serde::Serialize"))]
+    #[serde(bound(deserialize = "L::Length : serde::Deserialize<'de>"))]
     cursor: Option<Cursor<L>>,
 }
 
@@ -129,6 +132,7 @@ pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
 /// It can be passed to [`Gtree::inode()`] and [`Gtree::inode_mut()`] to
 /// get access to the inode.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct InodeIdx(usize);
 
 impl InodeIdx {
@@ -157,6 +161,7 @@ impl InodeIdx {
 
 /// A stable identifier for a particular leaf of the Gtree.
 #[derive(Eq)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct LeafIdx<L> {
     idx: usize,
     _pd: PhantomData<L>,
@@ -198,6 +203,7 @@ impl<L> PartialEq<LeafIdx<L>> for LeafIdx<L> {
 /// two leaf nodes in the tree, much like a line cursor identifies a position
 /// between two characters in a text editor.
 #[derive(PartialEq, Eq)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct Cursor<L: Leaf> {
     /// The index of the leaf node that comes *after* the cursor. There always
     /// is one because the cursor is never parked after the last leafof the
@@ -2488,6 +2494,7 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
 
 /// A leaf node of the Gtree.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct Lnode<Leaf> {
     /// The value of this leaf node.
     value: Leaf,
@@ -3201,6 +3208,36 @@ mod leaves {
 
                 self.next()
             }
+        }
+    }
+}
+
+#[cfg(feature = "encode")]
+mod inode_serde {
+    use serde::{de, ser};
+
+    use super::*;
+
+    impl<const N: usize, L: Leaf> ser::Serialize for Inode<N, L>
+    where
+        L::Length: ser::Serialize,
+    {
+        fn serialize<S: ser::Serializer>(
+            &self,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            todo!();
+        }
+    }
+
+    impl<'de, const N: usize, L: Leaf> de::Deserialize<'de> for Inode<N, L>
+    where
+        L::Length: de::Deserialize<'de>,
+    {
+        fn deserialize<D: de::Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Self, D::Error> {
+            todo!();
         }
     }
 }

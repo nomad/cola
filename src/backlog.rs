@@ -2,6 +2,7 @@ use crate::*;
 
 /// TODO: docs
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct BackLog {
     insertions: ReplicaIdMap<InsertionsBackLog>,
     deletions: ReplicaIdMap<DeletionsBackLog>,
@@ -32,6 +33,7 @@ impl BackLog {
 
 /// TODO: docs
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct InsertionsBackLog {
     vec: Vec<Insertion>,
 }
@@ -57,6 +59,7 @@ impl InsertionsBackLog {
 
 /// TODO: docs
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct DeletionsBackLog {
     vec: Vec<Deletion>,
 }

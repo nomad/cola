@@ -760,6 +760,7 @@ impl core::fmt::Debug for Replica {
 
 /// TODO: docs
 #[derive(Copy, Clone, Default)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct LamportClock(u64);
 
 impl core::fmt::Debug for LamportClock {
@@ -839,41 +840,102 @@ pub type DeletionTs = DeletionClock;
 
 #[cfg(feature = "encode")]
 mod encode {
+    use serde::{de, ser};
+
     use super::*;
 
+    type EncodedFields =
+        (RunTree, RunIndices, LamportClock, VersionMap, DeletionMap, BackLog);
+
     /// TODO: docs
+    #[inline]
     pub(super) fn encode(replica: &Replica) -> Vec<u8> {
-        todo!();
+        let mut encoded = Vec::new();
+
+        encode_field(&mut encoded, &replica.run_tree);
+        encode_field(&mut encoded, &replica.run_indices);
+        encode_field(&mut encoded, &replica.lamport_clock);
+        encode_field(&mut encoded, &replica.version_map);
+        encode_field(&mut encoded, &replica.deletion_map);
+        encode_field(&mut encoded, &replica.backlog);
+
+        encoded
     }
 
     /// TODO: docs
-    pub(super) fn decode(
-        bytes: &[u8],
-    ) -> Option<(
-        RunTree,
-        RunIndices,
-        LamportClock,
-        VersionMap,
-        DeletionMap,
-        BackLog,
-    )> {
-        todo!();
+    #[inline]
+    pub(super) fn decode(bytes: &[u8]) -> Option<EncodedFields> {
+        let (run_tree, bytes) = decode_field(bytes)?;
+        let (run_indices, bytes) = decode_field(bytes)?;
+        let (lamport_clock, bytes) = decode_field(bytes)?;
+        let (version_map, bytes) = decode_field(bytes)?;
+        let (deletion_map, bytes) = decode_field(bytes)?;
+        let (backlog, bytes) = decode_field(bytes)?;
+
+        if bytes.is_empty() {
+            Some((
+                run_tree,
+                run_indices,
+                lamport_clock,
+                version_map,
+                deletion_map,
+                backlog,
+            ))
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn encode_field<T>(buf: &mut Vec<u8>, field: &T)
+    where
+        T: ser::Serialize,
+    {
+        let field_bytes = serialize(field);
+        let len_bytes = field_bytes.len().to_le_bytes();
+        buf.extend_from_slice(&len_bytes);
+        buf.extend_from_slice(&field_bytes);
+    }
+
+    #[inline]
+    fn decode_field<'a, T>(buf: &'a [u8]) -> Option<(T, &'a [u8])>
+    where
+        T: de::Deserialize<'a>,
+    {
+        // The first 8 bytes represent the length of the encoded field.
+        let (len_bytes, rest) = if buf.len() >= 8 {
+            buf.split_at(8)
+        } else {
+            return None;
+        };
+
+        let len_bytes: [u8; 8] = len_bytes.try_into().ok()?;
+
+        let len = usize::from_le_bytes(len_bytes);
+
+        let (encoded_field, rest) = if rest.len() >= len {
+            rest.split_at(len)
+        } else {
+            return None;
+        };
+
+        deserialize::<T>(encoded_field).map(|field| (field, rest))
     }
 
     #[inline]
     fn serialize<T>(value: &T) -> Vec<u8>
     where
-        T: serde::Serialize,
+        T: ser::Serialize,
     {
         bincode::serialize(value).expect("failed to serialize")
     }
 
     #[inline]
-    fn deserialize<'a, T>(bytes: &'a [u8]) -> T
+    fn deserialize<'a, T>(bytes: &'a [u8]) -> Option<T>
     where
-        T: serde::de::Deserialize<'a>,
+        T: de::Deserialize<'a>,
     {
-        bincode::deserialize(bytes).expect("failed to deserialize")
+        bincode::deserialize(bytes).ok()
     }
 }
 

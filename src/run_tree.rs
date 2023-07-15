@@ -7,6 +7,7 @@ use crate::*;
 const RUN_TREE_ARITY: usize = 32;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunTree {
     /// TODO: docs
     gtree: Gtree<RUN_TREE_ARITY, EditRun>,
@@ -334,6 +335,7 @@ pub(crate) enum DeletionOutcome {
 
 /// TODO: docs
 #[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct EditRun {
     /// TODO: docs
     inserted_at: Anchor,
@@ -506,7 +508,10 @@ impl EditRun {
 
 /// TODO: docs
 #[derive(Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "encode", feature = "serde"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct Anchor {
     /// TODO: docs
     replica_id: ReplicaId,

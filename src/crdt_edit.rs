@@ -75,7 +75,10 @@ pub enum CrdtEditKind {
 
 /// TODO: docs
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "encode", feature = "serde"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct Insertion {
     pub(crate) anchor: Anchor,
     pub(crate) replica_id: ReplicaId,
@@ -93,7 +96,10 @@ impl Insertion {
 
 /// TODO: docs
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "encode", feature = "serde"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct Deletion {
     pub(crate) start: Anchor,
     pub(crate) end: Anchor,

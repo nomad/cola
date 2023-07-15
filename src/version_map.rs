@@ -121,7 +121,10 @@ impl PartialOrd for VersionMap {
 }
 
 #[derive(Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "encode", feature = "serde"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct BaseMap<T> {
     /// TODO: docs
     this_id: ReplicaId,
