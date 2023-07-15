@@ -3214,6 +3214,7 @@ mod leaves {
 
 #[cfg(feature = "encode")]
 mod inode_serde {
+    use serde::ser::SerializeMap;
     use serde::{de, ser};
 
     use super::*;
@@ -3226,7 +3227,24 @@ mod inode_serde {
             &self,
             serializer: S,
         ) -> Result<S::Ok, S::Error> {
-            todo!();
+            let mut map = serializer.serialize_map(Some(5))?;
+
+            map.serialize_entry("tot_len", &self.tot_len)?;
+            map.serialize_entry("parent", &self.parent)?;
+            map.serialize_entry("num_children", &self.num_children)?;
+            map.serialize_entry("has_leaves", &self.has_leaves)?;
+
+            match self.children() {
+                Either::Internal(inode_idxs) => {
+                    map.serialize_entry("children", inode_idxs)?;
+                },
+
+                Either::Leaf(leaf_idxs) => {
+                    map.serialize_entry("children", leaf_idxs)?;
+                },
+            }
+
+            map.end()
         }
     }
 
@@ -3237,7 +3255,157 @@ mod inode_serde {
         fn deserialize<D: de::Deserializer<'de>>(
             deserializer: D,
         ) -> Result<Self, D::Error> {
-            todo!();
+            struct InodeVisitor<const N: usize, L: Leaf>(PhantomData<L>);
+
+            impl<'de, const N: usize, L> de::Visitor<'de> for InodeVisitor<N, L>
+            where
+                L: Leaf,
+                L::Length: de::Deserialize<'de>,
+            {
+                type Value = Inode<N, L>;
+
+                #[inline]
+                fn expecting(
+                    &self,
+                    formatter: &mut core::fmt::Formatter,
+                ) -> core::fmt::Result {
+                    formatter.write_str("a map representing an Inode")
+                }
+
+                #[inline]
+                fn visit_map<V: de::MapAccess<'de>>(
+                    self,
+                    mut map: V,
+                ) -> Result<Self::Value, V::Error> {
+                    let mut tot_len = None;
+                    let mut parent = None;
+                    let mut num_children = None;
+                    let mut has_leaves = None;
+                    let mut children_vec = None;
+
+                    while let Some(key) = map.next_key()? {
+                        match key {
+                            "tot_len" => {
+                                if tot_len.is_some() {
+                                    return Err(de::Error::duplicate_field(
+                                        "tot_len",
+                                    ));
+                                }
+                                tot_len = Some(map.next_value()?);
+                            },
+
+                            "parent" => {
+                                if parent.is_some() {
+                                    return Err(de::Error::duplicate_field(
+                                        "parent",
+                                    ));
+                                }
+                                parent = Some(map.next_value()?);
+                            },
+
+                            "num_children" => {
+                                if num_children.is_some() {
+                                    return Err(de::Error::duplicate_field(
+                                        "num_children",
+                                    ));
+                                }
+                                num_children = Some(map.next_value()?);
+                            },
+
+                            "has_leaves" => {
+                                if has_leaves.is_some() {
+                                    return Err(de::Error::duplicate_field(
+                                        "has_leaves",
+                                    ));
+                                }
+                                has_leaves = Some(map.next_value()?);
+                            },
+
+                            "children" => {
+                                if children_vec.is_some() {
+                                    return Err(de::Error::duplicate_field(
+                                        "children",
+                                    ));
+                                }
+                                children_vec =
+                                    Some(map.next_value::<Vec<usize>>()?);
+                            },
+
+                            _ => {
+                                return Err(de::Error::unknown_field(
+                                    key,
+                                    &[
+                                        "tot_len",
+                                        "parent",
+                                        "num_children",
+                                        "has_leaves",
+                                        "children",
+                                    ],
+                                ));
+                            },
+                        }
+                    }
+
+                    let tot_len = tot_len
+                        .ok_or_else(|| de::Error::missing_field("tot_len"))?;
+
+                    let parent = parent
+                        .ok_or_else(|| de::Error::missing_field("parent"))?;
+
+                    let num_children = num_children.ok_or_else(|| {
+                        de::Error::missing_field("num_children")
+                    })?;
+
+                    let has_leaves = has_leaves.ok_or_else(|| {
+                        de::Error::missing_field("has_leaves")
+                    })?;
+
+                    let children_slice = children_vec
+                        .ok_or_else(|| de::Error::missing_field("children"))?;
+
+                    if children_slice.len() != num_children {
+                        return Err(de::Error::invalid_length(
+                            children_slice.len(),
+                            &num_children.to_string().as_str(),
+                        ));
+                    }
+
+                    if children_slice.len() > N {
+                        return Err(de::Error::invalid_length(
+                            children_slice.len(),
+                            &format!("no more than {N}").as_str(),
+                        ));
+                    }
+
+                    let mut children = [NodeIdx::dangling(); N];
+
+                    if has_leaves {
+                        for (i, child_idx) in
+                            children_slice.into_iter().enumerate()
+                        {
+                            children[i] =
+                                NodeIdx::from_leaf(LeafIdx::new(child_idx));
+                        }
+                    } else {
+                        for (i, child_idx) in
+                            children_slice.into_iter().enumerate()
+                        {
+                            children[i] =
+                                NodeIdx::from_internal(InodeIdx(child_idx));
+                        }
+                    }
+
+                    Ok(Inode {
+                        tot_len,
+                        parent,
+                        num_children,
+                        has_leaves,
+                        children,
+                    })
+                }
+            }
+
+            deserializer.deserialize_map(InodeVisitor(PhantomData))
         }
     }
 }

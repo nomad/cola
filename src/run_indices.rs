@@ -418,6 +418,7 @@ mod run_splits {
 
     #[cfg(feature = "encode")]
     mod array_serde {
+        use serde::ser::SerializeMap;
         use serde::{de, ser};
 
         use super::*;
@@ -427,7 +428,11 @@ mod run_splits {
                 &self,
                 serializer: S,
             ) -> Result<S::Ok, S::Error> {
-                todo!();
+                let mut map = serializer.serialize_map(Some(3))?;
+                map.serialize_entry("splits", self.splits())?;
+                map.serialize_entry("len", &self.len)?;
+                map.serialize_entry("total_len", &self.total_len)?;
+                map.end()
             }
         }
 
@@ -435,7 +440,105 @@ mod run_splits {
             fn deserialize<D: de::Deserializer<'de>>(
                 deserializer: D,
             ) -> Result<Self, D::Error> {
-                todo!();
+                struct ArrayVisitor<const N: usize>;
+
+                impl<'de, const N: usize> de::Visitor<'de> for ArrayVisitor<N> {
+                    type Value = Array<N>;
+
+                    #[inline]
+                    fn expecting(
+                        &self,
+                        formatter: &mut core::fmt::Formatter,
+                    ) -> core::fmt::Result {
+                        formatter.write_str("a map representing an Array")
+                    }
+
+                    #[inline]
+                    fn visit_map<V: de::MapAccess<'de>>(
+                        self,
+                        mut map: V,
+                    ) -> Result<Self::Value, V::Error> {
+                        let mut len = None;
+                        let mut total_len = None;
+                        let mut splits_vec = None;
+
+                        while let Some(key) = map.next_key()? {
+                            match key {
+                                "len" => {
+                                    if len.is_some() {
+                                        return Err(
+                                            de::Error::duplicate_field("len"),
+                                        );
+                                    }
+                                    len = Some(map.next_value()?);
+                                },
+
+                                "total_len" => {
+                                    if total_len.is_some() {
+                                        return Err(
+                                            de::Error::duplicate_field(
+                                                "total_len",
+                                            ),
+                                        );
+                                    }
+                                    total_len = Some(map.next_value()?);
+                                },
+
+                                "splits" => {
+                                    if splits_vec.is_some() {
+                                        return Err(
+                                            de::Error::duplicate_field(
+                                                "splits",
+                                            ),
+                                        );
+                                    }
+                                    splits_vec =
+                                        Some(map.next_value::<Vec<Split>>()?);
+                                },
+
+                                _ => {
+                                    return Err(de::Error::unknown_field(
+                                        key,
+                                        &["splits", "len", "total_len"],
+                                    ));
+                                },
+                            }
+                        }
+
+                        let len = len
+                            .ok_or_else(|| de::Error::missing_field("len"))?;
+
+                        let total_len = total_len.ok_or_else(|| {
+                            de::Error::missing_field("total_len")
+                        })?;
+
+                        let splits_vec = splits_vec.ok_or_else(|| {
+                            de::Error::missing_field("splits")
+                        })?;
+
+                        if splits_vec.len() != len {
+                            return Err(de::Error::invalid_length(
+                                splits_vec.len(),
+                                &len.to_string().as_str(),
+                            ));
+                        }
+
+                        if splits_vec.len() > N {
+                            return Err(de::Error::invalid_length(
+                                splits_vec.len(),
+                                &format!("no more than {N}").as_str(),
+                            ));
+                        }
+
+                        let mut splits = [Split::null(); N];
+
+                        splits[..len].copy_from_slice(splits_vec.as_slice());
+
+                        Ok(Array { splits, len, total_len })
+                    }
+                }
+
+                deserializer.deserialize_map(ArrayVisitor)
             }
         }
     }
