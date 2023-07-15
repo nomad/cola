@@ -9,10 +9,13 @@ license = "MIT"
 name = "cola"
 
 [features]
-encode = ["dep:sha2"]
-serde = ["dep:serde"]
+encode = ["dep:bincode", "dep:sha2", "dep:serde"]
+serde = ["encode", "dep:serde"]
+
+default = ["encode"]
 
 [dependencies]
+bincode = { version = "1.3", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 sha2 = { version = "0.10", optional = true }
 

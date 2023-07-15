@@ -206,7 +206,7 @@ impl Replica {
     #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[inline]
     pub fn decode<Id>(
-        _id: Id,
+        id: Id,
         encoded: &EncodedReplica,
     ) -> Result<Self, DecodeError>
     where
@@ -223,9 +223,35 @@ impl Replica {
             return Err(DecodeError::ChecksumFailed);
         }
 
-        // TODO: check protocol version and checksum.
+        let Some((
+            run_tree,
+            run_indices,
+            lamport_clock,
+            mut version_map,
+            mut deletion_map,
+            backlog,
+        )) = encode::decode(encoded.bytes())
+        else {
+            return Err(DecodeError::InvalidData);
+        };
 
-        todo!();
+        let id = id.into();
+
+        version_map.fork_in_place(id, 0);
+        deletion_map.fork_in_place(id, 1);
+
+        let replica = Self {
+            id,
+            run_tree,
+            run_indices,
+            insertion_clock: InsertionClock::new(),
+            lamport_clock: lamport_clock.fork(),
+            version_map,
+            deletion_map,
+            backlog,
+        };
+
+        Ok(replica)
     }
 
     /// Informs the `Replica` that you have deleted the characters in the given
@@ -363,10 +389,8 @@ impl Replica {
     #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[inline]
     pub fn encode(&self) -> EncodedReplica {
-        let bytes: Vec<u8> = todo!();
-
+        let bytes = encode::encode(self);
         let checksum = checksum(&bytes);
-
         EncodedReplica::new(PROTOCOL_VERSION, checksum, bytes)
     }
 
@@ -712,11 +736,6 @@ impl Replica {
             backlog: BackLog::new(),
         }
     }
-
-    #[inline]
-    pub(crate) fn version_map(&self) -> &VersionMap {
-        &self.version_map
-    }
 }
 
 impl core::fmt::Debug for Replica {
@@ -817,6 +836,46 @@ pub type DeletionClock = u64;
 
 /// TODO: docs
 pub type DeletionTs = DeletionClock;
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+
+    /// TODO: docs
+    pub(super) fn encode(replica: &Replica) -> Vec<u8> {
+        todo!();
+    }
+
+    /// TODO: docs
+    pub(super) fn decode(
+        bytes: &[u8],
+    ) -> Option<(
+        RunTree,
+        RunIndices,
+        LamportClock,
+        VersionMap,
+        DeletionMap,
+        BackLog,
+    )> {
+        todo!();
+    }
+
+    #[inline]
+    fn serialize<T>(value: &T) -> Vec<u8>
+    where
+        T: serde::Serialize,
+    {
+        bincode::serialize(value).expect("failed to serialize")
+    }
+
+    #[inline]
+    fn deserialize<'a, T>(bytes: &'a [u8]) -> T
+    where
+        T: serde::de::Deserialize<'a>,
+    {
+        bincode::deserialize(bytes).expect("failed to deserialize")
+    }
+}
 
 mod debug {
     use core::fmt::Debug;

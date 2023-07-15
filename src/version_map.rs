@@ -168,11 +168,16 @@ impl<T: Copy> BaseMap<T> {
     }
 
     #[inline]
+    pub fn fork_in_place(&mut self, new_id: ReplicaId, restart_at: T) {
+        self.insert(self.this_id, self.this_value);
+        self.this_id = new_id;
+        self.this_value = restart_at;
+    }
+
+    #[inline]
     pub fn fork(&self, new_id: ReplicaId, restart_at: T) -> Self {
         let mut forked = self.clone();
-        forked.insert(self.this_id, self.this_value);
-        forked.this_id = new_id;
-        forked.this_value = restart_at;
+        forked.fork_in_place(new_id, restart_at);
         forked
     }
 

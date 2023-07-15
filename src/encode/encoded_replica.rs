@@ -8,6 +8,7 @@ use crate::*;
 /// the documentation of those methods for more information.
 #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EncodedReplica {
     protocol_version: ProtocolVersion,
     checksum: Checksum,
@@ -78,31 +79,4 @@ pub enum DecodeError {
     /// As long as you're not doing that (and you shouldn't be) this variant
     /// can be ignored.
     InvalidData,
-}
-
-#[cfg(feature = "serde")]
-mod serde {
-    use ::serde::{de, ser};
-
-    use super::*;
-
-    impl ser::Serialize for EncodedReplica {
-        #[inline]
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: ser::Serializer,
-        {
-            todo!();
-        }
-    }
-
-    impl<'de> de::Deserialize<'de> for EncodedReplica {
-        #[inline]
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: de::Deserializer<'de>,
-        {
-            todo!();
-        }
-    }
 }
