@@ -2,6 +2,16 @@ use cola::{Length, Replica, ReplicaId};
 
 #[cfg(feature = "encode")]
 #[test]
+fn encode_empty() {
+    let replica = Replica::new(0, 42);
+    let encoded = replica.encode();
+    let decoded = Replica::decode(1, &encoded).unwrap();
+    assert_eq!(decoded.id(), ReplicaId::from(1));
+    assert!(replica.eq_decoded(&decoded));
+}
+
+#[cfg(feature = "encode")]
+#[test]
 fn encode_automerge() {
     let automerge = traces::automerge().chars_to_bytes();
 
