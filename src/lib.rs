@@ -192,7 +192,7 @@ pub type ProtocolVersion = u64;
 ///
 /// buf2.insert_str(offset, b); // 💥 panics!
 /// ```
-pub type Length = u64;
+pub type Length = usize;
 
 /// TODO: docs
 const PROTOCOL_VERSION: ProtocolVersion = 0;

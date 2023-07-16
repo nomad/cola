@@ -74,7 +74,7 @@ pub enum CrdtEditKind {
 }
 
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
@@ -95,7 +95,7 @@ impl Insertion {
 }
 
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)

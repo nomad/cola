@@ -376,6 +376,13 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
+    #[doc(hidden)]
+    pub fn eq_decoded(&self, other: &Self) -> bool {
+        self.run_tree == other.run_tree
+            && self.run_indices == other.run_indices
+            && self.backlog == other.backlog
+    }
+
     /// Encodes the `Replica` in a custom binary format.
     ///
     /// This can be used to send a `Replica` to another peer over the network.

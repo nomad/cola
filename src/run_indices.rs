@@ -1,7 +1,7 @@
 use crate::*;
 
 /// TODO: docs
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunIndices {
     #[cfg_attr(feature = "encode", serde(flatten))]
@@ -49,7 +49,7 @@ impl RunIndices {
 }
 
 /// TODO: docs
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct ReplicaIndices {
     /// TODO: docs
@@ -215,7 +215,7 @@ mod run_splits {
     use super::*;
 
     /// TODO: docs
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq)]
     #[cfg_attr(
         feature = "encode",
         derive(serde::Serialize, serde::Deserialize)
@@ -396,7 +396,7 @@ mod run_splits {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq)]
     pub(super) struct Array<const N: usize> {
         splits: [Split; N],
         len: usize,
@@ -587,7 +587,7 @@ mod run_splits {
 }
 
 /// TODO: docs
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct Split {
     /// TODO: docs

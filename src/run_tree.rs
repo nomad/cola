@@ -6,7 +6,7 @@ use crate::*;
 /// TODO: docs
 const RUN_TREE_ARITY: usize = 32;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunTree {
     /// TODO: docs

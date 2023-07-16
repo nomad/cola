@@ -99,7 +99,7 @@ const _NODE_IDX_LAYOUT_CHECK: usize = {
 /// which the internal and leaf nodes are stored in memory.
 ///
 /// TODO: finish describing the data structure.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     /// The internal nodes of the Gtree.
@@ -2203,6 +2203,20 @@ struct Inode<const ARITY: usize, L: Leaf> {
     has_leaves: bool,
 }
 
+impl<const ARITY: usize, L> PartialEq<Inode<ARITY, L>> for Inode<ARITY, L>
+where
+    L: Leaf,
+{
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.tot_len == other.tot_len
+            && self.parent == other.parent
+            && self.num_children == other.num_children
+            && self.children() == other.children()
+            && self.has_leaves == other.has_leaves
+    }
+}
+
 /// An index to either an internal node or a leaf node of the Gtree.
 ///
 /// We use a union here to save space, since we know that an inode can only
@@ -2242,6 +2256,7 @@ impl<L: Leaf> NodeIdx<L> {
     }
 }
 
+#[derive(PartialEq)]
 enum Either<I, L> {
     Internal(I),
     Leaf(L),
@@ -2493,7 +2508,7 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
 }
 
 /// A leaf node of the Gtree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct Lnode<Leaf> {
     /// The value of this leaf node.
@@ -3416,7 +3431,7 @@ mod tests {
 
     #[derive(Clone, Debug)]
     struct TestLeaf {
-        len: u64,
+        len: crate::Length,
         is_visible: bool,
     }
 
@@ -3436,17 +3451,17 @@ mod tests {
     }
 
     impl Leaf for TestLeaf {
-        type Length = u64;
+        type Length = crate::Length;
 
         fn len(&self) -> Self::Length {
-            self.len * self.is_visible as u64
+            self.len * self.is_visible as crate::Length
         }
     }
 
     impl TestLeaf {
         fn insert_with_len(
-            len: u64,
-        ) -> impl FnOnce(&mut Self, u64) -> (Option<Self>, Option<Self>)
+            len: crate::Length,
+        ) -> impl FnOnce(&mut Self, crate::Length) -> (Option<Self>, Option<Self>)
         {
             move |leaf, offset| {
                 debug_assert!(offset <= leaf.len);
@@ -3463,11 +3478,11 @@ mod tests {
             }
         }
 
-        fn new_with_len(len: u64) -> Self {
+        fn new_with_len(len: crate::Length) -> Self {
             Self { len, is_visible: true }
         }
 
-        fn split(&mut self, at_offset: u64) -> Option<Self> {
+        fn split(&mut self, at_offset: crate::Length) -> Option<Self> {
             if at_offset >= self.len {
                 None
             } else {
