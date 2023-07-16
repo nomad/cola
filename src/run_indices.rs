@@ -4,7 +4,6 @@ use crate::*;
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunIndices {
-    #[cfg_attr(feature = "encode", serde(flatten))]
     map: ReplicaIdMap<ReplicaIndices>,
 }
 
