@@ -183,7 +183,7 @@ impl ReplicaIndices {
 
     #[inline]
     pub fn splits(&self) -> Splits<'_> {
-        let mut run_splits = self.insertion_runs.leaves();
+        let mut run_splits = self.insertion_runs.leaves_from_start();
 
         let (visited_last, first_split) =
             if let Some(first) = run_splits.next() {
@@ -562,7 +562,7 @@ mod run_splits {
                 },
 
                 Self::Gtree(gtree) => {
-                    RunSplitLeaves::OverGtree(gtree.leaves())
+                    RunSplitLeaves::OverGtree(gtree.leaves_from_start())
                 },
             }
         }

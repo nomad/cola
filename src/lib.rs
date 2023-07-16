@@ -195,4 +195,5 @@ pub type ProtocolVersion = u64;
 pub type Length = usize;
 
 /// TODO: docs
+#[allow(dead_code)]
 const PROTOCOL_VERSION: ProtocolVersion = 0;

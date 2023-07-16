@@ -122,8 +122,14 @@ pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     ///
     /// Saving this allows to make repeated edits at the same cursor position
     /// fast af.
-    #[serde(bound(serialize = "L::Length : serde::Serialize"))]
-    #[serde(bound(deserialize = "L::Length : serde::Deserialize<'de>"))]
+    #[cfg_attr(
+        feature = "encode",
+        serde(bound(serialize = "L::Length : serde::Serialize"))
+    )]
+    #[cfg_attr(
+        feature = "encode",
+        serde(bound(deserialize = "L::Length : serde::Deserialize<'de>"))
+    )]
     cursor: Option<Cursor<L>>,
 }
 
@@ -677,10 +683,19 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
+    #[inline]
+    pub fn leaves<const INCLUDE_START: bool>(
+        &self,
+        start_leaf: LeafIdx<L>,
+    ) -> Leaves<'_, ARITY, L> {
+        Leaves::new::<INCLUDE_START>(self, start_leaf)
+    }
+
     /// Returns an iterator over the leaves of the Gtree.
     #[inline]
-    pub fn leaves(&self) -> Leaves<'_, ARITY, L> {
-        self.into()
+    pub fn leaves_from_start(&self) -> Leaves<'_, ARITY, L> {
+        let first_leaf = self.first_leaf_idx();
+        Leaves::new::<true>(self, first_leaf)
     }
 
     /// Returns the combined length of all the leaves in the Gtree.
@@ -701,24 +716,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// created leaf index.
     #[inline]
     pub fn prepend(&mut self, leaf: L) -> LeafIdx<L> {
-        let first_leaf_idx = {
-            let mut idx = self.root_idx;
-            loop {
-                match self.inode(idx).children() {
-                    Either::Internal(children) => {
-                        idx = children[0];
-                    },
-                    Either::Leaf(leaf_idx) => {
-                        break leaf_idx[0];
-                    },
-                }
-            }
-        };
-
+        let first_leaf_idx = self.first_leaf_idx();
         let leaf_idx = self.insert_leaf_before_leaf(first_leaf_idx, 0, leaf);
-
         self.cursor = Some(Cursor::new(leaf_idx, L::Length::zero(), 0));
-
         leaf_idx
     }
 
@@ -1390,6 +1390,24 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.bubble(idx, maybe_split, diff, leaf_diff);
 
         (first, second)
+    }
+
+    #[inline]
+    fn first_leaf_idx(&self) -> LeafIdx<L> {
+        debug_assert!(self.is_initialized());
+
+        let mut idx = self.root_idx;
+
+        loop {
+            match self.inode(idx).children() {
+                Either::Internal(children) => {
+                    idx = children[0];
+                },
+                Either::Leaf(leaf_idx) => {
+                    break leaf_idx[0];
+                },
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -3152,26 +3170,38 @@ mod leaves {
         current_leaves: &'a [LeafIdx<L>],
     }
 
-    impl<'a, const N: usize, L: Leaf> From<&'a Gtree<N, L>> for Leaves<'a, N, L> {
-        fn from(gtree: &'a Gtree<N, L>) -> Self {
+    impl<'a, const N: usize, L: Leaf> Leaves<'a, N, L> {
+        #[inline]
+        pub(super) fn new<const INCLUDE_START: bool>(
+            gtree: &'a Gtree<N, L>,
+            start_idx: LeafIdx<L>,
+        ) -> Self {
+            if !gtree.is_initialized() {
+                return Self {
+                    gtree,
+                    path: Vec::new(),
+                    current_leaves: &[][..],
+                };
+            }
+
+            let (mut inode_idx, current_leaves) = {
+                let parent_idx = gtree.lnode(start_idx).parent();
+                let parent = gtree.inode(parent_idx);
+                let child_idx = parent.idx_of_leaf_child(start_idx);
+                let leaves = parent.children().unwrap_leaf();
+                let idx =
+                    if INCLUDE_START { child_idx } else { child_idx + 1 };
+                (parent_idx, &leaves[idx..])
+            };
+
             let mut path = Vec::new();
-            let mut idx = gtree.root_idx;
-            let mut current_leaves = &[][..];
 
-            if gtree.is_initialized() {
-                loop {
-                    match gtree.inode(idx).children() {
-                        Either::Internal(inode_idxs) => {
-                            path.push((idx, 0));
-                            idx = inode_idxs[0];
-                        },
-
-                        Either::Leaf(leaf_idxs) => {
-                            current_leaves = leaf_idxs;
-                            break;
-                        },
-                    }
-                }
+            while !gtree.is_root(inode_idx) {
+                let parent_idx = gtree.inode(inode_idx).parent();
+                let parent = gtree.inode(parent_idx);
+                let child_idx = parent.idx_of_internal_child(inode_idx);
+                path.insert(0, (parent_idx, child_idx));
+                inode_idx = parent_idx;
             }
 
             Self { gtree, path, current_leaves }
@@ -3181,13 +3211,14 @@ mod leaves {
     impl<'a, const N: usize, L: Leaf> Iterator for Leaves<'a, N, L> {
         type Item = &'a L;
 
+        #[inline]
         fn next(&mut self) -> Option<Self::Item> {
             if !self.gtree.is_initialized() {
                 return None;
             }
 
-            if let Some((first, rest)) = self.current_leaves.split_first() {
-                let leaf = self.gtree.leaf(*first);
+            if let Some((&first, rest)) = self.current_leaves.split_first() {
+                let leaf = self.gtree.leaf(first);
                 self.current_leaves = rest;
                 Some(leaf)
             } else {
