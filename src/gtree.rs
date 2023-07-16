@@ -783,7 +783,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     ) where
         F: FnOnce(&mut L, &mut L),
     {
-        debug_assert!(first_idx.idx < second_idx.idx);
+        debug_assert!(first_idx != second_idx);
 
         let (first, second) = crate::get_two_mut(
             &mut self.lnodes,
