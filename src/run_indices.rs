@@ -186,7 +186,7 @@ impl ReplicaIndices {
         let mut run_splits = self.insertion_runs.leaves_from_start();
 
         let (visited_last, first_split) =
-            if let Some(first) = run_splits.next() {
+            if let Some((_, first)) = run_splits.next() {
                 (false, first)
             } else {
                 (true, &self.last_run)
@@ -207,8 +207,7 @@ const INSERTION_SPLITS_INLINE: usize = 8;
 
 type InsertionSplits = run_splits::InsertionSplits<INSERTION_SPLITS_INLINE>;
 
-type RunSplitLeaves<'a> =
-    run_splits::RunSplitLeaves<'a, INSERTION_SPLITS_INLINE>;
+use run_splits::RunSplitLeaves;
 
 mod run_splits {
     use super::*;
@@ -555,32 +554,32 @@ mod run_splits {
 
     impl<const N: usize> InsertionSplits<N> {
         #[inline]
-        pub fn leaves(&self) -> RunSplitLeaves<'_, N> {
+        pub fn leaves(&self) -> RunSplitLeaves<'_> {
             match self {
                 Self::Array(array) => {
-                    RunSplitLeaves::OverArray(array.splits().iter())
+                    let iter = Box::new(array.splits().iter()) as _;
+                    RunSplitLeaves { iter }
                 },
 
                 Self::Gtree(gtree) => {
-                    RunSplitLeaves::OverGtree(gtree.leaves_from_start())
+                    let iter = Box::new(
+                        gtree.leaves_from_start().map(|(_idx, leaf)| leaf),
+                    ) as _;
+                    RunSplitLeaves { iter }
                 },
             }
         }
     }
 
-    pub(super) enum RunSplitLeaves<'a, const N: usize> {
-        OverArray(core::slice::Iter<'a, Split>),
-        OverGtree(gtree::Leaves<'a, N, Split>),
+    pub(super) struct RunSplitLeaves<'a> {
+        iter: Box<dyn Iterator<Item = &'a Split> + 'a>,
     }
 
-    impl<'a, const N: usize> Iterator for RunSplitLeaves<'a, N> {
+    impl<'a> Iterator for RunSplitLeaves<'a> {
         type Item = &'a Split;
 
         fn next(&mut self) -> Option<Self::Item> {
-            match self {
-                Self::OverArray(split) => split.next(),
-                Self::OverGtree(splits) => splits.next(),
-            }
+            self.iter.next()
         }
     }
 }
@@ -660,7 +659,7 @@ mod splits {
                 let offset = self.offset;
                 self.offset += len;
                 Some((idx, offset, len))
-            } else if let Some(splits) = self.run_splits.next() {
+            } else if let Some((_, splits)) = self.run_splits.next() {
                 self.current_split = splits.leaves();
                 self.next()
             } else if self.visited_last {

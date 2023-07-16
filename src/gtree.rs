@@ -3209,7 +3209,7 @@ mod leaves {
     }
 
     impl<'a, const N: usize, L: Leaf> Iterator for Leaves<'a, N, L> {
-        type Item = &'a L;
+        type Item = (LeafIdx<L>, &'a L);
 
         #[inline]
         fn next(&mut self) -> Option<Self::Item> {
@@ -3220,7 +3220,7 @@ mod leaves {
             if let Some((&first, rest)) = self.current_leaves.split_first() {
                 let leaf = self.gtree.leaf(first);
                 self.current_leaves = rest;
-                Some(leaf)
+                Some((first, leaf))
             } else {
                 while let Some((idx, child_idx)) = self.path.last_mut() {
                     *child_idx += 1;
