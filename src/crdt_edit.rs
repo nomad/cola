@@ -39,17 +39,17 @@ impl CrdtEdit {
     #[inline]
     pub(super) fn insertion(
         anchor: Anchor,
-        this_id: ReplicaId,
-        start_ts: Length,
+        anchor_ts: InsertionTimestamp,
+        text: Text,
         lamport_ts: LamportTimestamp,
-        len: Length,
+        insertion_ts: InsertionTimestamp,
     ) -> Self {
         let kind = CrdtEditKind::Insertion(Insertion {
             anchor,
-            replica_id: this_id,
-            start_ts,
-            len,
+            anchor_ts,
+            text,
             lamport_ts,
+            insertion_ts,
         });
         Self { kind }
     }
@@ -67,7 +67,7 @@ impl CrdtEdit {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum CrdtEditKind {
+pub(crate) enum CrdtEditKind {
     Deletion(Deletion),
     Insertion(Insertion),
     NoOp,
@@ -79,18 +79,58 @@ pub enum CrdtEditKind {
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
-pub struct Insertion {
-    pub(crate) anchor: Anchor,
-    pub(crate) replica_id: ReplicaId,
-    pub(crate) start_ts: Length,
-    pub(crate) lamport_ts: LamportTimestamp,
-    pub(crate) len: Length,
+pub(crate) struct Insertion {
+    anchor: Anchor,
+    anchor_ts: InsertionTimestamp,
+    text: Text,
+    insertion_ts: InsertionTimestamp,
+    lamport_ts: LamportTimestamp,
 }
 
 impl Insertion {
     #[inline]
+    pub fn anchor(&self) -> &Anchor {
+        &self.anchor
+    }
+
+    #[inline]
+    pub fn anchor_ts(&self) -> InsertionTimestamp {
+        self.anchor_ts
+    }
+
+    #[inline]
+    pub fn end(&self) -> Length {
+        self.text.range.end
+    }
+
+    #[inline]
     pub fn inserted_by(&self) -> ReplicaId {
-        self.replica_id
+        self.text.inserted_by
+    }
+
+    #[inline]
+    pub fn insertion_ts(&self) -> InsertionTimestamp {
+        self.insertion_ts
+    }
+
+    #[inline]
+    pub fn lamport_ts(&self) -> LamportTimestamp {
+        self.lamport_ts
+    }
+
+    #[inline]
+    pub fn len(&self) -> Length {
+        self.end() - self.start()
+    }
+
+    #[inline]
+    pub fn start(&self) -> Length {
+        self.text.range.start
+    }
+
+    #[inline]
+    pub fn text(&self) -> &Text {
+        &self.text
     }
 }
 
@@ -100,7 +140,7 @@ impl Insertion {
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
-pub struct Deletion {
+pub(crate) struct Deletion {
     pub(crate) start: Anchor,
     pub(crate) end: Anchor,
     pub(crate) version_map: VersionMap,

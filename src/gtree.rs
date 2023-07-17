@@ -722,6 +722,15 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         leaf_idx
     }
 
+    /// TODO: docs
+    #[inline]
+    pub fn siblings<const INCLUDE_LEAF: bool>(
+        &self,
+        leaf_idx: LeafIdx<L>,
+    ) -> Siblings<'_, ARITY, L> {
+        todo!();
+    }
+
     /// Calls the closure with the leaf at the given index. The closure should
     /// split the into two leaves, returning the the right part of the split.
     ///
@@ -3158,9 +3167,9 @@ mod debug {
     }
 }
 
-pub use leaves::Leaves;
+pub use iter::{Leaves, Siblings};
 
-mod leaves {
+mod iter {
     use super::*;
 
     #[derive(Debug)]
@@ -3254,6 +3263,34 @@ mod leaves {
 
                 self.next()
             }
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Siblings<'a, const N: usize, L: Leaf> {
+        gtree: &'a Gtree<N, L>,
+    }
+
+    impl<'a, const N: usize, L: Leaf> Siblings<'a, N, L> {
+        #[inline]
+        pub(super) fn new<const INCLUDE_START: bool>(
+            gtree: &'a Gtree<N, L>,
+            start_idx: LeafIdx<L>,
+        ) -> Self {
+            todo!();
+        }
+    }
+
+    impl<'a, const N: usize, L: Leaf> Iterator for Siblings<'a, N, L> {
+        type Item = (LeafIdx<L>, &'a L);
+
+        #[inline]
+        fn next(&mut self) -> Option<Self::Item> {
+            if !self.gtree.is_initialized() {
+                return None;
+            }
+
+            todo!();
         }
     }
 }

@@ -3,7 +3,7 @@ use crate::*;
 /// TODO: docs
 #[derive(Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-pub struct BackLog {
+pub(crate) struct BackLog {
     insertions: ReplicaIdMap<InsertionsBackLog>,
     deletions: ReplicaIdMap<DeletionsBackLog>,
 }
@@ -44,7 +44,7 @@ impl InsertionsBackLog {
     fn add(&mut self, insertion: Insertion) {
         let Err(insert_at_offset) = self
             .vec
-            .binary_search_by(|probe| probe.start_ts.cmp(&insertion.start_ts))
+            .binary_search_by(|probe| probe.start().cmp(&insertion.start()))
         else {
             unreachable!(
                 "the start of the insertions produced by a given Replica \

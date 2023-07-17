@@ -16,6 +16,15 @@ pub(crate) struct RunTree {
 
 impl RunTree {
     #[inline]
+    fn append_run_to_another(
+        &mut self,
+        run: EditRun,
+        append_to: LeafIdx<EditRun>,
+    ) -> (Length, InsertionOutcome) {
+        todo!();
+    }
+
+    #[inline]
     pub fn assert_invariants(&self) {
         self.gtree.assert_invariants();
     }
@@ -179,8 +188,10 @@ impl RunTree {
         text: Text,
         insertion_clock: &mut InsertionClock,
         lamport_clock: &mut LamportClock,
-    ) -> (Anchor, InsertionOutcome) {
-        debug_assert!(text.range.len() > 0);
+    ) -> (Anchor, InsertionTimestamp, InsertionOutcome) {
+        debug_assert!(!text.range.is_empty());
+
+        let mut anchor_ts = 0;
 
         if offset == 0 {
             let run = EditRun::new(
@@ -194,7 +205,7 @@ impl RunTree {
 
             let outcome = InsertionOutcome::InsertedRun { inserted_idx };
 
-            return (Anchor::origin(), outcome);
+            return (Anchor::origin(), anchor_ts, outcome);
         }
 
         let mut split_id = ReplicaId::zero();
@@ -209,6 +220,7 @@ impl RunTree {
             split_id = run.replica_id();
             split_insertion = run.insertion_ts();
             split_at_offset = run.start() + offset;
+            anchor_ts = run.insertion_ts();
             anchor = Anchor::new(run.replica_id(), run.end());
 
             if run.len() == offset
@@ -253,7 +265,26 @@ impl RunTree {
             _ => unreachable!(),
         };
 
-        (anchor, outcome)
+        (anchor, anchor_ts, outcome)
+    }
+
+    #[inline]
+    fn insert_run_after_another(
+        &mut self,
+        run: EditRun,
+        insert_after: LeafIdx<EditRun>,
+    ) -> (Length, InsertionOutcome) {
+        todo!();
+    }
+
+    #[inline]
+    fn insert_run_at_origin(
+        &mut self,
+        run: EditRun,
+    ) -> (Length, InsertionOutcome) {
+        debug_assert!(run.anchor().is_origin());
+
+        todo!();
     }
 
     #[inline]
@@ -267,14 +298,89 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn merge_insertion(&self, insertion: &Insertion) -> Length {
-        todo!();
+    pub fn merge_insertion(
+        &mut self,
+        insertion: &Insertion,
+        run_indices: &RunIndices,
+    ) -> (Length, InsertionOutcome) {
+        let run = EditRun::from_insertion(insertion);
+
+        if run.anchor().is_origin() {
+            return self.insert_run_at_origin(run);
+        }
+
+        // Get the leaf index of the EditRun that contains the anchor of the
+        // Insertion.
+        let anchor_idx = run_indices
+            .get(run.anchor().replica_id())
+            .leaf_at_offset(insertion.anchor_ts(), insertion.anchor().offset);
+
+        let anchor = self.gtree.get_leaf(anchor_idx);
+
+        // If the insertion is anchored in the middle of the anchor run then
+        // there can't be any other runs that are tied with the one we're
+        // inserting. In this case we can just split the anchor run and insert
+        // the new run after it.
+        if run.anchor().offset < anchor.end() {
+            let insert_at = anchor.end() - run.anchor().offset;
+            return self.split_run_with_another(run, anchor_idx, insert_at);
+        }
+
+        let mut prev_idx = anchor_idx;
+
+        // Before creating the `Leaves` iterator (which would allocate) we
+        // check if we can rule out any possible ties by only using the direct
+        // siblings of the anchor run.
+        let mut siblings = self.gtree.siblings::<false>(anchor_idx);
+
+        if let Some((idx, next_sibling)) = siblings.next() {
+            // The next sibling is tied with the run we're inserting -> check
+            // the other siblings.
+            if &run > next_sibling {
+                prev_idx = idx;
+
+                for (idx, sibling) in siblings {
+                    if &run < sibling {
+                        return self.insert_run_after_another(run, prev_idx);
+                    } else {
+                        prev_idx = idx;
+                    }
+                }
+            } else if anchor.can_append(&run) {
+                // Append the run to the anchor run. This is the only path that
+                // doesn't add new runs to the Gtree.
+                return self.append_run_to_another(run, anchor_idx);
+            } else {
+                // Insert the run right after the anchor run.
+                return self.insert_run_after_another(run, anchor_idx);
+            }
+        };
+
+        for (idx, leaf) in self.gtree.leaves::<false>(prev_idx) {
+            if &run < leaf {
+                return self.insert_run_after_another(run, prev_idx);
+            } else {
+                prev_idx = idx;
+            }
+        }
+
+        self.insert_run_after_another(run, prev_idx)
     }
 
     #[inline]
     pub fn new(first_run: EditRun) -> (Self, LeafIdx<EditRun>) {
         let (gtree, idx) = Gtree::new(first_run);
         (Self { gtree }, idx)
+    }
+
+    #[inline]
+    fn split_run_with_another(
+        &mut self,
+        run: EditRun,
+        insert_into: LeafIdx<EditRun>,
+        at_offset: Length,
+    ) -> (Length, InsertionOutcome) {
+        todo!();
     }
 }
 
@@ -354,7 +460,7 @@ pub(crate) enum MergedDeletion {
 /// TODO: docs
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-pub struct EditRun {
+pub(crate) struct EditRun {
     /// TODO: docs
     inserted_at: Anchor,
 
@@ -407,6 +513,25 @@ impl PartialOrd for EditRun {
 }
 
 impl EditRun {
+    #[inline(always)]
+    pub fn anchor(&self) -> &Anchor {
+        &self.inserted_at
+    }
+
+    #[inline]
+    pub fn can_append(&self, other: &Self) -> bool {
+        self.is_deleted == other.is_deleted
+            && self.replica_id() == other.replica_id()
+            && self.end() == other.start()
+    }
+
+    #[inline]
+    pub fn can_prepend(&self, other: &Self) -> bool {
+        self.is_deleted == other.is_deleted
+            && self.replica_id() == other.replica_id()
+            && other.end() == self.start()
+    }
+
     #[inline(always)]
     pub fn end(&self) -> Length {
         self.text.range.end
@@ -470,6 +595,17 @@ impl EditRun {
         } else {
             self.is_deleted = true;
             None
+        }
+    }
+
+    #[inline(always)]
+    pub fn from_insertion(insertion: &Insertion) -> Self {
+        Self {
+            inserted_at: insertion.anchor().clone(),
+            text: insertion.text().clone(),
+            insertion_ts: insertion.insertion_ts(),
+            lamport_ts: insertion.lamport_ts(),
+            is_deleted: false,
         }
     }
 
@@ -555,6 +691,11 @@ impl Anchor {
     }
 
     #[inline(always)]
+    pub fn is_origin(&self) -> bool {
+        self == &Self::origin()
+    }
+
+    #[inline(always)]
     pub fn new(replica_id: ReplicaId, offset: Length) -> Self {
         Self { replica_id, offset }
     }
@@ -606,10 +747,7 @@ impl gtree::Length for Length {
 impl gtree::Join for EditRun {
     #[inline]
     fn append(&mut self, other: Self) -> Option<Self> {
-        if self.is_deleted == other.is_deleted
-            && self.replica_id() == other.replica_id()
-            && self.end() == other.start()
-        {
+        if self.can_append(&other) {
             *self.end_mut() = other.end();
             None
         } else {
@@ -619,10 +757,7 @@ impl gtree::Join for EditRun {
 
     #[inline]
     fn prepend(&mut self, other: Self) -> Option<Self> {
-        if self.is_deleted == other.is_deleted
-            && self.replica_id() == other.replica_id()
-            && other.end() == self.start()
-        {
+        if self.can_prepend(&other) {
             debug_assert_eq!(self.insertion_ts, other.insertion_ts);
             *self.start_mut() = other.start();
             None
@@ -647,6 +782,8 @@ impl gtree::Leaf for EditRun {
     }
 }
 
-pub type DebugAsBtree<'a> = gtree::DebugAsBtree<'a, RUN_TREE_ARITY, EditRun>;
+pub(crate) type DebugAsBtree<'a> =
+    gtree::DebugAsBtree<'a, RUN_TREE_ARITY, EditRun>;
 
-pub type DebugAsSelf<'a> = gtree::DebugAsSelf<'a, RUN_TREE_ARITY, EditRun>;
+pub(crate) type DebugAsSelf<'a> =
+    gtree::DebugAsSelf<'a, RUN_TREE_ARITY, EditRun>;

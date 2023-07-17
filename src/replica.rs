@@ -168,12 +168,12 @@ impl Replica {
             // it's needed to correctly increment the chararacter clock inside
             // this `Replica`'s `VersionMap` without skipping any temporal
             // range.
-            self.version_map.get(insertion.inserted_by()) == insertion.start_ts
+            self.version_map.get(insertion.inserted_by()) == insertion.start()
         ) && (
             // Makes sure that we have already merged the insertion containing
             // the anchor of this insertion.
-            self.version_map.get(insertion.anchor.replica_id())
-                >= insertion.anchor.character_ts()
+            self.version_map.get(insertion.anchor().replica_id())
+                >= insertion.anchor().character_ts()
         )
     }
 
@@ -439,6 +439,40 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
+    fn handle_insertion_outcome(
+        &mut self,
+        len: Length,
+        outcome: InsertionOutcome,
+    ) {
+        match outcome {
+            InsertionOutcome::ExtendedLastRun => {
+                self.run_indices.get_mut(self.id).extend_last(len)
+            },
+
+            InsertionOutcome::SplitRun {
+                split_id,
+                split_insertion,
+                split_at_offset,
+                split_idx,
+                inserted_idx,
+            } => {
+                self.run_indices.get_mut(self.id).append(len, inserted_idx);
+
+                self.run_indices.get_mut(split_id).split(
+                    split_insertion,
+                    split_at_offset,
+                    split_idx,
+                );
+            },
+
+            InsertionOutcome::InsertedRun { inserted_idx } => {
+                self.run_indices.get_mut(self.id).append(len, inserted_idx)
+            },
+        };
+    }
+
+    /// TODO: docs
+    #[inline]
     fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
         self.deletion_map.get(deletion.deleted_by()) > deletion.deletion_ts
     }
@@ -446,7 +480,7 @@ impl Replica {
     /// TODO: docs
     #[inline]
     fn has_merged_insertion(&self, insertion: &Insertion) -> bool {
-        self.version_map.get(insertion.inserted_by()) > insertion.start_ts
+        self.version_map.get(insertion.inserted_by()) > insertion.start()
     }
 
     /// Returns the id of the `Replica`.
@@ -488,47 +522,23 @@ impl Replica {
 
         let end = self.version_map.this();
 
-        let text = Text::new(self.id, (start..end).into());
+        let text = Text::new(self.id, start..end);
 
-        let (anchor, outcome) = self.run_tree.insert(
+        let (anchor, anchor_ts, outcome) = self.run_tree.insert(
             at_offset,
-            text,
+            text.clone(),
             &mut self.insertion_clock,
             &mut self.lamport_clock,
         );
 
-        match outcome {
-            InsertionOutcome::ExtendedLastRun => {
-                self.run_indices.get_mut(self.id).extend_last(len)
-            },
-
-            InsertionOutcome::SplitRun {
-                split_id,
-                split_insertion,
-                split_at_offset,
-                split_idx,
-                inserted_idx,
-            } => {
-                self.run_indices.get_mut(self.id).append(len, inserted_idx);
-
-                self.run_indices.get_mut(split_id).split(
-                    split_insertion,
-                    split_at_offset,
-                    split_idx,
-                );
-            },
-
-            InsertionOutcome::InsertedRun { inserted_idx } => {
-                self.run_indices.get_mut(self.id).append(len, inserted_idx)
-            },
-        };
+        self.handle_insertion_outcome(len, outcome);
 
         CrdtEdit::insertion(
             anchor,
-            self.id,
-            start,
+            anchor_ts,
+            text,
             self.lamport_clock.last(),
-            len,
+            self.insertion_clock.last(),
         )
     }
 
@@ -679,19 +689,18 @@ impl Replica {
     ) -> TextEdit {
         debug_assert!(self.can_merge_insertion(insertion));
 
-        let offset = self.run_tree.merge_insertion(insertion);
+        let (offset, outcome) =
+            self.run_tree.merge_insertion(insertion, &self.run_indices);
 
-        self.lamport_clock.update(insertion.lamport_ts);
+        let len = insertion.len();
 
-        *self.version_map.get_mut(insertion.inserted_by()) += insertion.len;
+        self.handle_insertion_outcome(len, outcome);
 
-        let text = {
-            let start = insertion.start_ts;
-            let end = start + insertion.len;
-            Text::new(insertion.inserted_by(), start..end)
-        };
+        *self.version_map.get_mut(insertion.inserted_by()) += len;
 
-        TextEdit::Insertion(offset, text)
+        self.lamport_clock.update(insertion.lamport_ts());
+
+        TextEdit::Insertion(offset, insertion.text().clone())
     }
 
     /// Creates a new `Replica` with the given id from the initial [`Length`]
@@ -743,7 +752,7 @@ impl Replica {
 
         let mut lamport_clock = LamportClock::new();
 
-        let initial_text = Text::new(id, (0..len).into());
+        let initial_text = Text::new(id, 0..len);
 
         let origin_run = EditRun::new(
             Anchor::origin(),
@@ -845,6 +854,11 @@ impl core::fmt::Debug for InsertionClock {
 }
 
 impl InsertionClock {
+    #[inline]
+    fn last(&self) -> LamportTimestamp {
+        self.0.saturating_sub(1)
+    }
+
     #[inline]
     fn new() -> Self {
         Self::default()

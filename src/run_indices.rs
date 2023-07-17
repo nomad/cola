@@ -34,6 +34,12 @@ impl RunIndices {
 
     /// TODO: docs
     #[inline]
+    pub fn get(&self, id: ReplicaId) -> &ReplicaIndices {
+        self.map.get(&id).unwrap()
+    }
+
+    /// TODO: docs
+    #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
         self.map.get_mut(&id).unwrap()
     }
@@ -50,7 +56,7 @@ impl RunIndices {
 /// TODO: docs
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-pub struct ReplicaIndices {
+pub(crate) struct ReplicaIndices {
     /// TODO: docs
     insertion_runs: Gtree<32, InsertionSplits>,
 
@@ -60,12 +66,6 @@ pub struct ReplicaIndices {
     /// TODO: docs
     last_run: InsertionSplits,
 }
-
-// impl core::fmt::Debug for ReplicaIndices {
-//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-//         self.insertion_runs.fmt(f)
-//     }
-// }
 
 impl ReplicaIndices {
     #[inline]
@@ -99,6 +99,15 @@ impl ReplicaIndices {
     #[inline]
     pub fn extend_last(&mut self, extend_by: Length) {
         self.last_run.extend(extend_by);
+    }
+
+    #[inline]
+    pub fn leaf_at_offset(
+        &self,
+        insertion_ts: InsertionTimestamp,
+        offset: Length,
+    ) -> LeafIdx<EditRun> {
+        todo!();
     }
 
     #[inline]
@@ -182,7 +191,7 @@ impl ReplicaIndices {
     }
 
     #[inline]
-    pub fn splits(&self) -> Splits<'_> {
+    fn splits(&self) -> Splits<'_> {
         let mut run_splits = self.insertion_runs.leaves_from_start();
 
         let (visited_last, first_split) =
@@ -636,12 +645,12 @@ impl gtree::Leaf for Split {
     }
 }
 
-pub use splits::Splits;
+pub(crate) use splits::Splits;
 
 mod splits {
     use super::*;
 
-    pub struct Splits<'a> {
+    pub(crate) struct Splits<'a> {
         pub(super) run_splits: gtree::Leaves<'a, 32, InsertionSplits>,
         pub(super) current_split: RunSplitLeaves<'a>,
         pub(super) last: &'a InsertionSplits,
