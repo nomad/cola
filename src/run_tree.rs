@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use core::ops;
 
 use crate::gtree::LeafIdx;
 use crate::*;
@@ -261,6 +262,16 @@ impl RunTree {
     }
 
     #[inline]
+    pub fn merge_deletion(&self, deletion: &Deletion) -> MergedDeletion {
+        todo!();
+    }
+
+    #[inline]
+    pub fn merge_insertion(&self, insertion: &Insertion) -> Length {
+        todo!();
+    }
+
+    #[inline]
     pub fn new(first_run: EditRun) -> (Self, LeafIdx<EditRun>) {
         let (gtree, idx) = Gtree::new(first_run);
         (Self { gtree }, idx)
@@ -331,6 +342,13 @@ pub(crate) enum DeletionOutcome {
     },
 
     DeletedWholeRun,
+}
+
+/// TODO: docs
+#[derive(Debug)]
+pub(crate) enum MergedDeletion {
+    Contiguous(ops::Range<Length>),
+    Split(Vec<ops::Range<Length>>),
 }
 
 /// TODO: docs

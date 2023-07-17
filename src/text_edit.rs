@@ -111,11 +111,11 @@ pub enum TextEdit {
 /// `Replica`. These two properties can be accessed via the
 /// [`inserted_by`](Text::inserted_by) and
 /// [`temporal_range`](Text::temporal_range) methods respectively.
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct Text {
     pub(crate) inserted_by: ReplicaId,
-    pub(crate) range: crate::Range<Length>,
+    pub(crate) range: Range<Length>,
 }
 
 impl core::fmt::Debug for Text {
@@ -151,10 +151,7 @@ impl Text {
     }
 
     #[inline]
-    pub(crate) fn new(
-        inserted_by: ReplicaId,
-        range: crate::Range<Length>,
-    ) -> Self {
+    pub(crate) fn new(inserted_by: ReplicaId, range: Range<Length>) -> Self {
         Self { inserted_by, range }
     }
 
@@ -224,6 +221,6 @@ impl Text {
     /// ```
     #[inline]
     pub fn temporal_range(&self) -> Range<Length> {
-        self.range.into()
+        self.range.clone()
     }
 }

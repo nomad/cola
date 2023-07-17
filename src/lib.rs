@@ -73,7 +73,7 @@ use replica::*;
 pub use replica_id::ReplicaId;
 use replica_id::{ReplicaIdMap, ReplicaIdMapValuesMut};
 use run_indices::RunIndices;
-use run_tree::{Anchor, DeletionOutcome, EditRun, InsertionOutcome, RunTree};
+use run_tree::*;
 pub use text_edit::{Text, TextEdit};
 use utils::*;
 use version_map::{DeletionMap, VersionMap};

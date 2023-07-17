@@ -653,10 +653,22 @@ impl Replica {
         &mut self,
         deletion: &Deletion,
     ) -> Option<TextEdit> {
+        debug_assert!(self.can_merge_deletion(deletion));
+
+        let outcome = self.run_tree.merge_deletion(deletion);
+
         *self.deletion_map.get_mut(deletion.deleted_by()) =
             deletion.deletion_ts;
 
-        todo!();
+        match outcome {
+            MergedDeletion::Contiguous(range) => {
+                Some(TextEdit::ContiguousDeletion(range))
+            },
+
+            MergedDeletion::Split(ranges) => {
+                Some(TextEdit::SplitDeletion(ranges))
+            },
+        }
     }
 
     /// TODO: docs
@@ -665,9 +677,21 @@ impl Replica {
         &mut self,
         insertion: &Insertion,
     ) -> TextEdit {
+        debug_assert!(self.can_merge_insertion(insertion));
+
+        let offset = self.run_tree.merge_insertion(insertion);
+
+        self.lamport_clock.update(insertion.lamport_ts);
+
         *self.version_map.get_mut(insertion.inserted_by()) += insertion.len;
 
-        todo!();
+        let text = {
+            let start = insertion.start_ts;
+            let end = start + insertion.len;
+            Text::new(insertion.inserted_by(), start..end)
+        };
+
+        TextEdit::Insertion(offset, text)
     }
 
     /// Creates a new `Replica` with the given id from the initial [`Length`]
@@ -802,9 +826,8 @@ impl LamportClock {
 
     /// TODO: docs
     #[inline]
-    fn _update(&mut self, other: LamportTimestamp) -> LamportTimestamp {
+    fn update(&mut self, other: LamportTimestamp) {
         self.0 = self.0.max(other) + 1;
-        self.0
     }
 }
 
