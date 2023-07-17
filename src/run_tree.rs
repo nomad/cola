@@ -318,9 +318,8 @@ impl RunTree {
         let anchor = self.gtree.get_leaf(anchor_idx);
 
         // If the insertion is anchored in the middle of the anchor run then
-        // there can't be any other runs that are tied with the one we're
-        // inserting. In this case we can just split the anchor run and insert
-        // the new run after it.
+        // there can't be any other runs that are tied with it. In this case we
+        // can just split the anchor run and insert the new run after it.
         if run.anchor().offset < anchor.end() {
             let insert_at = anchor.end() - run.anchor().offset;
             return self.split_run_with_another(run, anchor_idx, insert_at);
@@ -342,9 +341,8 @@ impl RunTree {
                 for (idx, sibling) in siblings {
                     if &run < sibling {
                         return self.insert_run_after_another(run, prev_idx);
-                    } else {
-                        prev_idx = idx;
                     }
+                    prev_idx = idx;
                 }
             } else if anchor.can_append(&run) {
                 // Append the run to the anchor run. This is the only path that
@@ -359,11 +357,11 @@ impl RunTree {
         for (idx, leaf) in self.gtree.leaves::<false>(prev_idx) {
             if &run < leaf {
                 return self.insert_run_after_another(run, prev_idx);
-            } else {
-                prev_idx = idx;
             }
+            prev_idx = idx;
         }
 
+        // If we get here we're inserting after the last run in the Gtree.
         self.insert_run_after_another(run, prev_idx)
     }
 
