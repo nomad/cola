@@ -47,11 +47,11 @@ pub trait Delete {
 pub trait Join: Sized {
     /// Try to append `other` to the end of `self`.
     ///
-    /// The method returns `None` if the join operation succeeded and
-    /// `Some(other)` if it failed.
+    /// The method returns `Ok(())` if the join operation succeeded and
+    /// `Err(other)` if it failed.
     #[allow(unused_variables)]
-    fn append(&mut self, other: Self) -> Option<Self> {
-        None
+    fn append(&mut self, other: Self) -> Result<(), Self> {
+        Err(other)
     }
 
     /// Try to prepend `other` to the beginning of `self`.
@@ -59,8 +59,8 @@ pub trait Join: Sized {
     /// The method returns `None` if the join operation succeeded and
     /// `Some(other)` if it failed.
     #[allow(unused_variables)]
-    fn prepend(&mut self, other: Self) -> Option<Self> {
-        None
+    fn prepend(&mut self, other: Self) -> Result<(), Self> {
+        Err(other)
     }
 }
 
@@ -1216,16 +1216,17 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             (Some(deleted), None) if deleted.is_empty() => {
                 let inserted_idx =
                     match self.next_leaf(leaf_idx, idx_in_parent) {
-                        Some(next_idx) => self
-                            .leaf_mut(next_idx)
-                            .prepend(deleted)
-                            .map(|deleted| {
-                                self.insert_leaf_after_leaf(
-                                    leaf_idx,
-                                    idx_in_parent,
-                                    deleted,
-                                )
-                            }),
+                        Some(next_idx) => {
+                            self.leaf_mut(next_idx).prepend(deleted).err().map(
+                                |deleted| {
+                                    self.insert_leaf_after_leaf(
+                                        leaf_idx,
+                                        idx_in_parent,
+                                        deleted,
+                                    )
+                                },
+                            )
+                        },
 
                         _ => Some(self.insert_leaf_after_leaf(
                             leaf_idx,
@@ -1261,7 +1262,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
                         let previous_leaf = self.leaf_mut(prev_idx);
 
-                        if let Some(deleted) = previous_leaf.append(deleted) {
+                        if let Err(deleted) = previous_leaf.append(deleted) {
                             let rest = core::mem::replace(
                                 self.leaf_mut(leaf_idx),
                                 deleted,
@@ -3589,14 +3590,7 @@ mod tests {
         }
     }
 
-    impl Join for TestLeaf {
-        fn append(&mut self, other: Self) -> Option<Self> {
-            Some(other)
-        }
-        fn prepend(&mut self, other: Self) -> Option<Self> {
-            Some(other)
-        }
-    }
+    impl Join for TestLeaf {}
 
     impl Leaf for TestLeaf {
         type Length = crate::Length;

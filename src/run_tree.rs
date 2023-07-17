@@ -21,7 +21,17 @@ impl RunTree {
         run: EditRun,
         append_to: LeafIdx<EditRun>,
     ) -> (Length, InsertionOutcome) {
-        todo!();
+        use gtree::Join;
+
+        debug_assert!(self.gtree.get_leaf(append_to).can_append(&run));
+
+        let leaf_len = self.gtree.get_leaf(append_to).len();
+
+        self.gtree.get_leaf_mut(append_to, |leaf| leaf.append(run).unwrap());
+
+        let offset = self.gtree.offset_of_leaf(append_to) + leaf_len;
+
+        (offset, InsertionOutcome::ExtendedLastRun)
     }
 
     #[inline]
@@ -769,23 +779,23 @@ impl gtree::Length for Length {
 
 impl gtree::Join for EditRun {
     #[inline]
-    fn append(&mut self, other: Self) -> Option<Self> {
+    fn append(&mut self, other: Self) -> Result<(), Self> {
         if self.can_append(&other) {
             *self.end_mut() = other.end();
-            None
+            Ok(())
         } else {
-            Some(other)
+            Err(other)
         }
     }
 
     #[inline]
-    fn prepend(&mut self, other: Self) -> Option<Self> {
+    fn prepend(&mut self, other: Self) -> Result<(), Self> {
         if self.can_prepend(&other) {
             debug_assert_eq!(self.insertion_ts, other.insertion_ts);
             *self.start_mut() = other.start();
-            None
+            Ok(())
         } else {
-            Some(other)
+            Err(other)
         }
     }
 }
