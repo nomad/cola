@@ -102,12 +102,14 @@ impl ReplicaIndices {
     }
 
     #[inline]
-    pub fn leaf_at_offset(
+    pub fn idx_at_offset(
         &self,
         insertion_ts: InsertionTimestamp,
-        offset: Length,
+        at_offset: Length,
     ) -> LeafIdx<EditRun> {
-        todo!();
+        let idx = insertion_ts as usize;
+        let (splits, at_offset) = self.splits_at_offset(idx, at_offset);
+        splits.split_at_offset(at_offset).idx_in_run_tree
     }
 
     #[inline]
@@ -119,7 +121,8 @@ impl ReplicaIndices {
     ) {
         let idx = insertion_ts as usize;
 
-        let (splits, at_offset) = self.splits_at_offset(idx, split_at_offset);
+        let (splits, at_offset) =
+            self.splits_at_offset_mut(idx, split_at_offset);
 
         splits.move_len_to_next_split(at_offset, len_moved);
     }
@@ -133,7 +136,8 @@ impl ReplicaIndices {
     ) {
         let idx = insertion_ts as usize;
 
-        let (splits, at_offset) = self.splits_at_offset(idx, split_at_offset);
+        let (splits, at_offset) =
+            self.splits_at_offset_mut(idx, split_at_offset);
 
         splits.move_len_to_prev_split(at_offset, len_moved);
     }
@@ -158,13 +162,40 @@ impl ReplicaIndices {
     ) {
         let idx = insertion_ts as usize;
 
-        let (splits, at_offset) = self.splits_at_offset(idx, at_offset);
+        let (splits, at_offset) = self.splits_at_offset_mut(idx, at_offset);
 
         splits.split(at_offset, right_idx);
     }
 
     #[inline]
     fn splits_at_offset(
+        &self,
+        idx: usize,
+        mut at_offset: Length,
+    ) -> (&InsertionSplits, Length) {
+        let splits = if idx == self.run_idxs.len() {
+            let offset = self
+                .run_idxs
+                .last()
+                .map(|&(idx, offset)| {
+                    let last_split = self.insertion_runs.get_leaf(idx);
+                    offset + last_split.len()
+                })
+                .unwrap_or(0);
+
+            at_offset -= offset;
+            &self.last_run
+        } else {
+            let (leaf_idx, run_offset) = self.run_idxs[idx];
+            at_offset -= run_offset;
+            self.insertion_runs.get_leaf(leaf_idx)
+        };
+
+        (splits, at_offset)
+    }
+
+    #[inline]
+    fn splits_at_offset_mut(
         &mut self,
         idx: usize,
         mut at_offset: Length,
@@ -400,6 +431,29 @@ mod run_splits {
                     });
                 },
             };
+        }
+
+        #[inline]
+        pub fn split_at_offset(&self, at_offset: Length) -> &Split {
+            debug_assert!(at_offset <= self.len());
+
+            match self {
+                Self::Array(array) => {
+                    let mut offset = 0;
+                    for split in array.splits() {
+                        offset += split.len;
+                        if offset >= at_offset {
+                            return split;
+                        }
+                    }
+                    unreachable!();
+                },
+
+                Self::Gtree(gtree) => {
+                    let (leaf_idx, _) = gtree.leaf_at_offset(at_offset);
+                    gtree.get_leaf(leaf_idx)
+                },
+            }
         }
     }
 

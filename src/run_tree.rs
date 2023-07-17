@@ -313,7 +313,7 @@ impl RunTree {
         // Insertion.
         let anchor_idx = run_indices
             .get(run.anchor().replica_id())
-            .leaf_at_offset(insertion.anchor_ts(), insertion.anchor().offset);
+            .idx_at_offset(insertion.anchor_ts(), insertion.anchor().offset);
 
         let anchor = self.gtree.get_leaf(anchor_idx);
 
