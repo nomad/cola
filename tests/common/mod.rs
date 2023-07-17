@@ -29,14 +29,21 @@ impl PartialEq<Replica> for &str {
     }
 }
 
+type Edit = (String, CrdtEdit);
+
 impl Replica {
     pub fn as_btree(&self) -> DebugAsBtree<'_> {
         DebugAsBtree(self)
     }
 
-    pub fn delete(&mut self, byte_range: Range<usize>) -> CrdtEdit {
+    pub fn delete(&mut self, byte_range: Range<usize>) -> Edit {
         self.buffer.replace_range(byte_range.clone(), "");
-        self.crdt.deleted(byte_range.start as Length..byte_range.end as Length)
+
+        let edit = self
+            .crdt
+            .deleted(byte_range.start as Length..byte_range.end as Length);
+
+        (String::new(), edit)
     }
 
     pub fn fork(&self, id: impl Into<ReplicaId>) -> Self {
@@ -47,18 +54,31 @@ impl Replica {
         &mut self,
         byte_offset: usize,
         text: T,
-    ) -> CrdtEdit {
+    ) -> Edit {
         let text = text.into();
         self.buffer.insert_str(byte_offset, text.as_str());
-        self.crdt.inserted(byte_offset as Length, text.len() as Length)
+        let edit =
+            self.crdt.inserted(byte_offset as Length, text.len() as Length);
+        (text, edit)
     }
 
-    pub fn merge(&mut self, crdt_edit: &CrdtEdit) {
-        if let Some(edit) = self.crdt.merge(crdt_edit) {
+    pub fn merge(&mut self, (string, edit): &Edit) {
+        if let Some(edit) = self.crdt.merge(edit) {
             match edit {
-                _ => todo!(),
+                TextEdit::Insertion(offset, _) => {
+                    self.buffer.insert_str(offset, string)
+                },
+
+                TextEdit::ContiguousDeletion(range) => {
+                    self.buffer.replace_range(range, "")
+                },
+
+                TextEdit::SplitDeletion(ranges) => {
+                    for range in ranges.into_iter().rev() {
+                        self.buffer.replace_range(range, "")
+                    }
+                },
             }
-            // self.buffer.replace(edit.range, "");
         }
     }
 
@@ -70,7 +90,7 @@ impl Replica {
 }
 
 impl traces::Crdt for Replica {
-    type EDIT = CrdtEdit;
+    type EDIT = Edit;
 
     fn from_str(s: &str) -> Self {
         Self::new(rand::random::<u64>(), s)
