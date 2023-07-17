@@ -788,7 +788,42 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
 
         let idx_in_parent = self.inode(parent_idx).idx_of_leaf_child(leaf_idx);
+
         self.insert_leaf_after_leaf(leaf_idx, idx_in_parent, split_leaf)
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn split_leaf_with_another<F>(
+        &mut self,
+        leaf_idx: LeafIdx<L>,
+        split_with: F,
+    ) -> (LeafIdx<L>, LeafIdx<L>)
+    where
+        F: FnOnce(&mut L) -> (L, L),
+    {
+        let lnode = self.lnode_mut(leaf_idx);
+        let parent_idx = lnode.parent();
+
+        let old_len = lnode.value().len();
+        let (inserted_leaf, split_leaf) = split_with(lnode.value_mut());
+        let new_len = lnode.value().len();
+
+        debug_assert!(new_len + split_leaf.len() == old_len);
+
+        if old_len != new_len {
+            let diff = L::Length::diff(old_len, new_len);
+            self.apply_diff(parent_idx, diff);
+        }
+
+        let idx_in_parent = self.inode(parent_idx).idx_of_leaf_child(leaf_idx);
+
+        self.insert_two_leaves_after_leaf(
+            leaf_idx,
+            idx_in_parent,
+            inserted_leaf,
+            split_leaf,
+        )
     }
 
     /// Returns a new, uninitialized Gtree.

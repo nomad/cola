@@ -413,7 +413,32 @@ impl RunTree {
         insert_into: LeafIdx<EditRun>,
         at_offset: Length,
     ) -> (Length, InsertionOutcome) {
-        todo!();
+        debug_assert!(at_offset > 0);
+        let splitting = self.gtree.get_leaf(insert_into);
+
+        debug_assert!(at_offset < splitting.len());
+
+        let split_id = splitting.replica_id();
+        let split_insertion = splitting.insertion_ts();
+        let split_at_offset = splitting.start() + at_offset;
+
+        let offset = self.gtree.offset_of_leaf(insert_into) + at_offset;
+
+        let (inserted_idx, split_idx) =
+            self.gtree.split_leaf_with_another(insert_into, |splitting| {
+                let split = splitting.split(at_offset).unwrap();
+                (run, split)
+            });
+
+        let outcome = InsertionOutcome::SplitRun {
+            split_id,
+            split_insertion,
+            split_at_offset,
+            split_idx,
+            inserted_idx,
+        };
+
+        (offset, outcome)
     }
 }
 
