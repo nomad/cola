@@ -274,7 +274,12 @@ impl RunTree {
         run: EditRun,
         insert_after: LeafIdx<EditRun>,
     ) -> (Length, InsertionOutcome) {
-        todo!();
+        let inserted_idx =
+            self.gtree.insert_leaf_after_another(run, insert_after);
+
+        let offset = self.gtree.offset_of_leaf(inserted_idx);
+
+        (offset, InsertionOutcome::InsertedRun { inserted_idx })
     }
 
     #[inline]

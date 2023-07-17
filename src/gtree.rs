@@ -640,6 +640,17 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.insert_at_offset(offset, insert_with)
     }
 
+    /// TODO: docs
+    #[inline]
+    pub fn insert_leaf_after_another(
+        &mut self,
+        leaf: L,
+        after_leaf: LeafIdx<L>,
+    ) -> LeafIdx<L> {
+        let idx_in_parent = self.idx_of_leaf_in_parent(after_leaf);
+        self.insert_leaf_after_leaf(after_leaf, idx_in_parent, leaf)
+    }
+
     /// Returns `false` if the Gtree was created with [`uninit()`] and has not
     /// yet been initialized by calling [`initialize()`].
     #[inline]
@@ -710,6 +721,23 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let mut this = Self::uninit();
         let idx = this.initialize(first_leaf);
         (this, idx)
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn offset_of_leaf(&self, leaf_idx: LeafIdx<L>) -> L::Length {
+        let mut offset = L::Length::zero();
+
+        offset += self.offset_of_leaf_child(leaf_idx);
+
+        let mut inode_idx = self.lnode(leaf_idx).parent();
+
+        while !self.is_root(inode_idx) {
+            offset += self.offset_of_internal_child(inode_idx);
+            inode_idx = self.inode(inode_idx).parent();
+        }
+
+        offset
     }
 
     /// Prepends a new leaf node to start of the Gtree, returning its newly
@@ -1601,8 +1629,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
-    /// Inserts the given leaf after the leaf at `leaf_idx`. `idx_in_parent`
-    /// should be the child index of `leaf_idx` in its parent.
+    /// Inserts the given leaf after the leaf at `leaf_idx`.
+    ///
+    /// `idx_in_parent` is the child index of `leaf_idx` in its parent.
     #[inline]
     fn insert_leaf_after_leaf(
         &mut self,
@@ -1637,8 +1666,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         inserted_idx
     }
 
-    /// Inserts the given leaf before the leaf at `leaf_idx`. `idx_in_parent`
-    /// should be the child index of `leaf_idx` in its parent.
+    /// Inserts the given leaf before the leaf at `leaf_idx`.
+    ///
+    /// `idx_in_parent` is the child index of `leaf_idx` in its parent.
     #[inline]
     fn insert_leaf_before_leaf(
         &mut self,
@@ -1916,6 +1946,44 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                     .then_some((leaf_idx, idx_in_parent + 1 + idx))
             },
         )
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn offset_of_internal_child(&self, inode_idx: InodeIdx) -> L::Length {
+        let parent_idx = self.inode(inode_idx).parent();
+
+        let siblings = self.inode(parent_idx).children().unwrap_internal();
+
+        let mut offset = L::Length::zero();
+
+        for &idx in siblings {
+            if idx == inode_idx {
+                return offset;
+            }
+            offset += self.inode(idx).len();
+        }
+
+        unreachable!();
+    }
+
+    /// TODO: docs
+    #[inline]
+    fn offset_of_leaf_child(&self, leaf_idx: LeafIdx<L>) -> L::Length {
+        let parent_idx = self.lnode(leaf_idx).parent();
+
+        let siblings = self.inode(parent_idx).children().unwrap_leaf();
+
+        let mut offset = L::Length::zero();
+
+        for &idx in siblings {
+            if idx == leaf_idx {
+                return offset;
+            }
+            offset += self.leaf(idx).len();
+        }
+
+        unreachable!();
     }
 
     /// Returns the index of the leaf before `leaf_idx` by only looking at its
@@ -3207,8 +3275,7 @@ mod iter {
 
             while !gtree.is_root(inode_idx) {
                 let parent_idx = gtree.inode(inode_idx).parent();
-                let parent = gtree.inode(parent_idx);
-                let child_idx = parent.idx_of_internal_child(inode_idx);
+                let child_idx = gtree.idx_of_inode_in_parent(inode_idx);
                 path.insert(0, (parent_idx, child_idx));
                 inode_idx = parent_idx;
             }
