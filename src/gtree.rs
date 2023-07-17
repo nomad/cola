@@ -728,7 +728,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         &self,
         leaf_idx: LeafIdx<L>,
     ) -> Siblings<'_, ARITY, L> {
-        todo!();
+        Siblings::new::<INCLUDE_LEAF>(self, leaf_idx)
     }
 
     /// Calls the closure with the leaf at the given index. The closure should
@@ -3269,6 +3269,7 @@ mod iter {
     #[derive(Debug)]
     pub struct Siblings<'a, const N: usize, L: Leaf> {
         gtree: &'a Gtree<N, L>,
+        leaf_idxs: &'a [LeafIdx<L>],
     }
 
     impl<'a, const N: usize, L: Leaf> Siblings<'a, N, L> {
@@ -3277,7 +3278,16 @@ mod iter {
             gtree: &'a Gtree<N, L>,
             start_idx: LeafIdx<L>,
         ) -> Self {
-            todo!();
+            if !gtree.is_initialized() {
+                return Self { gtree, leaf_idxs: &[] };
+            }
+
+            let parent_idx = gtree.lnode(start_idx).parent();
+            let parent = gtree.inode(parent_idx);
+            let child_idx = parent.idx_of_leaf_child(start_idx);
+            let siblings = parent.children().unwrap_leaf();
+            let idx = if INCLUDE_START { child_idx } else { child_idx + 1 };
+            Self { gtree, leaf_idxs: &siblings[idx..] }
         }
     }
 
@@ -3290,7 +3300,10 @@ mod iter {
                 return None;
             }
 
-            todo!();
+            let (&first, rest) = self.leaf_idxs.split_first()?;
+            let leaf = self.gtree.leaf(first);
+            self.leaf_idxs = rest;
+            Some((first, leaf))
         }
     }
 }
