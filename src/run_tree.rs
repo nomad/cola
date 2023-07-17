@@ -284,7 +284,25 @@ impl RunTree {
     ) -> (Length, InsertionOutcome) {
         debug_assert!(run.anchor().is_origin());
 
-        todo!();
+        let mut leaves = self.gtree.leaves_from_start();
+
+        let (mut prev_idx, first_leaf) = leaves.next().unwrap();
+
+        if run.partial_cmp(first_leaf) != Some(Ordering::Greater) {
+            let inserted_idx = self.gtree.prepend(run);
+            return (0, InsertionOutcome::InsertedRun { inserted_idx });
+        }
+
+        for (idx, leaf) in leaves {
+            if &run > leaf {
+                prev_idx = idx;
+            } else {
+                return self.insert_run_after_another(run, prev_idx);
+            }
+        }
+
+        // If we get here we're inserting after the last run in the Gtree.
+        self.insert_run_after_another(run, prev_idx)
     }
 
     #[inline]
@@ -339,10 +357,11 @@ impl RunTree {
                 prev_idx = idx;
 
                 for (idx, sibling) in siblings {
-                    if &run < sibling {
+                    if &run > sibling {
+                        prev_idx = idx;
+                    } else {
                         return self.insert_run_after_another(run, prev_idx);
                     }
-                    prev_idx = idx;
                 }
             } else if anchor.can_append(&run) {
                 // Append the run to the anchor run. This is the only path that
@@ -355,10 +374,11 @@ impl RunTree {
         };
 
         for (idx, leaf) in self.gtree.leaves::<false>(prev_idx) {
-            if &run < leaf {
+            if &run > leaf {
+                prev_idx = idx;
+            } else {
                 return self.insert_run_after_another(run, prev_idx);
             }
-            prev_idx = idx;
         }
 
         // If we get here we're inserting after the last run in the Gtree.
