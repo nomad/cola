@@ -19,6 +19,8 @@ impl RunIndices {
     /// TODO: docs
     pub fn assert_invariants(&self, run_tree: &RunTree) {
         for (&replica_id, indices) in self.map.iter() {
+            indices.assert_invariants();
+
             let mut offset = 0;
 
             for (run_idx, run_len) in indices.splits() {
@@ -128,6 +130,16 @@ impl ReplicaIndices {
         self.vec.push((new_last, last_offset + last_len));
     }
 
+    fn assert_invariants(&self) {
+        let mut offset = 0;
+
+        for &(ref splits, splits_offset) in self.vec.iter() {
+            assert_eq!(splits_offset, offset);
+            splits.assert_invariants();
+            offset += splits_offset;
+        }
+    }
+
     #[inline]
     pub fn extend_last(&mut self, extend_by: Length) {
         self.vec.last_mut().unwrap().0.extend(extend_by);
@@ -221,6 +233,13 @@ mod run_splits {
     }
 
     impl<const INLINE: usize> InsertionSplits<INLINE> {
+        pub fn assert_invariants(&self) {
+            match self {
+                Self::Array(array) => array.assert_invariants(),
+                Self::Gtree(gtree) => gtree.assert_invariants(),
+            }
+        }
+
         #[inline]
         pub fn extend(&mut self, extend_by: Length) {
             match self {
@@ -416,6 +435,22 @@ mod run_splits {
     }
 
     impl<const N: usize> Array<N> {
+        #[inline]
+        fn assert_invariants(&self) {
+            let mut total_len = 0;
+
+            for split in self.splits[..self.len].iter() {
+                total_len += split.len;
+                assert!(!split.is_null());
+            }
+
+            assert_eq!(self.total_len, total_len);
+
+            for split in self.splits[self.len..].iter() {
+                assert!(split.is_null());
+            }
+        }
+
         #[inline]
         fn splits(&self) -> &[Split] {
             &self.splits[..self.len]
@@ -613,6 +648,11 @@ impl Split {
     #[inline]
     const fn null() -> Self {
         Self { len: 0, idx_in_run_tree: LeafIdx::dangling() }
+    }
+
+    #[inline]
+    fn is_null(&self) -> bool {
+        *self == Self::null()
     }
 
     #[inline]
