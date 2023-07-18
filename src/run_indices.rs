@@ -1,3 +1,5 @@
+use core::ops::{Index, IndexMut};
+
 use crate::*;
 
 /// TODO: docs
@@ -17,11 +19,14 @@ impl RunIndices {
     /// TODO: docs
     pub fn assert_invariants(&self, run_tree: &RunTree) {
         for (replica_id, indices) in self.iter() {
-            for (run_idx, run_offset, run_len) in indices.splits() {
+            let mut offset = 0;
+
+            for (run_idx, run_len) in indices.splits() {
                 let run = run_tree.get_run(run_idx);
                 assert_eq!(replica_id, run.replica_id());
-                assert_eq!(run_offset, run.start());
                 assert_eq!(run_len, run.len());
+                assert_eq!(offset, run.start());
+                offset += run_len;
             }
         }
     }
@@ -57,48 +62,48 @@ impl RunIndices {
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ReplicaIndices {
-    /// TODO: docs
-    insertion_runs: Gtree<32, InsertionSplits>,
+    vec: Vec<(InsertionSplits, Length)>,
+}
 
-    /// TODO: docs
-    run_idxs: Vec<(LeafIdx<InsertionSplits>, Length)>,
+/// TODO: docs
+impl Index<InsertionTimestamp> for ReplicaIndices {
+    type Output = (InsertionSplits, Length);
 
-    /// TODO: docs
-    last_run: InsertionSplits,
+    #[inline]
+    fn index(&self, insertion_ts: InsertionTimestamp) -> &Self::Output {
+        &self.vec[insertion_ts as usize]
+    }
+}
+
+impl IndexMut<InsertionTimestamp> for ReplicaIndices {
+    #[inline]
+    fn index_mut(
+        &mut self,
+        insertion_ts: InsertionTimestamp,
+    ) -> &mut Self::Output {
+        &mut self.vec[insertion_ts as usize]
+    }
 }
 
 impl ReplicaIndices {
     #[inline]
     pub fn append(&mut self, len: Length, idx: LeafIdx<EditRun>) {
-        let last_split = Split::new(len, idx);
-        let new_last = InsertionSplits::new(last_split);
-        let old_last = core::mem::replace(&mut self.last_run, new_last);
-        self.append_split(old_last);
-    }
+        let split = Split::new(len, idx);
 
-    #[inline]
-    fn append_split(&mut self, splits: InsertionSplits) {
-        let last_idx = if self.insertion_runs.is_initialized() {
-            self.insertion_runs.append(splits)
-        } else {
-            self.insertion_runs.initialize(splits)
-        };
+        let new_last = InsertionSplits::new(split);
 
         let (last_offset, last_len) = self
-            .run_idxs
+            .vec
             .last()
-            .map(|&(idx, offset)| {
-                let splits = self.insertion_runs.get_leaf(idx);
-                (offset, splits.len())
-            })
+            .map(|(splits, offset)| (splits.len(), *offset))
             .unwrap_or((0, 0));
 
-        self.run_idxs.push((last_idx, last_offset + last_len));
+        self.vec.push((new_last, last_offset + last_len));
     }
 
     #[inline]
     pub fn extend_last(&mut self, extend_by: Length) {
-        self.last_run.extend(extend_by);
+        self.vec.last_mut().unwrap().0.extend(extend_by);
     }
 
     #[inline]
@@ -107,9 +112,8 @@ impl ReplicaIndices {
         insertion_ts: InsertionTimestamp,
         at_offset: Length,
     ) -> LeafIdx<EditRun> {
-        let idx = insertion_ts as usize;
-        let (splits, at_offset) = self.splits_at_offset(idx, at_offset);
-        splits.split_at_offset(at_offset).idx_in_run_tree
+        let (splits, offset) = &self[insertion_ts];
+        splits.split_at_offset(at_offset - offset).idx_in_run_tree
     }
 
     #[inline]
@@ -119,12 +123,8 @@ impl ReplicaIndices {
         split_at_offset: Length,
         len_moved: Length,
     ) {
-        let idx = insertion_ts as usize;
-
-        let (splits, at_offset) =
-            self.splits_at_offset_mut(idx, split_at_offset);
-
-        splits.move_len_to_next_split(at_offset, len_moved);
+        let (splits, offset) = &mut self[insertion_ts];
+        splits.move_len_to_next_split(split_at_offset - *offset, len_moved);
     }
 
     #[inline]
@@ -134,23 +134,15 @@ impl ReplicaIndices {
         split_at_offset: Length,
         len_moved: Length,
     ) {
-        let idx = insertion_ts as usize;
-
-        let (splits, at_offset) =
-            self.splits_at_offset_mut(idx, split_at_offset);
-
-        splits.move_len_to_prev_split(at_offset, len_moved);
+        let (splits, offset) = &mut self[insertion_ts];
+        splits.move_len_to_prev_split(split_at_offset - *offset, len_moved);
     }
 
     #[inline]
     pub fn new(first_idx: LeafIdx<EditRun>, len: Length) -> Self {
         let split = Split::new(len, first_idx);
-
-        Self {
-            insertion_runs: Gtree::uninit(),
-            run_idxs: Vec::with_capacity(128),
-            last_run: InsertionSplits::new(split),
-        }
+        let splits = InsertionSplits::new(split);
+        Self { vec: vec![(splits, 0)] }
     }
 
     #[inline]
@@ -160,85 +152,15 @@ impl ReplicaIndices {
         at_offset: Length,
         right_idx: LeafIdx<EditRun>,
     ) {
-        let idx = insertion_ts as usize;
-
-        let (splits, at_offset) = self.splits_at_offset_mut(idx, at_offset);
-
-        splits.split(at_offset, right_idx);
+        let (splits, offset) = &mut self[insertion_ts];
+        splits.split(at_offset - *offset, right_idx);
     }
 
     #[inline]
-    fn splits_at_offset(
-        &self,
-        idx: usize,
-        mut at_offset: Length,
-    ) -> (&InsertionSplits, Length) {
-        let splits = if idx == self.run_idxs.len() {
-            let offset = self
-                .run_idxs
-                .last()
-                .map(|&(idx, offset)| {
-                    let last_split = self.insertion_runs.get_leaf(idx);
-                    offset + last_split.len()
-                })
-                .unwrap_or(0);
-
-            at_offset -= offset;
-            &self.last_run
-        } else {
-            let (leaf_idx, run_offset) = self.run_idxs[idx];
-            at_offset -= run_offset;
-            self.insertion_runs.get_leaf(leaf_idx)
-        };
-
-        (splits, at_offset)
-    }
-
-    #[inline]
-    fn splits_at_offset_mut(
-        &mut self,
-        idx: usize,
-        mut at_offset: Length,
-    ) -> (&mut InsertionSplits, Length) {
-        let splits = if idx == self.run_idxs.len() {
-            let offset = self
-                .run_idxs
-                .last()
-                .map(|&(idx, offset)| {
-                    let last_split = self.insertion_runs.get_leaf(idx);
-                    offset + last_split.len()
-                })
-                .unwrap_or(0);
-
-            at_offset -= offset;
-            &mut self.last_run
-        } else {
-            let (leaf_idx, run_offset) = self.run_idxs[idx];
-            at_offset -= run_offset;
-            self.insertion_runs.leaf_mut(leaf_idx)
-        };
-
-        (splits, at_offset)
-    }
-
-    #[inline]
-    fn splits(&self) -> Splits<'_> {
-        let mut run_splits = self.insertion_runs.leaves_from_start();
-
-        let (visited_last, first_split) =
-            if let Some((_, first)) = run_splits.next() {
-                (false, first)
-            } else {
-                (true, &self.last_run)
-            };
-
-        Splits {
-            visited_last,
-            current_split: first_split.leaves(),
-            last: &self.last_run,
-            run_splits,
-            offset: 0,
-        }
+    fn splits(&self) -> impl Iterator<Item = (LeafIdx<EditRun>, Length)> + '_ {
+        self.vec.iter().flat_map(|(splits, _)| {
+            splits.leaves().map(|split| (split.idx_in_run_tree, split.len))
+        })
     }
 }
 
@@ -246,8 +168,6 @@ impl ReplicaIndices {
 const INSERTION_SPLITS_INLINE: usize = 8;
 
 type InsertionSplits = run_splits::InsertionSplits<INSERTION_SPLITS_INLINE>;
-
-use run_splits::RunSplitLeaves;
 
 mod run_splits {
     use super::*;
@@ -258,7 +178,7 @@ mod run_splits {
         feature = "encode",
         derive(serde::Serialize, serde::Deserialize)
     )]
-    pub(super) enum InsertionSplits<const INLINE: usize> {
+    pub(crate) enum InsertionSplits<const INLINE: usize> {
         /// TODO: docs
         Array(Array<INLINE>),
 
@@ -458,7 +378,7 @@ mod run_splits {
     }
 
     #[derive(Clone, PartialEq)]
-    pub(super) struct Array<const N: usize> {
+    pub(crate) struct Array<const N: usize> {
         splits: [Split; N],
         len: usize,
         total_len: Length,
@@ -634,7 +554,7 @@ mod run_splits {
         }
     }
 
-    pub(super) struct RunSplitLeaves<'a> {
+    pub(crate) struct RunSplitLeaves<'a> {
         iter: Box<dyn Iterator<Item = &'a Split> + 'a>,
     }
 
@@ -650,7 +570,7 @@ mod run_splits {
 /// TODO: docs
 #[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-struct Split {
+pub(crate) struct Split {
     /// TODO: docs
     len: Length,
 
@@ -696,42 +616,5 @@ impl gtree::Leaf for Split {
     #[inline]
     fn len(&self) -> Self::Length {
         self.len
-    }
-}
-
-pub(crate) use splits::Splits;
-
-mod splits {
-    use super::*;
-
-    pub(crate) struct Splits<'a> {
-        pub(super) run_splits: gtree::Leaves<'a, 32, InsertionSplits>,
-        pub(super) current_split: RunSplitLeaves<'a>,
-        pub(super) last: &'a InsertionSplits,
-        pub(super) offset: Length,
-        pub(super) visited_last: bool,
-    }
-
-    impl<'a> Iterator for Splits<'a> {
-        type Item = (LeafIdx<EditRun>, Length, Length); // (idx, offset, len)
-
-        fn next(&mut self) -> Option<Self::Item> {
-            if let Some(split) = self.current_split.next() {
-                let idx = split.idx_in_run_tree;
-                let len = split.len;
-                let offset = self.offset;
-                self.offset += len;
-                Some((idx, offset, len))
-            } else if let Some((_, splits)) = self.run_splits.next() {
-                self.current_split = splits.leaves();
-                self.next()
-            } else if self.visited_last {
-                None
-            } else {
-                self.visited_last = true;
-                self.current_split = self.last.leaves();
-                self.next()
-            }
-        }
     }
 }

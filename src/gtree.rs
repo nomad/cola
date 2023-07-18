@@ -284,14 +284,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         (total as f32) / (self.inodes.len() as f32)
     }
 
-    /// Appends a new leaf node to the end of the Gtree, returning its newly
-    /// created leaf index.
-    #[inline(always)]
-    pub fn append(&mut self, leaf: L) -> LeafIdx<L> {
-        let (last_leaf_idx, idx_in_parent) = self.last_leaf();
-        self.insert_leaf_after_leaf(last_leaf_idx, idx_in_parent, leaf)
-    }
-
     /// Returns an `(empty_leaves, total_leaves)` tuple.
     ///
     /// Only used for debugging.
