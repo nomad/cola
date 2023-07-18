@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -6,6 +7,7 @@ use cola::{CrdtEdit, Length, ReplicaId, TextEdit};
 pub struct Replica {
     pub buffer: String,
     pub crdt: cola::Replica,
+    history: HashMap<ReplicaId, String>,
 }
 
 impl Debug for Replica {
@@ -53,7 +55,11 @@ impl Replica {
     }
 
     pub fn fork(&self, id: impl Into<ReplicaId>) -> Self {
-        Self { buffer: self.buffer.clone(), crdt: self.crdt.fork(id) }
+        Self {
+            buffer: self.buffer.clone(),
+            crdt: self.crdt.fork(id),
+            history: self.history.clone(),
+        }
     }
 
     pub fn insert<T: Into<String>>(
@@ -71,17 +77,45 @@ impl Replica {
     pub fn merge(&mut self, (string, edit): &Edit) {
         if let Some(edit) = self.crdt.merge(edit) {
             match edit {
-                TextEdit::Insertion(offset, _) => {
-                    self.buffer.insert_str(offset, string)
+                TextEdit::Insertion(offset, text) => {
+                    self.buffer.insert_str(offset, string);
+
+                    self.history
+                        .entry(text.inserted_by())
+                        .or_insert_with(String::new)
+                        .push_str(string);
                 },
 
                 TextEdit::ContiguousDeletion(range) => {
-                    self.buffer.replace_range(range, "")
+                    self.buffer.replace_range(range, "");
                 },
 
                 TextEdit::SplitDeletion(ranges) => {
                     for range in ranges.into_iter().rev() {
-                        self.buffer.replace_range(range, "")
+                        self.buffer.replace_range(range, "");
+                    }
+                },
+            }
+        }
+    }
+
+    pub fn merge_backlogged(&mut self) {
+        for edit in self.crdt.backlogged() {
+            match edit {
+                TextEdit::Insertion(offset, text) => {
+                    let s = &self.history.get(&text.inserted_by()).unwrap()
+                        [text.temporal_range()];
+
+                    self.buffer.insert_str(offset, s);
+                },
+
+                TextEdit::ContiguousDeletion(range) => {
+                    self.buffer.replace_range(range, "");
+                },
+
+                TextEdit::SplitDeletion(ranges) => {
+                    for range in ranges.into_iter().rev() {
+                        self.buffer.replace_range(range, "");
                     }
                 },
             }
@@ -91,7 +125,8 @@ impl Replica {
     pub fn new<T: Into<String>>(id: impl Into<ReplicaId>, text: T) -> Self {
         let buffer = text.into();
         let crdt = cola::Replica::new(id, buffer.len() as Length);
-        Self { buffer, crdt }
+        let history = HashMap::new();
+        Self { buffer, crdt, history }
     }
 }
 
