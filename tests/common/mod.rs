@@ -17,6 +17,12 @@ impl Debug for Replica {
     }
 }
 
+impl PartialEq<Replica> for Replica {
+    fn eq(&self, rhs: &Replica) -> bool {
+        self.buffer == rhs.buffer
+    }
+}
+
 impl PartialEq<&str> for Replica {
     fn eq(&self, rhs: &&str) -> bool {
         self.buffer == *rhs
@@ -124,4 +130,22 @@ impl Debug for DebugAsBtree<'_> {
             .field("crdt", &replica.crdt.debug_as_btree())
             .finish()
     }
+}
+
+#[macro_export]
+macro_rules! assert_convergence {
+    ($one:expr, $two:expr) => {{
+        assert_eq!($one, $two);
+    }};
+
+    ($one:expr, $two:expr, $three:expr) => {{
+        assert_eq!($one, $two);
+        assert_eq!($two, $three);
+    }};
+
+    ($one:expr, $two:expr, $three:expr, $four:expr) => {{
+        assert_eq!($one, $two);
+        assert_eq!($two, $three);
+        assert_eq!($three, $four);
+    }};
 }

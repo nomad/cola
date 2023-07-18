@@ -30,8 +30,6 @@ fn woot_figure_2() {
     // after the '1', not before the '3'.
     peer3.merge(&op2);
 
-    assert_eq!(peer3, "a312b");
-
     // The figure ends here but we also complete Peers 1 and 2.
 
     peer1.merge(&op2);
@@ -40,6 +38,5 @@ fn woot_figure_2() {
     peer2.merge(&op3);
     peer2.merge(&op1);
 
-    assert_eq!(peer1, "a312b");
-    assert_eq!(peer2, "a312b");
+    assert_convergence!(peer1, peer2, peer3, "a312b");
 }
