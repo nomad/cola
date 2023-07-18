@@ -439,43 +439,6 @@ impl Replica {
 
     /// TODO: docs
     #[inline]
-    fn handle_insertion_outcome(
-        &mut self,
-        len: Length,
-        outcome: InsertionOutcome,
-    ) {
-        match outcome {
-            InsertionOutcome::ExtendedLastRun { replica_id } => {
-                self.run_indices.get_mut(replica_id).extend_last(len)
-            },
-
-            InsertionOutcome::SplitRun {
-                split_id,
-                split_insertion,
-                split_at_offset,
-                split_idx,
-                inserted_id,
-                inserted_idx,
-            } => {
-                self.run_indices
-                    .get_mut(inserted_id)
-                    .append(len, inserted_idx);
-
-                self.run_indices.get_mut(split_id).split(
-                    split_insertion,
-                    split_at_offset,
-                    split_idx,
-                );
-            },
-
-            InsertionOutcome::InsertedRun { replica_id, inserted_idx } => {
-                self.run_indices.get_mut(replica_id).append(len, inserted_idx)
-            },
-        };
-    }
-
-    /// TODO: docs
-    #[inline]
     fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
         self.deletion_map.get(deletion.deleted_by()) > deletion.deletion_ts
     }
@@ -534,7 +497,7 @@ impl Replica {
             &mut self.lamport_clock,
         );
 
-        self.handle_insertion_outcome(len, outcome);
+        self.run_indices.update_after_insert(outcome, len);
 
         CrdtEdit::insertion(
             anchor,
@@ -697,7 +660,7 @@ impl Replica {
 
         let len = insertion.len();
 
-        self.handle_insertion_outcome(len, outcome);
+        self.run_indices.update_after_insert(outcome, len);
 
         *self.version_map.get_mut(insertion.inserted_by()) += len;
 

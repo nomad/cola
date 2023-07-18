@@ -18,7 +18,7 @@ impl core::fmt::Debug for RunIndices {
 impl RunIndices {
     /// TODO: docs
     pub fn assert_invariants(&self, run_tree: &RunTree) {
-        for (replica_id, indices) in self.iter() {
+        for (&replica_id, indices) in self.map.iter() {
             let mut offset = 0;
 
             for (run_idx, run_len) in indices.splits() {
@@ -29,12 +29,6 @@ impl RunIndices {
                 offset += run_len;
             }
         }
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (ReplicaId, &ReplicaIndices)> {
-        self.map.iter().map(|(id, indices)| (*id, indices))
     }
 
     /// TODO: docs
@@ -55,6 +49,41 @@ impl RunIndices {
         let mut map = ReplicaIdMap::default();
         map.insert(id, ReplicaIndices::new(idx, len));
         Self { map }
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn update_after_insert(
+        &mut self,
+        outcome: InsertionOutcome,
+        inserted_len: Length,
+    ) {
+        match outcome {
+            InsertionOutcome::ExtendedLastRun { replica_id } => {
+                self.get_mut(replica_id).extend_last(inserted_len)
+            },
+
+            InsertionOutcome::SplitRun {
+                split_id,
+                split_insertion,
+                split_at_offset,
+                split_idx,
+                inserted_id,
+                inserted_idx,
+            } => {
+                self.get_mut(inserted_id).append(inserted_len, inserted_idx);
+
+                self.get_mut(split_id).split(
+                    split_insertion,
+                    split_at_offset,
+                    split_idx,
+                );
+            },
+
+            InsertionOutcome::InsertedRun { replica_id, inserted_idx } => {
+                self.get_mut(replica_id).append(inserted_len, inserted_idx)
+            },
+        };
     }
 }
 
