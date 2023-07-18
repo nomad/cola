@@ -238,6 +238,7 @@ impl Replica {
         let id = id.into();
 
         version_map.fork_in_place(id, 0);
+
         deletion_map.fork_in_place(id, 1);
 
         let replica = Self {
@@ -245,7 +246,7 @@ impl Replica {
             run_tree,
             run_indices,
             insertion_clock: InsertionClock::new(),
-            lamport_clock: lamport_clock.fork(),
+            lamport_clock,
             version_map,
             deletion_map,
             backlog,
@@ -430,7 +431,7 @@ impl Replica {
             run_tree: self.run_tree.clone(),
             run_indices: self.run_indices.clone(),
             insertion_clock: InsertionClock::new(),
-            lamport_clock: self.lamport_clock.fork(),
+            lamport_clock: self.lamport_clock,
             version_map: self.version_map.fork(new_id, 0),
             deletion_map: self.deletion_map.fork(new_id, 1),
             backlog: self.backlog.clone(),
@@ -778,11 +779,6 @@ impl core::fmt::Debug for LamportClock {
 }
 
 impl LamportClock {
-    #[inline]
-    fn fork(&self) -> Self {
-        Self(self.0 + 1)
-    }
-
     #[inline]
     fn last(&self) -> LamportTimestamp {
         self.0.saturating_sub(1)
