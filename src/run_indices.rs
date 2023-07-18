@@ -40,15 +40,13 @@ impl RunIndices {
     /// TODO: docs
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
-        self.map.get_mut(&id).unwrap()
+        self.map.entry(id).or_insert_with(ReplicaIndices::new)
     }
 
     /// TODO: docs
     #[inline]
-    pub fn new(id: ReplicaId, idx: LeafIdx<EditRun>, len: Length) -> Self {
-        let mut map = ReplicaIdMap::default();
-        map.insert(id, ReplicaIndices::new(idx, len));
-        Self { map }
+    pub fn new() -> Self {
+        Self { map: ReplicaIdMap::default() }
     }
 
     /// TODO: docs
@@ -168,10 +166,8 @@ impl ReplicaIndices {
     }
 
     #[inline]
-    pub fn new(first_idx: LeafIdx<EditRun>, len: Length) -> Self {
-        let split = Split::new(len, first_idx);
-        let splits = InsertionSplits::new(split);
-        Self { vec: vec![(splits, 0)] }
+    fn new() -> Self {
+        Self { vec: Vec::new() }
     }
 
     #[inline]

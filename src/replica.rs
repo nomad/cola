@@ -729,7 +729,9 @@ impl Replica {
 
         let (run_tree, origin_idx) = RunTree::new(origin_run);
 
-        let run_indices = RunIndices::new(id, origin_idx, len);
+        let mut run_indices = RunIndices::new();
+
+        run_indices.get_mut(id).append(len, origin_idx);
 
         Self {
             id,
