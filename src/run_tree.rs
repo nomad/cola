@@ -236,7 +236,7 @@ impl RunTree {
             split_insertion = run.insertion_ts();
             split_at_offset = run.start() + offset;
             anchor_ts = run.insertion_ts();
-            anchor = Anchor::new(run.replica_id(), run.end());
+            anchor = Anchor::new(run.replica_id(), split_at_offset);
 
             if run.len() == offset
                 && run.replica_id() == text.inserted_by()
