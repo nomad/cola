@@ -66,6 +66,7 @@ impl Replica {
     pub fn assert_invariants(&self) {
         self.run_tree.assert_invariants();
         self.run_indices.assert_invariants(&self.run_tree);
+        self.backlog.assert_invariants();
     }
 
     #[doc(hidden)]

@@ -24,6 +24,15 @@ impl BackLog {
             .add(insertion);
     }
 
+    pub fn assert_invariants(&self) {
+        for (&id, insertions) in self.insertions.iter() {
+            insertions.assert_invariants(id);
+        }
+        for (&id, deletions) in self.deletions.iter() {
+            deletions.assert_invariants(id);
+        }
+    }
+
     /// Creates a new, empty `BackLog`.
     #[inline]
     pub fn new() -> Self {
@@ -55,6 +64,16 @@ impl InsertionsBackLog {
 
         self.vec.insert(insert_at_offset, insertion);
     }
+
+    fn assert_invariants(&self, id: ReplicaId) {
+        let mut prev_end = 0;
+
+        for insertion in &self.vec {
+            assert_eq!(insertion.inserted_by(), id);
+            assert!(insertion.start() >= prev_end);
+            prev_end = insertion.end();
+        }
+    }
 }
 
 /// TODO: docs
@@ -79,6 +98,16 @@ impl DeletionsBackLog {
         };
 
         self.vec.insert(insert_at_offset, deletion);
+    }
+
+    fn assert_invariants(&self, id: ReplicaId) {
+        let mut prev_ts = 0;
+
+        for deletion in &self.vec {
+            assert_eq!(deletion.deleted_by(), id);
+            assert!(deletion.deletion_ts() > prev_ts);
+            prev_ts = deletion.deletion_ts();
+        }
     }
 }
 

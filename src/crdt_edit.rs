@@ -152,4 +152,9 @@ impl Deletion {
     pub fn deleted_by(&self) -> ReplicaId {
         self.version_map.this_id()
     }
+
+    #[inline]
+    pub fn deletion_ts(&self) -> DeletionTs {
+        self.deletion_ts
+    }
 }
