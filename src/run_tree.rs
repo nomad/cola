@@ -25,13 +25,15 @@ impl RunTree {
 
         debug_assert!(self.gtree.get_leaf(append_to).can_append(&run));
 
-        let leaf_len = self.gtree.get_leaf(append_to).len();
+        let appending_to = self.gtree.get_leaf(append_to);
+        let replica_id = appending_to.replica_id();
+        let leaf_len = appending_to.len();
 
         self.gtree.get_leaf_mut(append_to, |leaf| leaf.append(run).unwrap());
 
         let offset = self.gtree.offset_of_leaf(append_to) + leaf_len;
 
-        (offset, InsertionOutcome::ExtendedLastRun)
+        (offset, InsertionOutcome::ExtendedLastRun { replica_id })
     }
 
     #[inline]
@@ -201,6 +203,8 @@ impl RunTree {
     ) -> (Anchor, InsertionTimestamp, InsertionOutcome) {
         debug_assert!(!text.range.is_empty());
 
+        let replica_id = text.inserted_by();
+
         let mut anchor_ts = 0;
 
         if offset == 0 {
@@ -213,7 +217,8 @@ impl RunTree {
 
             let inserted_idx = self.gtree.prepend(run);
 
-            let outcome = InsertionOutcome::InsertedRun { inserted_idx };
+            let outcome =
+                InsertionOutcome::InsertedRun { replica_id, inserted_idx };
 
             return (Anchor::origin(), anchor_ts, outcome);
         }
@@ -256,7 +261,7 @@ impl RunTree {
         let (inserted_idx, split_idx) = self.gtree.insert(offset, insert_with);
 
         let outcome = match (inserted_idx, split_idx) {
-            (None, None) => InsertionOutcome::ExtendedLastRun,
+            (None, None) => InsertionOutcome::ExtendedLastRun { replica_id },
 
             (Some(inserted_idx), Some(split_idx)) => {
                 InsertionOutcome::SplitRun {
@@ -264,12 +269,13 @@ impl RunTree {
                     split_insertion,
                     split_at_offset,
                     split_idx,
+                    inserted_id: replica_id,
                     inserted_idx,
                 }
             },
 
             (Some(inserted_idx), None) => {
-                InsertionOutcome::InsertedRun { inserted_idx }
+                InsertionOutcome::InsertedRun { replica_id, inserted_idx }
             },
 
             _ => unreachable!(),
@@ -284,12 +290,14 @@ impl RunTree {
         run: EditRun,
         insert_after: LeafIdx<EditRun>,
     ) -> (Length, InsertionOutcome) {
+        let replica_id = run.replica_id();
+
         let inserted_idx =
             self.gtree.insert_leaf_after_another(run, insert_after);
 
         let offset = self.gtree.offset_of_leaf(inserted_idx);
 
-        (offset, InsertionOutcome::InsertedRun { inserted_idx })
+        (offset, InsertionOutcome::InsertedRun { replica_id, inserted_idx })
     }
 
     #[inline]
@@ -299,13 +307,17 @@ impl RunTree {
     ) -> (Length, InsertionOutcome) {
         debug_assert!(run.anchor().is_origin());
 
+        let replica_id = run.replica_id();
+
         let mut leaves = self.gtree.leaves_from_start();
 
         let (mut prev_idx, first_leaf) = leaves.next().unwrap();
 
         if run.partial_cmp(first_leaf) != Some(Ordering::Greater) {
             let inserted_idx = self.gtree.prepend(run);
-            return (0, InsertionOutcome::InsertedRun { inserted_idx });
+            let outcome =
+                InsertionOutcome::InsertedRun { replica_id, inserted_idx };
+            return (0, outcome);
         }
 
         for (idx, leaf) in leaves {
@@ -422,6 +434,8 @@ impl RunTree {
         let split_insertion = splitting.insertion_ts();
         let split_at_offset = splitting.start() + at_offset;
 
+        let inserted_id = run.replica_id();
+
         let offset = self.gtree.offset_of_leaf(insert_into) + at_offset;
 
         let (inserted_idx, split_idx) =
@@ -435,6 +449,7 @@ impl RunTree {
             split_insertion,
             split_at_offset,
             split_idx,
+            inserted_id,
             inserted_idx,
         };
 
@@ -446,10 +461,10 @@ impl RunTree {
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum InsertionOutcome {
     /// TODO: docs
-    ExtendedLastRun,
+    ExtendedLastRun { replica_id: ReplicaId },
 
     /// TODO: docs
-    InsertedRun { inserted_idx: LeafIdx<EditRun> },
+    InsertedRun { replica_id: ReplicaId, inserted_idx: LeafIdx<EditRun> },
 
     /// TODO: docs
     SplitRun {
@@ -457,6 +472,7 @@ pub(crate) enum InsertionOutcome {
         split_insertion: InsertionTimestamp,
         split_at_offset: Length,
         split_idx: LeafIdx<EditRun>,
+        inserted_id: ReplicaId,
         inserted_idx: LeafIdx<EditRun>,
     },
 }
@@ -659,7 +675,7 @@ impl EditRun {
     #[inline(always)]
     pub fn from_insertion(insertion: &Insertion) -> Self {
         Self {
-            inserted_at: insertion.anchor().clone(),
+            inserted_at: *insertion.anchor(),
             text: insertion.text().clone(),
             insertion_ts: insertion.insertion_ts(),
             lamport_ts: insertion.lamport_ts(),

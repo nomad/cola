@@ -445,8 +445,8 @@ impl Replica {
         outcome: InsertionOutcome,
     ) {
         match outcome {
-            InsertionOutcome::ExtendedLastRun => {
-                self.run_indices.get_mut(self.id).extend_last(len)
+            InsertionOutcome::ExtendedLastRun { replica_id } => {
+                self.run_indices.get_mut(replica_id).extend_last(len)
             },
 
             InsertionOutcome::SplitRun {
@@ -454,9 +454,12 @@ impl Replica {
                 split_insertion,
                 split_at_offset,
                 split_idx,
+                inserted_id,
                 inserted_idx,
             } => {
-                self.run_indices.get_mut(self.id).append(len, inserted_idx);
+                self.run_indices
+                    .get_mut(inserted_id)
+                    .append(len, inserted_idx);
 
                 self.run_indices.get_mut(split_id).split(
                     split_insertion,
@@ -465,8 +468,8 @@ impl Replica {
                 );
             },
 
-            InsertionOutcome::InsertedRun { inserted_idx } => {
-                self.run_indices.get_mut(self.id).append(len, inserted_idx)
+            InsertionOutcome::InsertedRun { replica_id, inserted_idx } => {
+                self.run_indices.get_mut(replica_id).append(len, inserted_idx)
             },
         };
     }
