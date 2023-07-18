@@ -1,6 +1,7 @@
 mod common;
 
 use common::Replica;
+use rand::seq::SliceRandom;
 
 /// Tests the convergence of the state illustrated in Figure 2 of the WOOT
 /// paper.
@@ -39,4 +40,62 @@ fn woot_figure_2() {
     peer2.merge(&op1);
 
     assert_convergence!(peer1, peer2, peer3, "a312b");
+}
+
+#[test]
+fn random_edits() {
+    let replica1 = Replica::new(1, "");
+    let replica2 = replica1.fork(2);
+    let replica3 = replica1.fork(3);
+    let replica4 = replica1.fork(4);
+    let replica5 = replica1.fork(5);
+
+    let mut replicas = vec![replica1, replica2, replica3, replica4, replica5];
+
+    let edits_per_cycle = 5;
+
+    for _ in 0..1_000 {
+        let edits = (0..replicas.len())
+            .map(|idx| {
+                (0..edits_per_cycle)
+                    .map(|_| {
+                        let replica = &mut replicas[idx];
+                        let (offset, text) = replica.random_insert();
+                        replica.insert(offset, text)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
+
+        merge_order.shuffle(&mut rand::thread_rng());
+
+        for replica_idx in merge_order {
+            let len = replicas.len();
+
+            let replica = &mut replicas[replica_idx];
+
+            let mut merge_order =
+                (0..len).filter(|&idx| idx != replica_idx).collect::<Vec<_>>();
+
+            merge_order.shuffle(&mut rand::thread_rng());
+
+            for edits_idx in merge_order {
+                for edit in &edits[edits_idx] {
+                    replica.merge(edit);
+                }
+            }
+
+            replica.merge_backlogged();
+        }
+
+        assert_convergence!(
+            replicas[0],
+            replicas[1],
+            replicas[2],
+            replicas[3],
+            replicas[4]
+        );
+    }
 }

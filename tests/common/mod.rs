@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 
 use cola::{CrdtEdit, Length, ReplicaId, TextEdit};
+use rand::Rng;
 
 pub struct Replica {
     pub buffer: String,
@@ -42,6 +43,16 @@ type Edit = (String, CrdtEdit);
 impl Replica {
     pub fn as_btree(&self) -> DebugAsBtree<'_> {
         DebugAsBtree(self)
+    }
+
+    pub fn edit(&mut self, edit: RandomEdit) -> Edit {
+        match edit {
+            RandomEdit::Insertion(byte_offset, text) => {
+                self.insert(byte_offset, text)
+            },
+
+            RandomEdit::Deletion(byte_range) => self.delete(byte_range),
+        }
     }
 
     pub fn delete(&mut self, byte_range: Range<usize>) -> Edit {
@@ -128,6 +139,35 @@ impl Replica {
         let history = HashMap::new();
         Self { buffer, crdt, history }
     }
+
+    pub fn random_insert(&self) -> (usize, String) {
+        let mut rng = rand::thread_rng();
+        let offset = if self.buffer.is_empty() {
+            0
+        } else {
+            rng.gen_range(0..self.buffer.len())
+        };
+        let text_len = rng.gen_range(1..=5);
+        let letter = rng.gen_range('a'..='z');
+        let text = (0..text_len).map(|_| letter).collect::<String>();
+        (offset, text)
+    }
+
+    pub fn random_edit(&self) -> RandomEdit {
+        let create_insertion = rand::random::<bool>();
+
+        if create_insertion {
+            let (offset, text) = self.random_insert();
+            RandomEdit::Insertion(offset, text)
+        } else {
+            todo!();
+        }
+    }
+}
+
+pub enum RandomEdit {
+    Insertion(usize, String),
+    Deletion(Range<usize>),
 }
 
 impl traces::Crdt for Replica {
@@ -182,5 +222,12 @@ macro_rules! assert_convergence {
         assert_eq!($one, $two);
         assert_eq!($two, $three);
         assert_eq!($three, $four);
+    }};
+
+    ($one:expr, $two:expr, $three:expr, $four:expr, $five:expr) => {{
+        assert_eq!($one, $two);
+        assert_eq!($two, $three);
+        assert_eq!($three, $four);
+        assert_eq!($four, $five);
     }};
 }
