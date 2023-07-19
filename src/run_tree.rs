@@ -371,7 +371,7 @@ impl RunTree {
         // there can't be any other runs that are tied with it. In this case we
         // can just split the anchor run and insert the new run after it.
         if run.anchor().offset < anchor.end() {
-            let insert_at = anchor.end() - run.anchor().offset;
+            let insert_at = run.anchor().offset - anchor.start();
             return self.split_run_with_another(run, anchor_idx, insert_at);
         }
 
