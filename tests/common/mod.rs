@@ -141,9 +141,12 @@ impl Replica {
         Self { buffer, crdt, history }
     }
 
-    pub fn random_insert(&self, max_len: usize) -> (usize, String) {
+    pub fn random_insert(
+        &self,
+        rng: &mut impl rand::Rng,
+        max_len: usize,
+    ) -> (usize, String) {
         assert!(max_len > 0);
-        let mut rng = rand::thread_rng();
         let offset = rng.gen_range(0..=self.buffer.len());
         let text_len = rng.gen_range(1..=max_len);
         let letter = rng.gen_range('a'..='z');
@@ -151,11 +154,15 @@ impl Replica {
         (offset, text)
     }
 
-    pub fn random_edit(&self, max_len: usize) -> RandomEdit {
+    pub fn random_edit(
+        &self,
+        rng: &mut impl rand::Rng,
+        max_len: usize,
+    ) -> RandomEdit {
         let create_insertion = rand::random::<bool>();
 
         if create_insertion {
-            let (offset, text) = self.random_insert(max_len);
+            let (offset, text) = self.random_insert(rng, max_len);
             RandomEdit::Insertion(offset, text)
         } else {
             todo!();

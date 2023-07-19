@@ -3,6 +3,8 @@ mod common;
 use cola::ReplicaId;
 use common::Replica;
 use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 /// Tests the convergence of the state illustrated in Figure 2 of the WOOT
 /// paper.
@@ -45,10 +47,15 @@ fn woot_figure_2() {
 
 #[test]
 fn random_insertions() {
-    test_random_insertions(2, 1_000, 1, 1);
+    // let seed = rand::random::<u64>();
+    let seed = 4752997793787158095;
+    println!("seed: {}", seed);
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    test_random_insertions(&mut rng, 2, 1_000, 2, 2);
 }
 
 fn test_random_insertions(
+    rng: &mut impl Rng,
     num_replicas: usize,
     num_cycles: usize,
     insertions_per_cycle: usize,
@@ -67,22 +74,31 @@ fn test_random_insertions(
     }
 
     for _ in 0..num_cycles {
+        println!("============");
+        println!("============");
+        println!("============");
+        println!("before editing: {:#?}", replicas);
+
         let edits = (0..replicas.len())
             .map(|idx| {
                 (0..insertions_per_cycle)
                     .map(|_| {
                         let replica = &mut replicas[idx];
                         let (offset, text) =
-                            replica.random_insert(max_insertion_len);
+                            replica.random_insert(rng, max_insertion_len);
                         replica.insert(offset, text)
                     })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
 
+        println!("edits: {:#?}", edits);
+
+        println!("after editing: {:#?}", replicas);
+
         let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
 
-        merge_order.shuffle(&mut rand::thread_rng());
+        merge_order.shuffle(rng);
 
         for replica_idx in merge_order {
             let len = replicas.len();
@@ -92,7 +108,7 @@ fn test_random_insertions(
             let mut merge_order =
                 (0..len).filter(|&idx| idx != replica_idx).collect::<Vec<_>>();
 
-            merge_order.shuffle(&mut rand::thread_rng());
+            merge_order.shuffle(rng);
 
             for edits_idx in merge_order {
                 for edit in &edits[edits_idx] {
@@ -102,6 +118,8 @@ fn test_random_insertions(
 
             replica.merge_backlogged();
         }
+
+        println!("after merging: {:#?}", replicas);
 
         for replica in &replicas {
             replica.assert_invariants();
