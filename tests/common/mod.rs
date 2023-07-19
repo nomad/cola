@@ -15,7 +15,7 @@ impl Debug for Replica {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Replica")
             .field("buffer", &self.buffer)
-            .field("crdt", &self.crdt.debug())
+            .field("crdt", &self.crdt.debug_as_btree())
             .finish()
     }
 }
@@ -41,8 +41,9 @@ impl PartialEq<Replica> for &str {
 type Edit = (String, CrdtEdit);
 
 impl Replica {
-    pub fn as_btree(&self) -> DebugAsBtree<'_> {
-        DebugAsBtree(self)
+    pub fn assert_invariants(&self) {
+        self.crdt.assert_invariants();
+        assert_eq!(self.buffer.len(), self.crdt.len());
     }
 
     pub fn edit(&mut self, edit: RandomEdit) -> Edit {
@@ -140,24 +141,21 @@ impl Replica {
         Self { buffer, crdt, history }
     }
 
-    pub fn random_insert(&self) -> (usize, String) {
+    pub fn random_insert(&self, max_len: usize) -> (usize, String) {
+        assert!(max_len > 0);
         let mut rng = rand::thread_rng();
-        let offset = if self.buffer.is_empty() {
-            0
-        } else {
-            rng.gen_range(0..self.buffer.len())
-        };
-        let text_len = rng.gen_range(1..=5);
+        let offset = rng.gen_range(0..=self.buffer.len());
+        let text_len = rng.gen_range(1..=max_len);
         let letter = rng.gen_range('a'..='z');
         let text = (0..text_len).map(|_| letter).collect::<String>();
         (offset, text)
     }
 
-    pub fn random_edit(&self) -> RandomEdit {
+    pub fn random_edit(&self, max_len: usize) -> RandomEdit {
         let create_insertion = rand::random::<bool>();
 
         if create_insertion {
-            let (offset, text) = self.random_insert();
+            let (offset, text) = self.random_insert(max_len);
             RandomEdit::Insertion(offset, text)
         } else {
             todo!();
@@ -194,40 +192,37 @@ impl traces::Crdt for Replica {
     }
 }
 
-pub struct DebugAsBtree<'a>(&'a Replica);
-
-impl Debug for DebugAsBtree<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let replica = self.0;
-
-        f.debug_struct("Replica")
-            .field("buffer", &replica.buffer)
-            .field("crdt", &replica.crdt.debug_as_btree())
-            .finish()
-    }
-}
-
 #[macro_export]
 macro_rules! assert_convergence {
+    ($slice:expr) => {{
+        for replica in $slice[1..].iter() {
+            if &$slice[0] != replica {
+                panic!("left: {:#?}\nright: {:#?}", &$slice[0], replica);
+            }
+        }
+    }};
+
     ($one:expr, $two:expr) => {{
-        assert_eq!($one, $two);
+        if $one != $two {
+            panic!("left: {:#?}\nright: {:#?}", $one, $two);
+        }
     }};
 
     ($one:expr, $two:expr, $three:expr) => {{
-        assert_eq!($one, $two);
-        assert_eq!($two, $three);
+        assert_eq!($one, $two, "{:#?} vs {:#?}", $one, $two);
+        assert_eq!($two, $three, "{:#?} vs {:#?}", $two, $three);
     }};
 
     ($one:expr, $two:expr, $three:expr, $four:expr) => {{
-        assert_eq!($one, $two);
-        assert_eq!($two, $three);
-        assert_eq!($three, $four);
+        assert_eq!($one, $two, "{:#?} vs {:#?}", $one, $two);
+        assert_eq!($two, $three, "{:#?} vs {:#?}", $two, $three);
+        assert_eq!($three, $four, "{:#?} vs {:#?}", $three, $four);
     }};
 
     ($one:expr, $two:expr, $three:expr, $four:expr, $five:expr) => {{
-        assert_eq!($one, $two);
-        assert_eq!($two, $three);
-        assert_eq!($three, $four);
-        assert_eq!($four, $five);
+        assert_eq!($one, $two, "{:#?} vs {:#?}", $one, $two);
+        assert_eq!($two, $three, "{:#?} vs {:#?}", $two, $three);
+        assert_eq!($three, $four, "{:#?} vs {:#?}", $three, $four);
+        assert_eq!($four, $five, "{:#?} vs {:#?}", $four, $five);
     }};
 }

@@ -1,5 +1,6 @@
 mod common;
 
+use cola::ReplicaId;
 use common::Replica;
 use rand::seq::SliceRandom;
 
@@ -43,24 +44,36 @@ fn woot_figure_2() {
 }
 
 #[test]
-fn random_edits() {
-    let replica1 = Replica::new(1, "");
-    let replica2 = replica1.fork(2);
-    let replica3 = replica1.fork(3);
-    let replica4 = replica1.fork(4);
-    let replica5 = replica1.fork(5);
+fn random_insertions() {
+    test_random_insertions(2, 1_000, 1, 1);
+}
 
-    let mut replicas = vec![replica1, replica2, replica3, replica4, replica5];
+fn test_random_insertions(
+    num_replicas: usize,
+    num_cycles: usize,
+    insertions_per_cycle: usize,
+    max_insertion_len: usize,
+) {
+    assert!(num_replicas > 1);
+    assert!(max_insertion_len > 0);
+    assert!(insertions_per_cycle > 0);
 
-    let edits_per_cycle = 5;
+    let first_replica = Replica::new(0, "");
 
-    for _ in 0..1_000 {
+    let mut replicas = vec![first_replica];
+
+    for i in 1..num_replicas {
+        replicas.push(replicas[0].fork(ReplicaId::from(i as u64)));
+    }
+
+    for _ in 0..num_cycles {
         let edits = (0..replicas.len())
             .map(|idx| {
-                (0..edits_per_cycle)
+                (0..insertions_per_cycle)
                     .map(|_| {
                         let replica = &mut replicas[idx];
-                        let (offset, text) = replica.random_insert();
+                        let (offset, text) =
+                            replica.random_insert(max_insertion_len);
                         replica.insert(offset, text)
                     })
                     .collect::<Vec<_>>()
@@ -90,12 +103,10 @@ fn random_edits() {
             replica.merge_backlogged();
         }
 
-        assert_convergence!(
-            replicas[0],
-            replicas[1],
-            replicas[2],
-            replicas[3],
-            replicas[4]
-        );
+        for replica in &replicas {
+            replica.assert_invariants();
+        }
+
+        assert_convergence!(replicas);
     }
 }
