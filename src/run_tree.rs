@@ -288,12 +288,21 @@ impl RunTree {
         run: EditRun,
         insert_after: LeafIdx<EditRun>,
     ) -> (Length, InsertionOutcome) {
+        let append_to_last = run.anchor().replica_id() == run.replica_id()
+            && run.anchor().offset == run.start();
+
         let replica_id = run.replica_id();
 
         let (offset, inserted_idx) =
             self.gtree.insert_leaf_after_another(run, insert_after);
 
-        (offset, InsertionOutcome::InsertedRun { replica_id, inserted_idx })
+        let outcome = if append_to_last {
+            InsertionOutcome::AppendToLast { replica_id, idx: inserted_idx }
+        } else {
+            InsertionOutcome::InsertedRun { replica_id, inserted_idx }
+        };
+
+        (offset, outcome)
     }
 
     #[inline]
@@ -454,6 +463,9 @@ impl RunTree {
 /// TODO: docs
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum InsertionOutcome {
+    /// TODO: docs
+    AppendToLast { replica_id: ReplicaId, idx: LeafIdx<EditRun> },
+
     /// TODO: docs
     ExtendedLastRun { replica_id: ReplicaId },
 

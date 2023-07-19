@@ -62,6 +62,10 @@ impl RunIndices {
         inserted_len: Length,
     ) {
         match outcome {
+            InsertionOutcome::AppendToLast { replica_id, idx } => {
+                self.get_mut(replica_id).append_to_last(inserted_len, idx)
+            },
+
             InsertionOutcome::ExtendedLastRun { replica_id } => {
                 self.get_mut(replica_id).extend_last(inserted_len)
             },
@@ -136,6 +140,12 @@ impl ReplicaIndices {
             .unwrap_or((0, 0));
 
         self.vec.push((new_last, last_offset + last_len));
+    }
+
+    #[inline]
+    pub fn append_to_last(&mut self, len: Length, idx: LeafIdx<EditRun>) {
+        let split = Split::new(len, idx);
+        self.vec.last_mut().unwrap().0.append(split);
     }
 
     fn assert_invariants(&self) {
@@ -247,6 +257,30 @@ mod run_splits {
             match self {
                 Self::Array(array) => array.assert_invariants(),
                 Self::Gtree(gtree) => gtree.assert_invariants(),
+            }
+        }
+
+        #[inline]
+        pub fn append(&mut self, split: Split) {
+            match self {
+                InsertionSplits::Array(array) => {
+                    if array.len == INLINE {
+                        let mut gtree = Gtree::from_leaves(
+                            array.splits().iter().copied(),
+                            array.total_len,
+                        );
+                        gtree.append(split);
+                        *self = Self::Gtree(gtree);
+                    } else {
+                        array.total_len += split.len;
+                        array.splits[array.len] = split;
+                        array.len += 1;
+                    }
+                },
+
+                InsertionSplits::Gtree(splits) => {
+                    splits.append(split);
+                },
             }
         }
 

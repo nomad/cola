@@ -246,6 +246,14 @@ impl<L: Leaf> Cursor<L> {
 
 // Public API.
 impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
+    /// Appends a new leaf node to the end of the Gtree, returning its newly
+    /// created leaf index.
+    #[inline(always)]
+    pub fn append(&mut self, leaf: L) -> LeafIdx<L> {
+        let (last_leaf_idx, idx_in_parent) = self.last_leaf();
+        self.insert_leaf_after_leaf(last_leaf_idx, idx_in_parent, leaf)
+    }
+
     /// TODO: docs
     #[inline]
     pub fn append_leaf_to_another(
