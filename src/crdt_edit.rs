@@ -39,10 +39,10 @@ impl CrdtEdit {
     #[inline]
     pub(super) fn insertion(
         anchor: Anchor,
-        anchor_ts: InsertionTimestamp,
+        anchor_ts: InsertionTs,
         text: Text,
         lamport_ts: LamportTimestamp,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
     ) -> Self {
         let kind = CrdtEditKind::Insertion(Insertion {
             anchor,
@@ -81,9 +81,9 @@ pub(crate) enum CrdtEditKind {
 )]
 pub(crate) struct Insertion {
     anchor: Anchor,
-    anchor_ts: InsertionTimestamp,
+    anchor_ts: InsertionTs,
     text: Text,
-    insertion_ts: InsertionTimestamp,
+    insertion_ts: InsertionTs,
     lamport_ts: LamportTimestamp,
 }
 
@@ -94,7 +94,7 @@ impl Insertion {
     }
 
     #[inline]
-    pub fn anchor_ts(&self) -> InsertionTimestamp {
+    pub fn anchor_ts(&self) -> InsertionTs {
         self.anchor_ts
     }
 
@@ -109,7 +109,7 @@ impl Insertion {
     }
 
     #[inline]
-    pub fn insertion_ts(&self) -> InsertionTimestamp {
+    pub fn insertion_ts(&self) -> InsertionTs {
         self.insertion_ts
     }
 

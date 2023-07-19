@@ -820,7 +820,7 @@ impl core::fmt::Debug for InsertionClock {
 
 impl InsertionClock {
     #[inline]
-    fn last(&self) -> LamportTimestamp {
+    fn last(&self) -> InsertionTs {
         self.0.saturating_sub(1)
     }
 
@@ -831,7 +831,7 @@ impl InsertionClock {
 
     /// TODO: docs
     #[inline]
-    pub fn next(&mut self) -> InsertionTimestamp {
+    pub fn next(&mut self) -> InsertionTs {
         let next = self.0;
         self.0 += 1;
         next
@@ -839,7 +839,7 @@ impl InsertionClock {
 }
 
 /// TODO: docs
-pub type InsertionTimestamp = u64;
+pub type InsertionTs = u64;
 
 /// TODO: docs
 pub type DeletionClock = u64;

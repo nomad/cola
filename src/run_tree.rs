@@ -198,7 +198,7 @@ impl RunTree {
         text: Text,
         insertion_clock: &mut InsertionClock,
         lamport_clock: &mut LamportClock,
-    ) -> (Anchor, InsertionTimestamp, InsertionOutcome) {
+    ) -> (Anchor, InsertionTs, InsertionOutcome) {
         debug_assert!(!text.range.is_empty());
 
         let replica_id = text.inserted_by();
@@ -463,7 +463,7 @@ pub(crate) enum InsertionOutcome {
     /// TODO: docs
     SplitRun {
         split_id: ReplicaId,
-        split_insertion: InsertionTimestamp,
+        split_insertion: InsertionTs,
         split_at_offset: Length,
         split_idx: LeafIdx<EditRun>,
         inserted_id: ReplicaId,
@@ -476,16 +476,15 @@ pub(crate) enum DeletionOutcome {
     /// TODO: docs
     DeletedAcrossRuns {
         split_start:
-            Option<(ReplicaId, InsertionTimestamp, Length, LeafIdx<EditRun>)>,
+            Option<(ReplicaId, InsertionTs, Length, LeafIdx<EditRun>)>,
 
-        split_end:
-            Option<(ReplicaId, InsertionTimestamp, Length, LeafIdx<EditRun>)>,
+        split_end: Option<(ReplicaId, InsertionTs, Length, LeafIdx<EditRun>)>,
     },
 
     /// TODO: docs
     DeletedInMiddleOfSingleRun {
         replica_id: ReplicaId,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         range: Range<Length>,
         idx_of_deleted: LeafIdx<EditRun>,
         idx_of_split: LeafIdx<EditRun>,
@@ -494,7 +493,7 @@ pub(crate) enum DeletionOutcome {
     /// TODO: docs
     DeletionSplitSingleRun {
         replica_id: ReplicaId,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         offset: Length,
         idx: LeafIdx<EditRun>,
     },
@@ -502,7 +501,7 @@ pub(crate) enum DeletionOutcome {
     /// TODO: docs
     DeletionMergedInPreviousRun {
         replica_id: ReplicaId,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         offset: Length,
         deleted: Length,
     },
@@ -510,7 +509,7 @@ pub(crate) enum DeletionOutcome {
     /// TODO: docs
     DeletionMergedInNextRun {
         replica_id: ReplicaId,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         offset: Length,
         deleted: Length,
     },
@@ -536,7 +535,7 @@ pub(crate) struct EditRun {
     text: Text,
 
     /// TODO: docs
-    insertion_ts: InsertionTimestamp,
+    insertion_ts: InsertionTs,
 
     /// TODO: docs
     lamport_ts: LamportTimestamp,
@@ -678,7 +677,7 @@ impl EditRun {
     }
 
     #[inline(always)]
-    pub fn insertion_ts(&self) -> InsertionTimestamp {
+    pub fn insertion_ts(&self) -> InsertionTs {
         self.insertion_ts
     }
 
@@ -693,7 +692,7 @@ impl EditRun {
     pub fn new(
         inserted_at: Anchor,
         text: Text,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         lamport_ts: LamportTimestamp,
     ) -> Self {
         Self { inserted_at, text, insertion_ts, lamport_ts, is_deleted: false }

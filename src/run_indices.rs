@@ -103,21 +103,18 @@ impl core::fmt::Debug for ReplicaIndices {
 }
 
 /// TODO: docs
-impl Index<InsertionTimestamp> for ReplicaIndices {
+impl Index<InsertionTs> for ReplicaIndices {
     type Output = (InsertionSplits, Length);
 
     #[inline]
-    fn index(&self, insertion_ts: InsertionTimestamp) -> &Self::Output {
+    fn index(&self, insertion_ts: InsertionTs) -> &Self::Output {
         &self.vec[insertion_ts as usize]
     }
 }
 
-impl IndexMut<InsertionTimestamp> for ReplicaIndices {
+impl IndexMut<InsertionTs> for ReplicaIndices {
     #[inline]
-    fn index_mut(
-        &mut self,
-        insertion_ts: InsertionTimestamp,
-    ) -> &mut Self::Output {
+    fn index_mut(&mut self, insertion_ts: InsertionTs) -> &mut Self::Output {
         &mut self.vec[insertion_ts as usize]
     }
 }
@@ -156,7 +153,7 @@ impl ReplicaIndices {
     #[inline]
     pub fn idx_at_offset(
         &self,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         at_offset: Length,
     ) -> LeafIdx<EditRun> {
         let (splits, offset) = &self[insertion_ts];
@@ -166,7 +163,7 @@ impl ReplicaIndices {
     #[inline]
     pub fn move_len_to_next_split(
         &mut self,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         split_at_offset: Length,
         len_moved: Length,
     ) {
@@ -177,7 +174,7 @@ impl ReplicaIndices {
     #[inline]
     pub fn move_len_to_prev_split(
         &mut self,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         split_at_offset: Length,
         len_moved: Length,
     ) {
@@ -193,7 +190,7 @@ impl ReplicaIndices {
     #[inline]
     pub fn split(
         &mut self,
-        insertion_ts: InsertionTimestamp,
+        insertion_ts: InsertionTs,
         at_offset: Length,
         right_idx: LeafIdx<EditRun>,
     ) {
