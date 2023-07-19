@@ -693,7 +693,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 (offset, idx_in_parent)
             });
 
-        let new_cursor_offset = leaf_offset + leaf.len();
+        let new_cursor_offset = leaf_offset + self.leaf(after_leaf).len();
 
         let leaf_idx =
             self.insert_leaf_after_leaf(after_leaf, idx_in_parent, leaf);
