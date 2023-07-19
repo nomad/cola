@@ -23,12 +23,15 @@ impl RunIndices {
 
             let mut offset = 0;
 
-            for (run_idx, run_len) in indices.splits() {
-                let run = run_tree.get_run(run_idx);
-                assert_eq!(replica_id, run.replica_id());
-                assert_eq!(run_len, run.len());
-                assert_eq!(offset, run.start());
-                offset += run_len;
+            for (idx, splits) in indices.splits().enumerate() {
+                for split in splits.leaves() {
+                    let run = run_tree.get_run(split.idx_in_run_tree);
+                    assert_eq!(replica_id, run.replica_id());
+                    assert_eq!(split.len, run.len());
+                    assert_eq!(offset, run.start());
+                    assert_eq!(idx, run.insertion_ts() as usize);
+                    offset += split.len;
+                }
             }
         }
     }
@@ -199,10 +202,8 @@ impl ReplicaIndices {
     }
 
     #[inline]
-    fn splits(&self) -> impl Iterator<Item = (LeafIdx<EditRun>, Length)> + '_ {
-        self.vec.iter().flat_map(|(splits, _)| {
-            splits.leaves().map(|split| (split.idx_in_run_tree, split.len))
-        })
+    fn splits(&self) -> impl Iterator<Item = &InsertionSplits> {
+        self.vec.iter().map(|(splits, _)| splits)
     }
 }
 
