@@ -21,17 +21,15 @@ impl RunTree {
         run: EditRun,
         append_to: LeafIdx<EditRun>,
     ) -> (Length, InsertionOutcome) {
-        use gtree::Join;
+        let appending_to = self.gtree.get_leaf(append_to);
 
         debug_assert!(self.gtree.get_leaf(append_to).can_append(&run));
 
-        let appending_to = self.gtree.get_leaf(append_to);
         let replica_id = appending_to.replica_id();
         let leaf_len = appending_to.len();
 
-        self.gtree.get_leaf_mut(append_to, |leaf| leaf.append(run).unwrap());
-
-        let offset = self.gtree.offset_of_leaf(append_to) + leaf_len;
+        let offset =
+            self.gtree.append_leaf_to_another(append_to, run) + leaf_len;
 
         (offset, InsertionOutcome::ExtendedLastRun { replica_id })
     }
@@ -292,10 +290,8 @@ impl RunTree {
     ) -> (Length, InsertionOutcome) {
         let replica_id = run.replica_id();
 
-        let inserted_idx =
+        let (offset, inserted_idx) =
             self.gtree.insert_leaf_after_another(run, insert_after);
-
-        let offset = self.gtree.offset_of_leaf(inserted_idx);
 
         (offset, InsertionOutcome::InsertedRun { replica_id, inserted_idx })
     }
@@ -436,9 +432,7 @@ impl RunTree {
 
         let inserted_id = run.replica_id();
 
-        let offset = self.gtree.offset_of_leaf(insert_into) + at_offset;
-
-        let (inserted_idx, split_idx) =
+        let (offset, inserted_idx, split_idx) =
             self.gtree.split_leaf_with_another(insert_into, |splitting| {
                 let split = splitting.split(at_offset).unwrap();
                 (run, split)

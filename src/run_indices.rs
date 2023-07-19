@@ -88,10 +88,18 @@ impl RunIndices {
 }
 
 /// TODO: docs
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ReplicaIndices {
     vec: Vec<(InsertionSplits, Length)>,
+}
+
+impl core::fmt::Debug for ReplicaIndices {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        f.debug_list()
+            .entries(self.vec.iter().map(|(splits, _)| splits))
+            .finish()
+    }
 }
 
 /// TODO: docs
@@ -136,7 +144,7 @@ impl ReplicaIndices {
         for &(ref splits, splits_offset) in self.vec.iter() {
             assert_eq!(splits_offset, offset);
             splits.assert_invariants();
-            offset += splits_offset;
+            offset += splits.len();
         }
     }
 
@@ -227,7 +235,11 @@ mod run_splits {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             match self {
                 Self::Array(array) => array.fmt(f),
-                Self::Gtree(gtree) => gtree.fmt(f),
+
+                Self::Gtree(gtree) => f
+                    .debug_list()
+                    .entries(gtree.leaves_from_start().map(|(_, split)| split))
+                    .finish(),
             }
         }
     }
