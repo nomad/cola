@@ -288,7 +288,8 @@ impl RunTree {
         run: EditRun,
         insert_after: LeafIdx<EditRun>,
     ) -> (Length, InsertionOutcome) {
-        let append_to_last = run.anchor().replica_id() == run.replica_id()
+        let append_to_last = !run.anchor().is_origin()
+            && run.anchor().replica_id() == run.replica_id()
             && run.anchor().offset == run.start();
 
         let replica_id = run.replica_id();
