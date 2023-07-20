@@ -46,6 +46,29 @@ fn woot_figure_2() {
 }
 
 #[test]
+fn conflicting_insertions() {
+    let peer0 = Replica::new(0, "aa");
+    let mut peer1 = peer0.fork(1);
+    let mut peer2 = peer0.fork(2);
+
+    let one_a = peer1.insert(2, "bb");
+    let one_b = peer1.insert(2, "cc");
+    let one_c = peer1.insert(6, "dd");
+    let one_d = peer1.insert(4, "ee");
+
+    let two_a = peer2.insert(2, "ff");
+
+    peer1.merge(&two_a);
+
+    peer2.merge(&one_a);
+    peer2.merge(&one_b);
+    peer2.merge(&one_c);
+    peer2.merge(&one_d);
+
+    assert_convergence!(peer1, peer2);
+}
+
+#[test]
 fn random_insertions() {
     // let seed = rand::random::<u64>();
     let seed = 4752997793787158095;
