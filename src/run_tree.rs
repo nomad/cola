@@ -538,7 +538,7 @@ pub(crate) enum MergedDeletion {
 }
 
 /// TODO: docs
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct EditRun {
     /// TODO: docs
@@ -571,24 +571,24 @@ impl core::fmt::Debug for EditRun {
     }
 }
 
-/// This implementation is guaranteed to never return `Some(Ordering::Equal)`.
+impl Ord for EditRun {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        // We first sort descending on Lamport timestamps, using the replica id
+        // as a tie breaker (the ids are sorted in ascending order but that's
+        // totally arbitrary).
+
+        self.lamport_ts
+            .cmp(&other.lamport_ts)
+            .reverse()
+            .then(self.replica_id().cmp(&other.replica_id()))
+    }
+}
+
 impl PartialOrd for EditRun {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // If the two runs were inserted at different positions they're totally
-        // unrelated and we can't compare them.
-        if self.inserted_at != other.inserted_at {
-            return None;
-        };
-
-        // If they have the same anchor we first sort descending on lamport
-        // timestamsps, and if those are also the same we use the replica id as
-        // a last tie breaker (here we sort ascending on replica ids but that's
-        // totally arbitrary).
-        Some(match other.lamport_ts.cmp(&self.lamport_ts) {
-            Ordering::Equal => self.replica_id().cmp(&other.replica_id()),
-            other => other,
-        })
+        Some(self.cmp(other))
     }
 }
 
@@ -741,7 +741,7 @@ impl EditRun {
 }
 
 /// TODO: docs
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
