@@ -319,7 +319,7 @@ impl RunTree {
 
         let (mut prev_idx, first_leaf) = leaves.next().unwrap();
 
-        if run.partial_cmp(first_leaf) != Some(Ordering::Greater) {
+        if &run < first_leaf {
             let inserted_idx = self.gtree.prepend(run);
             let outcome =
                 InsertionOutcome::InsertedRun { replica_id, inserted_idx };
@@ -364,7 +364,7 @@ impl RunTree {
         // Insertion.
         let anchor_idx = run_indices
             .get(run.anchor().replica_id())
-            .idx_at_offset(insertion.anchor_ts(), insertion.anchor().offset);
+            .idx_at_offset(insertion.anchor_ts(), run.anchor().offset);
 
         let anchor = self.gtree.get_leaf(anchor_idx);
 
