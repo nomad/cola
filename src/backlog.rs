@@ -1,29 +1,19 @@
+use alloc::collections::VecDeque;
+
 use crate::*;
 
-/// TODO: docs
+/// A [`Replica`]'s backlog of remote edits that have been received from other
+/// replicas but have not yet been merged.
+///
+/// See [`Replica::backlogged`] for more information.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct BackLog {
-    insertions: ReplicaIdMap<InsertionsBackLog>,
-    deletions: ReplicaIdMap<DeletionsBackLog>,
+pub(crate) struct Backlog {
+    insertions: ReplicaIdMap<InsertionsBacklog>,
+    deletions: ReplicaIdMap<DeletionsBacklog>,
 }
 
-impl BackLog {
-    /// TODO: docs
-    #[inline]
-    pub fn add_deletion(&mut self, deletion: Deletion) {
-        self.deletions.entry(deletion.deleted_by()).or_default().add(deletion);
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn add_insertion(&mut self, insertion: Insertion) {
-        self.insertions
-            .entry(insertion.inserted_by())
-            .or_default()
-            .add(insertion);
-    }
-
+impl Backlog {
     pub fn assert_invariants(&self) {
         for (&id, insertions) in self.insertions.iter() {
             insertions.assert_invariants(id);
@@ -33,81 +23,124 @@ impl BackLog {
         }
     }
 
-    /// Creates a new, empty `BackLog`.
+    /// Inserts a new [`Deletion`] into the backlog.
+    ///
+    /// Runs in `O(n)` in the number of deletions already in the backlog, with
+    /// a best-case of `O(log n)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the deletion has already been backlogged.
+    #[inline]
+    pub fn insert_deletion(&mut self, deletion: Deletion) {
+        self.deletions
+            .entry(deletion.deleted_by())
+            .or_default()
+            .insert(deletion);
+    }
+
+    /// Inserts a new [`Insertion`] into the backlog.
+    ///
+    /// Runs in `O(n)` in the number of insertions already in the backlog, with
+    /// a best-case of `O(log n)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the insertion has already been backlogged.
+    #[inline]
+    pub fn insert_insertion(&mut self, insertion: Insertion) {
+        self.insertions
+            .entry(insertion.inserted_by())
+            .or_default()
+            .insert(insertion);
+    }
+
+    /// Creates a new, empty `Backlog`.
     #[inline]
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-/// TODO: docs
-#[derive(Debug, Clone, Default, PartialEq)]
+/// Stores the backlogged [`Insertion`]s of a particular replica.
+#[derive(Clone, Default, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-struct InsertionsBackLog {
-    vec: Vec<Insertion>,
+struct InsertionsBacklog {
+    insertions: VecDeque<Insertion>,
 }
 
-impl InsertionsBackLog {
-    /// TODO: docs
-    #[inline]
-    fn add(&mut self, insertion: Insertion) {
-        let Err(insert_at_offset) = self
-            .vec
-            .binary_search_by(|probe| probe.start().cmp(&insertion.start()))
-        else {
-            unreachable!(
-                "the start of the insertions produced by a given Replica \
-                 form a strictly monotonic sequence so the binary search can \
-                 never find an exact match"
-            )
-        };
-
-        self.vec.insert(insert_at_offset, insertion);
+impl core::fmt::Debug for InsertionsBacklog {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_list()
+            .entries(self.insertions.iter().map(|i| i.text().temporal_range()))
+            .finish()
     }
+}
 
+impl InsertionsBacklog {
     fn assert_invariants(&self, id: ReplicaId) {
         let mut prev_end = 0;
 
-        for insertion in &self.vec {
+        for insertion in &self.insertions {
             assert_eq!(insertion.inserted_by(), id);
             assert!(insertion.start() >= prev_end);
             prev_end = insertion.end();
         }
     }
-}
 
-/// TODO: docs
-#[derive(Debug, Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-struct DeletionsBackLog {
-    vec: Vec<Deletion>,
-}
-
-impl DeletionsBackLog {
-    /// TODO: docs
+    /// # Panics
+    ///
+    /// Panics if the insertion has already been inserted.
     #[inline]
-    fn add(&mut self, deletion: Deletion) {
-        let Err(insert_at_offset) = self.vec.binary_search_by(|probe| {
-            probe.deletion_ts.cmp(&deletion.deletion_ts)
-        }) else {
-            unreachable!(
-                "the deletion timestamps produced by a given Replica form a \
-                 strictly monotonic sequence so the binary search can never \
-                 find an exact match"
-            )
-        };
+    fn insert(&mut self, insertion: Insertion) {
+        let offset = self
+            .insertions
+            .binary_search_by(|probe| probe.start().cmp(&insertion.start()))
+            .unwrap_err();
 
-        self.vec.insert(insert_at_offset, deletion);
+        self.insertions.insert(offset, insertion);
     }
+}
 
+/// Stores the backlogged [`Deletion`]s of a particular replica.
+#[derive(Clone, Default, PartialEq)]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
+struct DeletionsBacklog {
+    deletions: VecDeque<Deletion>,
+}
+
+impl core::fmt::Debug for DeletionsBacklog {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_list()
+            .entries(self.deletions.iter().map(|d| d.deletion_ts()))
+            .finish()
+    }
+}
+
+impl DeletionsBacklog {
     fn assert_invariants(&self, id: ReplicaId) {
         let mut prev_ts = 0;
 
-        for deletion in &self.vec {
+        for deletion in &self.deletions {
             assert_eq!(deletion.deleted_by(), id);
             assert!(deletion.deletion_ts() > prev_ts);
             prev_ts = deletion.deletion_ts();
         }
+    }
+
+    /// # Panics
+    ///
+    /// Panics if the deletion has already inserted.
+    #[inline]
+    fn insert(&mut self, deletion: Deletion) {
+        let offset = self
+            .deletions
+            .binary_search_by(|probe| {
+                probe.deletion_ts().cmp(&deletion.deletion_ts())
+            })
+            .unwrap_err();
+
+        self.deletions.insert(offset, deletion);
     }
 }
 
@@ -116,26 +149,28 @@ impl DeletionsBackLog {
 ///
 /// This struct is created by the [`backlogged`](Replica::backlogged) method on
 /// [`Replica`]. See its documentation for more information.
-pub struct BackLogged<'a> {
+pub struct Backlogged<'a> {
     replica: &'a mut Replica,
-    iter: BackLogIter<'a>,
-    deletions: Option<ReplicaIdMapValuesMut<'a, DeletionsBackLog>>,
+    iter: BacklogIter<'a>,
+    deletions: Option<ReplicaIdMapValuesMut<'a, DeletionsBacklog>>,
 }
 
-/// TODO: docs
-enum BackLogIter<'a> {
+/// In the `Iterator` impl of `Backlogged` we first iterate over the insertions
+/// of each replica, and then over the deletions of each replica. This enum
+/// represents the state of the iterator.
+enum BacklogIter<'a> {
     Insertions {
-        current: Option<&'a mut InsertionsBackLog>,
-        iter: ReplicaIdMapValuesMut<'a, InsertionsBackLog>,
+        current: Option<&'a mut InsertionsBacklog>,
+        iter: ReplicaIdMapValuesMut<'a, InsertionsBacklog>,
     },
 
     Deletions {
-        current: Option<&'a mut DeletionsBackLog>,
-        iter: ReplicaIdMapValuesMut<'a, DeletionsBackLog>,
+        current: Option<&'a mut DeletionsBacklog>,
+        iter: ReplicaIdMapValuesMut<'a, DeletionsBacklog>,
     },
 }
 
-impl<'a> BackLogged<'a> {
+impl<'a> Backlogged<'a> {
     #[inline]
     pub(crate) fn from_replica(replica: &'a mut Replica) -> Self {
         let backlog = replica.backlog_mut();
@@ -144,11 +179,10 @@ impl<'a> BackLogged<'a> {
         // type to get around the borrow checker.
         //
         // SAFETY: this is safe because in the `Iterator` implementation we
-        // will never access the backlog through the `Replica` again, neither
-        // directly nor by calling any methods on `Replica` that would access
-        // the backlog.
+        // never access the backlog through the `Replica`, neither directly nor
+        // by calling any methods on `Replica` that would access the backlog.
         let backlog =
-            unsafe { core::mem::transmute::<_, &mut BackLog>(backlog) };
+            unsafe { core::mem::transmute::<_, &mut Backlog>(backlog) };
 
         let mut iter = backlog.insertions.values_mut();
 
@@ -156,33 +190,33 @@ impl<'a> BackLogged<'a> {
 
         let current = iter.next();
 
-        let iter = BackLogIter::Insertions { current, iter };
+        let iter = BacklogIter::Insertions { current, iter };
 
         Self { replica, iter, deletions: Some(deletions) }
     }
 }
 
-impl Iterator for BackLogged<'_> {
+impl Iterator for Backlogged<'_> {
     type Item = TextEdit;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.iter {
-            BackLogIter::Insertions { current, iter } => {
+            BacklogIter::Insertions { current, iter } => {
                 let Some(insertions) = current else {
                     let mut iter = self.deletions.take().unwrap();
                     let current = iter.next();
-                    self.iter = BackLogIter::Deletions { current, iter };
+                    self.iter = BacklogIter::Deletions { current, iter };
                     return self.next();
                 };
 
-                let Some(first) = insertions.vec.first() else {
+                let Some(first) = insertions.insertions.front() else {
                     *current = iter.next();
                     return self.next();
                 };
 
                 if self.replica.can_merge_insertion(first) {
-                    let first = insertions.vec.remove(0);
+                    let first = insertions.insertions.pop_front().unwrap();
                     let edit = self.replica.merge_unchecked_insertion(&first);
                     Some(edit)
                 } else {
@@ -191,20 +225,23 @@ impl Iterator for BackLogged<'_> {
                 }
             },
 
-            BackLogIter::Deletions { current, iter } => {
+            BacklogIter::Deletions { current, iter } => {
                 let deletions = current.as_mut()?;
 
-                let Some(first) = deletions.vec.first() else {
+                let Some(first) = deletions.deletions.front() else {
                     *current = iter.next();
                     return self.next();
                 };
 
                 if self.replica.can_merge_deletion(first) {
-                    let first = deletions.vec.remove(0);
+                    let first = deletions.deletions.pop_front().unwrap();
                     let edit = self.replica.merge_unchecked_deletion(&first);
                     if edit.is_some() {
                         edit
                     } else {
+                        // This iterator is fused, so we can't return `None`
+                        // here. Instead we just skip this edit and try the
+                        // next one.
                         self.next()
                     }
                 } else {
@@ -216,4 +253,4 @@ impl Iterator for BackLogged<'_> {
     }
 }
 
-impl core::iter::FusedIterator for BackLogged<'_> {}
+impl core::iter::FusedIterator for Backlogged<'_> {}

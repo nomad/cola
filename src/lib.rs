@@ -63,8 +63,8 @@ mod text_edit;
 mod utils;
 mod version_map;
 
-use backlog::BackLog;
-pub use backlog::BackLogged;
+use backlog::Backlog;
+pub use backlog::Backlogged;
 pub use crdt_edit::CrdtEdit;
 use crdt_edit::{CrdtEditKind, Deletion, Insertion};
 use gtree::{Gtree, LeafIdx};

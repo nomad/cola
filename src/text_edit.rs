@@ -6,7 +6,7 @@ use crate::{Length, ReplicaId};
 ///
 /// This enum is either created by the [`merge`](crate::Replica::merge) method
 /// on [`Replica`](crate::Replica) or yielded by the
-/// [`BackLogged`](crate::BackLogged) iterator. See their documentation for
+/// [`Backlogged`](crate::Backlogged) iterator. See their documentation for
 /// more.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TextEdit {

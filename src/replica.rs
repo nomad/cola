@@ -58,7 +58,7 @@ pub struct Replica {
     deletion_map: DeletionMap,
 
     /// TODO: docs
-    backlog: BackLog,
+    backlog: Backlog,
 }
 
 impl Replica {
@@ -85,7 +85,7 @@ impl Replica {
     /// This method returns an iterator over all the backlogged edits which are
     /// now ready to be applied to your buffer.
     ///
-    /// The [`BackLogged`] iterator yields [`TextEdit`]s. It's very important
+    /// The [`Backlogged`] iterator yields [`TextEdit`]s. It's very important
     /// that you apply every `TextEdit` to your buffer in the *exact same*
     /// order in which they were yielded by the iterator. If you don't your
     /// buffer could permanently diverge from the other peers.
@@ -130,13 +130,13 @@ impl Replica {
     /// assert!(matches!(backlogged.next(), Some(TextEdit::Insertion(4, _))));
     /// ```
     #[inline]
-    pub fn backlogged(&mut self) -> BackLogged<'_> {
-        BackLogged::from_replica(self)
+    pub fn backlogged(&mut self) -> Backlogged<'_> {
+        Backlogged::from_replica(self)
     }
 
     /// TOOD: docs
     #[inline]
-    pub(crate) fn backlog_mut(&mut self) -> &mut BackLog {
+    pub(crate) fn backlog_mut(&mut self) -> &mut Backlog {
         &mut self.backlog
     }
 
@@ -607,7 +607,7 @@ impl Replica {
         if self.can_merge_deletion(deletion) {
             self.merge_unchecked_deletion(deletion)
         } else {
-            self.backlog.add_deletion(deletion.clone());
+            self.backlog.insert_deletion(deletion.clone());
             None
         }
     }
@@ -620,7 +620,7 @@ impl Replica {
         if self.can_merge_insertion(insertion) {
             Some(self.merge_unchecked_insertion(insertion))
         } else {
-            self.backlog.add_insertion(insertion.clone());
+            self.backlog.insert_insertion(insertion.clone());
             None
         }
     }
@@ -743,7 +743,7 @@ impl Replica {
             lamport_clock,
             version_map: VersionMap::new(id, len),
             deletion_map: DeletionMap::new(id, 1),
-            backlog: BackLog::new(),
+            backlog: Backlog::new(),
         }
     }
 }
@@ -854,7 +854,7 @@ mod encode {
     use super::*;
 
     type EncodedFields =
-        (RunTree, RunIndices, LamportClock, VersionMap, DeletionMap, BackLog);
+        (RunTree, RunIndices, LamportClock, VersionMap, DeletionMap, Backlog);
 
     /// TODO: docs
     #[inline]
