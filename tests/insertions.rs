@@ -69,12 +69,31 @@ fn conflicting_insertions() {
 }
 
 #[test]
+fn conflicting_insertions_2() {
+    let mut peer1 = Replica::new(1, "");
+    let mut peer2 = peer1.fork(2);
+
+    let sss = peer1.insert(0, "sss");
+    let d = peer1.insert(2, "d");
+
+    let m = peer2.insert(0, "m");
+    let xx = peer2.insert(0, "xx");
+
+    peer1.merge(&m);
+    peer1.merge(&xx);
+
+    peer2.merge(&sss);
+    peer2.merge(&d);
+
+    assert_convergence!(peer1, peer2, "xxssdsm");
+}
+
+#[test]
 fn random_insertions() {
-    // let seed = rand::random::<u64>();
-    let seed = 4752997793787158095;
+    let seed = rand::random::<u64>();
     println!("seed: {}", seed);
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    test_random_insertions(&mut rng, 2, 1_000, 2, 2);
+    test_random_insertions(&mut rng, 5, 1_000, 5, 5);
 }
 
 fn test_random_insertions(
@@ -97,11 +116,6 @@ fn test_random_insertions(
     }
 
     for _ in 0..num_cycles {
-        println!("============");
-        println!("============");
-        println!("============");
-        println!("before editing: {:#?}", replicas);
-
         let edits = (0..replicas.len())
             .map(|idx| {
                 (0..insertions_per_cycle)
@@ -114,10 +128,6 @@ fn test_random_insertions(
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-
-        println!("edits: {:#?}", edits);
-
-        println!("after editing: {:#?}", replicas);
 
         let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
 
@@ -141,8 +151,6 @@ fn test_random_insertions(
 
             replica.merge_backlogged();
         }
-
-        println!("after merging: {:#?}", replicas);
 
         for replica in &replicas {
             replica.assert_invariants();
