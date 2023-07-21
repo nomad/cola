@@ -79,11 +79,11 @@ use utils::*;
 use version_map::{DeletionMap, VersionMap};
 
 #[cfg(feature = "encode")]
-mod encode;
+mod encoded_replica;
 #[cfg(feature = "encode")]
-use encode::{checksum, Checksum};
+use encoded_replica::checksum;
 #[cfg(feature = "encode")]
-pub use encode::{DecodeError, EncodedReplica};
+pub use encoded_replica::{DecodeError, EncodedReplica};
 
 /// The version of the protocol cola uses to represent `EncodedReplica`s and
 /// `CrdtEdit`s.
@@ -194,6 +194,8 @@ pub type ProtocolVersion = u64;
 /// ```
 pub type Length = usize;
 
-/// TODO: docs
-#[allow(dead_code)]
+/// The protocol version of the current cola release.
+///
+/// See [`ProtocolVersion`] for more infos.
+#[cfg(feature = "encode")]
 const PROTOCOL_VERSION: ProtocolVersion = 0;

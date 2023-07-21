@@ -1,4 +1,8 @@
+use sha2::{Digest, Sha256};
+
 use crate::*;
+
+pub type Checksum = Vec<u8>;
 
 /// A `Replica` encoded into a very compact binary format suitable for
 /// transmission over the network.
@@ -79,4 +83,9 @@ pub enum DecodeError {
     /// As long as you're not doing that (and you shouldn't be) this variant
     /// can be ignored.
     InvalidData,
+}
+
+#[inline]
+pub fn checksum(bytes: &[u8]) -> Checksum {
+    Sha256::digest(bytes)[..].to_vec()
 }
