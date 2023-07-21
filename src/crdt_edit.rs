@@ -12,55 +12,55 @@ use crate::*;
 ///
 /// See the the documentation of any of the methods mentioned above for more
 /// information.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CrdtEdit {
     #[cfg_attr(feature = "serde", serde(flatten))]
     kind: CrdtEditKind,
 }
 
+impl core::fmt::Debug for CrdtEdit {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match self.kind() {
+            CrdtEditKind::Deletion(deletion) => deletion.fmt(f),
+            CrdtEditKind::Insertion(insertion) => insertion.fmt(f),
+            CrdtEditKind::NoOp => f.write_str("NoOp"),
+        }
+    }
+}
+
 impl CrdtEdit {
     #[inline]
-    pub(super) fn deletion(
+    pub(crate) fn deletion(
         start: Anchor,
         end: Anchor,
         version_map: VersionMap,
         deletion_ts: DeletionTs,
     ) -> Self {
-        let kind = CrdtEditKind::Deletion(Deletion {
-            start,
-            end,
-            version_map,
-            deletion_ts,
-        });
-        Self { kind }
+        let deletion = Deletion { start, end, version_map, deletion_ts };
+        Self { kind: CrdtEditKind::Deletion(deletion) }
     }
 
     #[inline]
-    pub(super) fn insertion(
+    pub(crate) fn insertion(
         anchor: Anchor,
         anchor_ts: InsertionTs,
         text: Text,
         lamport_ts: LamportTimestamp,
         insertion_ts: InsertionTs,
     ) -> Self {
-        let kind = CrdtEditKind::Insertion(Insertion {
-            anchor,
-            anchor_ts,
-            text,
-            lamport_ts,
-            insertion_ts,
-        });
-        Self { kind }
+        let insertion =
+            Insertion { anchor, anchor_ts, text, lamport_ts, insertion_ts };
+        Self { kind: CrdtEditKind::Insertion(insertion) }
     }
 
-    #[inline]
-    pub(super) fn kind(&self) -> &CrdtEditKind {
+    #[inline(always)]
+    pub(crate) fn kind(&self) -> &CrdtEditKind {
         &self.kind
     }
 
     #[inline]
-    pub(super) fn no_op() -> Self {
+    pub(crate) fn no_op() -> Self {
         Self { kind: CrdtEditKind::NoOp }
     }
 }
@@ -73,47 +73,57 @@ pub(crate) enum CrdtEditKind {
     NoOp,
 }
 
-/// TODO: docs
+/// An insertion in CRDT coordinates.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct Insertion {
+    /// The anchor point of the insertion.
     anchor: Anchor,
+
+    /// The insertion timestamp of the [`EditRun`] containing the anchor.
     anchor_ts: InsertionTs,
+
+    /// Contains the replica that made the insertion and the temporal range
+    /// of the text that was inserted.
     text: Text,
+
+    /// The insertion timestamp of this insertion.
     insertion_ts: InsertionTs,
+
+    /// The Lamport timestamp of this insertion.
     lamport_ts: LamportTimestamp,
 }
 
 impl Insertion {
-    #[inline]
+    #[inline(always)]
     pub fn anchor(&self) -> &Anchor {
         &self.anchor
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn anchor_ts(&self) -> InsertionTs {
         self.anchor_ts
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn end(&self) -> Length {
         self.text.range.end
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn inserted_by(&self) -> ReplicaId {
-        self.text.inserted_by
+        self.text.inserted_by()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn insertion_ts(&self) -> InsertionTs {
         self.insertion_ts
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn lamport_ts(&self) -> LamportTimestamp {
         self.lamport_ts
     }
@@ -134,27 +144,57 @@ impl Insertion {
     }
 }
 
-/// TODO: docs
+/// A deletion in CRDT coordinates.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub(crate) struct Deletion {
-    pub(crate) start: Anchor,
-    pub(crate) end: Anchor,
-    pub(crate) version_map: VersionMap,
-    pub(crate) deletion_ts: DeletionTs,
+    /// The anchor point of the start of the deleted range.
+    start: Anchor,
+
+    /// The anchor point of the end of the deleted range.
+    end: Anchor,
+
+    /// The version map of the replica at the time of the deletion. This is
+    /// used by a `Replica` merging this deletion to determine:
+    ///
+    /// a) if it has all the text that the `Replica` who created the
+    ///   deletion had at the time of the deletion, and
+    ///
+    /// b) if there's some additional text within the deleted range that
+    ///  the `Replica` who created the deletion didn't have at the time
+    ///  of the deletion.
+    version_map: VersionMap,
+
+    /// The deletion timestamp of this insertion.
+    deletion_ts: DeletionTs,
 }
 
 impl Deletion {
-    #[inline]
+    #[inline(always)]
     pub fn deleted_by(&self) -> ReplicaId {
         self.version_map.this_id()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn deletion_ts(&self) -> DeletionTs {
         self.deletion_ts
+    }
+
+    #[inline(always)]
+    pub fn end(&self) -> Anchor {
+        self.end
+    }
+
+    #[inline(always)]
+    pub fn start(&self) -> Anchor {
+        self.start
+    }
+
+    #[inline(always)]
+    pub fn version_map(&self) -> &VersionMap {
+        &self.version_map
     }
 }

@@ -319,7 +319,7 @@ impl RunTree {
 
         let (mut prev_idx, first_leaf) = leaves.next().unwrap();
 
-        if &run < first_leaf {
+        if run < *first_leaf {
             let inserted_idx = self.gtree.prepend(run);
             let outcome =
                 InsertionOutcome::InsertedRun { replica_id, inserted_idx };
@@ -327,7 +327,7 @@ impl RunTree {
         }
 
         for (idx, leaf) in leaves {
-            if &run > leaf {
+            if run > *leaf {
                 prev_idx = idx;
             } else {
                 return self.insert_run_after_another(run, prev_idx);
@@ -386,11 +386,11 @@ impl RunTree {
         if let Some((idx, next_sibling)) = siblings.next() {
             // The next sibling is tied with the run we're inserting -> check
             // the other siblings.
-            if &run > next_sibling {
+            if run > *next_sibling {
                 prev_idx = idx;
 
                 for (idx, sibling) in siblings {
-                    if &run > sibling {
+                    if run > *sibling {
                         prev_idx = idx;
                     } else {
                         return self.insert_run_after_another(run, prev_idx);
@@ -407,7 +407,7 @@ impl RunTree {
         };
 
         for (idx, leaf) in self.gtree.leaves::<false>(prev_idx) {
-            if &run > leaf {
+            if run > *leaf {
                 prev_idx = idx;
             } else {
                 return self.insert_run_after_another(run, prev_idx);

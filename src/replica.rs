@@ -148,10 +148,10 @@ impl Replica {
         (
             // TODO: docs
             self.deletion_map.get(deletion.deleted_by()) + 1
-                == deletion.deletion_ts
+                == deletion.deletion_ts()
         ) && (
             // TODO: docs
-            self.version_map >= deletion.version_map
+            self.version_map >= *deletion.version_map()
         )
     }
 
@@ -442,7 +442,7 @@ impl Replica {
     /// TODO: docs
     #[inline]
     fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
-        self.deletion_map.get(deletion.deleted_by()) > deletion.deletion_ts
+        self.deletion_map.get(deletion.deleted_by()) > deletion.deletion_ts()
     }
 
     /// TODO: docs
@@ -636,7 +636,7 @@ impl Replica {
         let outcome = self.run_tree.merge_deletion(deletion);
 
         *self.deletion_map.get_mut(deletion.deleted_by()) =
-            deletion.deletion_ts;
+            deletion.deletion_ts();
 
         match outcome {
             MergedDeletion::Contiguous(range) => {
