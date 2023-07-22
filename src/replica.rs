@@ -43,11 +43,6 @@ pub struct Replica {
     /// far. This is the main data structure.
     run_tree: RunTree,
 
-    /// A secondary data structure that allows to quickly find the
-    /// [`LeafIdx`](crate::LeafIdx) of the run that contains a given
-    /// [`Anchor`].
-    run_indices: RunIndices,
-
     /// The value of the Lamport clock at this replica.
     lamport_clock: LamportClock,
 
@@ -72,7 +67,6 @@ impl Replica {
     #[doc(hidden)]
     pub fn assert_invariants(&self) {
         self.run_tree.assert_invariants();
-        self.run_indices.assert_invariants(&self.run_tree);
         self.backlog.assert_invariants();
     }
 
@@ -300,81 +294,7 @@ impl Replica {
 
         let deleted_range = (start..end).into();
 
-        let (start, end, outcome) = self.run_tree.delete(deleted_range);
-
-        match outcome {
-            DeletionOutcome::DeletedAcrossRuns { split_start, split_end } => {
-                if let Some((replica_id, insertion_ts, offset, idx)) =
-                    split_start
-                {
-                    self.run_indices.get_mut(replica_id).split(
-                        insertion_ts,
-                        offset,
-                        idx,
-                    );
-                }
-                if let Some((replica_id, insertion_ts, offset, idx)) =
-                    split_end
-                {
-                    self.run_indices.get_mut(replica_id).split(
-                        insertion_ts,
-                        offset,
-                        idx,
-                    );
-                }
-            },
-
-            DeletionOutcome::DeletedInMiddleOfSingleRun {
-                replica_id,
-                insertion_ts,
-                range,
-                idx_of_deleted,
-                idx_of_split,
-            } => {
-                let indices = self.run_indices.get_mut(replica_id);
-                indices.split(insertion_ts, range.start, idx_of_deleted);
-                indices.split(insertion_ts, range.end, idx_of_split);
-            },
-
-            DeletionOutcome::DeletionSplitSingleRun {
-                replica_id,
-                insertion_ts,
-                offset,
-                idx,
-            } => self.run_indices.get_mut(replica_id).split(
-                insertion_ts,
-                offset,
-                idx,
-            ),
-
-            DeletionOutcome::DeletionMergedInPreviousRun {
-                replica_id,
-                insertion_ts,
-                offset,
-                deleted,
-            } => {
-                self.run_indices.get_mut(replica_id).move_len_to_prev_split(
-                    insertion_ts,
-                    offset,
-                    deleted,
-                );
-            },
-
-            DeletionOutcome::DeletionMergedInNextRun {
-                replica_id,
-                insertion_ts,
-                offset,
-                deleted,
-            } => {
-                self.run_indices.get_mut(replica_id).move_len_to_next_split(
-                    insertion_ts,
-                    offset,
-                    deleted,
-                );
-            },
-
-            DeletionOutcome::DeletedWholeRun => {},
-        }
+        let (start, end) = self.run_tree.delete(deleted_range);
 
         let deletion_ts = self.deletion_map.this();
 
@@ -395,9 +315,7 @@ impl Replica {
     /// successful.
     #[doc(hidden)]
     pub fn eq_decoded(&self, other: &Self) -> bool {
-        self.run_tree == other.run_tree
-            && self.run_indices == other.run_indices
-            && self.backlog == other.backlog
+        self.run_tree == other.run_tree && self.backlog == other.backlog
     }
 
     /// Encodes the `Replica` in a custom binary format.
@@ -445,7 +363,6 @@ impl Replica {
         Self {
             id: new_id,
             run_tree: self.run_tree.clone(),
-            run_indices: self.run_indices.clone(),
             insertion_clock: InsertionClock::new(),
             lamport_clock: self.lamport_clock,
             version_map: self.version_map.fork(new_id, 0),
@@ -509,14 +426,12 @@ impl Replica {
 
         let text = Text::new(self.id, start..end);
 
-        let (anchor, anchor_ts, outcome) = self.run_tree.insert(
+        let (anchor, anchor_ts) = self.run_tree.insert(
             at_offset,
             text.clone(),
             &mut self.insertion_clock,
             &mut self.lamport_clock,
         );
-
-        self.run_indices.update_after_insert(outcome, len);
 
         CrdtEdit::insertion(
             anchor,
@@ -674,14 +589,9 @@ impl Replica {
     ) -> TextEdit {
         debug_assert!(self.can_merge_insertion(insertion));
 
-        let (offset, outcome) =
-            self.run_tree.merge_insertion(insertion, &self.run_indices);
+        let offset = self.run_tree.merge_insertion(insertion);
 
-        let len = insertion.len();
-
-        self.run_indices.update_after_insert(outcome, len);
-
-        *self.version_map.get_mut(insertion.inserted_by()) += len;
+        *self.version_map.get_mut(insertion.inserted_by()) += insertion.len();
 
         self.lamport_clock.update(insertion.lamport_ts());
 
@@ -746,16 +656,11 @@ impl Replica {
             lamport_clock.next(),
         );
 
-        let (run_tree, origin_idx) = RunTree::new(origin_run);
-
-        let mut run_indices = RunIndices::new();
-
-        run_indices.get_mut(id).append(len, origin_idx);
+        let run_tree = RunTree::new(origin_run);
 
         Self {
             id,
             run_tree,
-            run_indices,
             insertion_clock,
             lamport_clock,
             version_map: VersionMap::new(id, len),
@@ -1017,7 +922,7 @@ mod debug {
             f.debug_struct("Replica")
                 .field("id", &replica.id)
                 .field("run_tree", &self.debug_run_tree)
-                .field("run_indices", &replica.run_indices)
+                .field("run_indices", &replica.run_tree.run_indices())
                 .field("lamport_clock", &replica.lamport_clock)
                 .field("insertion_clock", &replica.insertion_clock)
                 .field("version_map", &replica.version_map)

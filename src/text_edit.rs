@@ -151,6 +151,11 @@ impl Text {
     }
 
     #[inline]
+    pub(crate) fn len(&self) -> Length {
+        self.range.len()
+    }
+
+    #[inline]
     pub(crate) fn new(inserted_by: ReplicaId, range: Range<Length>) -> Self {
         Self { inserted_by, range }
     }

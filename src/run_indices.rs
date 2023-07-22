@@ -16,7 +16,6 @@ impl core::fmt::Debug for RunIndices {
 }
 
 impl RunIndices {
-    /// TODO: docs
     pub fn assert_invariants(&self, run_tree: &RunTree) {
         for (&replica_id, indices) in self.map.iter() {
             indices.assert_invariants();
@@ -25,7 +24,7 @@ impl RunIndices {
 
             for (idx, splits) in indices.splits().enumerate() {
                 for split in splits.leaves() {
-                    let run = run_tree.get_run(split.idx_in_run_tree);
+                    let run = run_tree.run(split.idx_in_run_tree);
                     assert_eq!(replica_id, run.replica_id());
                     assert_eq!(split.len, run.len());
                     assert_eq!(offset, run.start());
@@ -52,45 +51,6 @@ impl RunIndices {
     #[inline]
     pub fn new() -> Self {
         Self { map: ReplicaIdMap::default() }
-    }
-
-    /// TODO: docs
-    #[inline]
-    pub fn update_after_insert(
-        &mut self,
-        outcome: InsertionOutcome,
-        inserted_len: Length,
-    ) {
-        match outcome {
-            InsertionOutcome::AppendToLast { replica_id, idx } => {
-                self.get_mut(replica_id).append_to_last(inserted_len, idx)
-            },
-
-            InsertionOutcome::ExtendedLastRun { replica_id } => {
-                self.get_mut(replica_id).extend_last(inserted_len)
-            },
-
-            InsertionOutcome::SplitRun {
-                split_id,
-                split_insertion,
-                split_at_offset,
-                split_idx,
-                inserted_id,
-                inserted_idx,
-            } => {
-                self.get_mut(inserted_id).append(inserted_len, inserted_idx);
-
-                self.get_mut(split_id).split(
-                    split_insertion,
-                    split_at_offset,
-                    split_idx,
-                );
-            },
-
-            InsertionOutcome::InsertedRun { replica_id, inserted_idx } => {
-                self.get_mut(replica_id).append(inserted_len, inserted_idx)
-            },
-        };
     }
 }
 

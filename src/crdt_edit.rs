@@ -130,7 +130,7 @@ impl Insertion {
 
     #[inline]
     pub fn len(&self) -> Length {
-        self.end() - self.start()
+        self.text.len()
     }
 
     #[inline]
