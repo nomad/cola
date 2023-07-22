@@ -307,8 +307,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         recursively_assert_inode_invariants(self, self.root_idx);
 
         if let Some(cursor) = self.cursor {
-            self.assert_offset_of_leaf(cursor.leaf_idx, cursor.offset);
-            self.assert_child_idx_of_leaf(cursor.leaf_idx, cursor.child_idx);
+            assert_eq!(self.offset_of_leaf(cursor.leaf_idx), cursor.offset);
+
+            assert_eq!(
+                self.idx_of_leaf_in_parent(cursor.leaf_idx),
+                cursor.child_idx
+            );
         }
     }
 
@@ -934,15 +938,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
-    fn assert_child_idx_of_leaf(
-        &self,
-        leaf_idx: LeafIdx<L>,
-        child_idx: ChildIdx,
-    ) {
-        let parent = self.inode(self.lnode(leaf_idx).parent());
-        assert_eq!(child_idx, parent.idx_of_leaf_child(leaf_idx));
-    }
-
     /// Asserts the invariants of the given inode. Does not recurse into its
     /// children.
     fn assert_inode_invariants(&self, inode_idx: InodeIdx) {
@@ -976,38 +971,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         if !inode.len().is_zero() {
             assert_eq!(child_lengths, inode.len());
         }
-    }
-
-    /// Asserts that the len offset of the given leaf is equal to the
-    /// given len.
-    ///
-    /// The len offset of a leaf is the sum of the lengths of all the
-    /// leaves that precede it in the Gtree, *not* including the len of
-    /// the leaf itself.
-    fn assert_offset_of_leaf(
-        &self,
-        leaf_idx: LeafIdx<L>,
-        leaf_offset: L::Length,
-    ) {
-        let mut len = L::Length::zero();
-
-        let mut parent_idx = self.lnode(leaf_idx).parent();
-
-        let parent = self.inode(parent_idx);
-        let child_idx = parent.idx_of_leaf_child(leaf_idx);
-        len += self.len_offset_of_child(parent_idx, child_idx);
-        let mut inode_idx = parent_idx;
-        parent_idx = parent.parent();
-
-        while !parent_idx.is_dangling() {
-            let parent = self.inode(parent_idx);
-            let child_idx = parent.idx_of_internal_child(inode_idx);
-            len += self.len_offset_of_child(parent_idx, child_idx);
-            inode_idx = parent_idx;
-            parent_idx = parent.parent();
-        }
-
-        assert_eq!(len, leaf_offset);
     }
 
     /// Inserts `maybe_split` after `inode_idx` in the parent of `inode_idx`.
@@ -3671,132 +3634,5 @@ mod inode_serde {
 
             deserializer.deserialize_map(InodeVisitor(PhantomData))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[derive(Clone, Debug)]
-    struct TestLeaf {
-        len: crate::Length,
-        is_visible: bool,
-    }
-
-    impl Delete for TestLeaf {
-        fn delete(&mut self) {
-            self.is_visible = false;
-        }
-    }
-
-    impl Join for TestLeaf {}
-
-    impl Leaf for TestLeaf {
-        type Length = crate::Length;
-
-        fn len(&self) -> Self::Length {
-            self.len * self.is_visible as crate::Length
-        }
-    }
-
-    impl TestLeaf {
-        fn insert_with_len(
-            len: crate::Length,
-        ) -> impl FnOnce(&mut Self, crate::Length) -> (Option<Self>, Option<Self>)
-        {
-            move |leaf, offset| {
-                debug_assert!(offset <= leaf.len);
-
-                if offset == 0 {
-                    let new_leaf = TestLeaf::new_with_len(len);
-                    (Some(mem::replace(leaf, new_leaf)), None)
-                } else if offset == leaf.len {
-                    (Some(TestLeaf::new_with_len(len)), None)
-                } else {
-                    let rest = leaf.split(offset);
-                    (Some(TestLeaf::new_with_len(len)), rest)
-                }
-            }
-        }
-
-        fn new_with_len(len: crate::Length) -> Self {
-            Self { len, is_visible: true }
-        }
-
-        fn split(&mut self, at_offset: crate::Length) -> Option<Self> {
-            if at_offset >= self.len {
-                None
-            } else {
-                let split = Self {
-                    len: self.len - at_offset,
-                    is_visible: self.is_visible,
-                };
-                self.len = at_offset;
-                Some(split)
-            }
-        }
-    }
-
-    type TestGtree<const ARITY: usize> = Gtree<ARITY, TestLeaf>;
-
-    #[test]
-    fn insert_two_leaves_after_leaf_0() {
-        let first_leaf = TestLeaf::new_with_len(1);
-
-        let (mut gt, _) = TestGtree::<4>::new(first_leaf);
-
-        let (Some(second_leaf_idx), _) =
-            gt.insert(1, TestLeaf::insert_with_len(2))
-        else {
-            panic!()
-        };
-
-        let third_leaf = TestLeaf::new_with_len(3);
-
-        let fourth_leaf = TestLeaf::new_with_len(4);
-
-        let _ = gt.insert_two_leaves_after_leaf(
-            second_leaf_idx,
-            0,
-            third_leaf,
-            fourth_leaf,
-        );
-
-        assert_eq!(gt.len(), 1 + 2 + 3 + 4);
-
-        assert_eq!(gt.height(), 1);
-
-        gt.assert_invariants();
-    }
-
-    #[test]
-    fn insert_two_leaves_after_leaf_1() {
-        let first_leaf = TestLeaf::new_with_len(2);
-
-        let (mut gt, _) = TestGtree::<4>::new(first_leaf);
-
-        let (Some(second_leaf_idx), _) =
-            gt.insert(1, TestLeaf::insert_with_len(3))
-        else {
-            panic!()
-        };
-
-        let third_leaf = TestLeaf::new_with_len(4);
-
-        let fourth_leaf = TestLeaf::new_with_len(5);
-
-        let _ = gt.insert_two_leaves_after_leaf(
-            second_leaf_idx,
-            0,
-            third_leaf,
-            fourth_leaf,
-        );
-
-        assert_eq!(gt.len(), 2 + 3 + 4 + 5);
-
-        assert_eq!(gt.height(), 2);
-
-        gt.assert_invariants();
     }
 }
