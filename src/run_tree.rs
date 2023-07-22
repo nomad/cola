@@ -72,11 +72,11 @@ impl RunTree {
     #[inline]
     pub fn delete(&mut self, range: Range<Length>) -> (Anchor, Anchor) {
         let mut id_start = ReplicaId::zero();
-        let mut insertion_ts_start = 0;
+        let mut run_ts_start = 0;
         let mut offset_start = 0;
 
         let mut id_end = ReplicaId::zero();
-        let mut insertion_ts_end = 0;
+        let mut run_ts_end = 0;
         let mut offset_end = 0;
 
         let mut split_across_runs = false;
@@ -84,27 +84,27 @@ impl RunTree {
         let delete_from = |run: &mut EditRun, offset: Length| {
             split_across_runs = true;
             id_start = run.replica_id();
-            insertion_ts_start = run.insertion_ts();
+            run_ts_start = run.run_ts();
             offset_start = run.start() + offset;
             run.delete_from(offset)
         };
 
         let delete_up_to = |run: &mut EditRun, offset: Length| {
             id_end = run.replica_id();
-            insertion_ts_end = run.insertion_ts();
+            run_ts_end = run.run_ts();
             offset_end = run.start() + offset;
             run.delete_up_to(offset)
         };
 
         let mut id_range = ReplicaId::zero();
-        let mut insertion_ts_range = 0;
+        let mut run_ts_range = 0;
         let mut deleted_range_offset = 0;
         let mut deleted_range_run_len = 0;
         let mut deleted_range = Range { start: 0, end: 0 };
 
         let delete_range = |run: &mut EditRun, range: Range<Length>| {
             id_range = run.replica_id();
-            insertion_ts_range = run.insertion_ts();
+            run_ts_range = run.run_ts();
             deleted_range_offset = run.start();
             deleted_range_run_len = run.len();
             deleted_range = range;
@@ -117,18 +117,16 @@ impl RunTree {
         if split_across_runs {
             if let Some(idx) = first_idx {
                 self.run_indices.get_mut(id_start).split(
-                    insertion_ts_start,
+                    run_ts_start,
                     offset_start,
                     idx,
                 );
             }
 
             if let Some(idx) = second_idx {
-                self.run_indices.get_mut(id_end).split(
-                    insertion_ts_end,
-                    offset_end,
-                    idx,
-                );
+                self.run_indices
+                    .get_mut(id_end)
+                    .split(run_ts_end, offset_end, idx);
             }
 
             return (
@@ -141,8 +139,8 @@ impl RunTree {
             (Some(first), Some(second)) => {
                 let range = deleted_range + deleted_range_offset;
                 let indices = self.run_indices.get_mut(id_range);
-                indices.split(insertion_ts_range, range.start, first);
-                indices.split(insertion_ts_range, range.end, second);
+                indices.split(run_ts_range, range.start, first);
+                indices.split(run_ts_range, range.end, second);
             },
 
             (Some(first), _) => {
@@ -154,7 +152,7 @@ impl RunTree {
                     };
 
                 self.run_indices.get_mut(id_range).split(
-                    insertion_ts_range,
+                    run_ts_range,
                     offset,
                     first,
                 );
@@ -163,13 +161,13 @@ impl RunTree {
             (None, None) if deleted_range.len() < deleted_range_run_len => {
                 if deleted_range.start == 0 {
                     self.run_indices.get_mut(id_range).move_len_to_prev_split(
-                        insertion_ts_range,
+                        run_ts_range,
                         deleted_range_offset + deleted_range.end,
                         deleted_range.len(),
                     );
                 } else if deleted_range.end == deleted_range_run_len {
                     self.run_indices.get_mut(id_range).move_len_to_next_split(
-                        insertion_ts_range,
+                        run_ts_range,
                         deleted_range_offset + deleted_range.start,
                         deleted_range.len(),
                     );
@@ -200,9 +198,9 @@ impl RunTree {
         &mut self,
         offset: Length,
         text: Text,
-        insertion_clock: &mut InsertionClock,
+        run_clock: &mut RunClock,
         lamport_clock: &mut LamportClock,
-    ) -> (Anchor, InsertionTs) {
+    ) -> (Anchor, RunTs) {
         debug_assert!(!text.range.is_empty());
 
         let replica_id = text.inserted_by();
@@ -215,7 +213,7 @@ impl RunTree {
             let run = EditRun::new(
                 Anchor::origin(),
                 text,
-                insertion_clock.next(),
+                run_clock.next(),
                 lamport_clock.next(),
             );
 
@@ -238,9 +236,9 @@ impl RunTree {
 
         let insert_with = |run: &mut EditRun, offset: Length| {
             split_id = run.replica_id();
-            split_insertion = run.insertion_ts();
+            split_insertion = run.run_ts();
             split_at_offset = run.start() + offset;
-            anchor_ts = run.insertion_ts();
+            anchor_ts = run.run_ts();
             anchor = Anchor::new(run.replica_id(), split_at_offset);
 
             if run.len() == offset
@@ -256,7 +254,7 @@ impl RunTree {
             let new_run = EditRun::new(
                 anchor,
                 text,
-                insertion_clock.next(),
+                run_clock.next(),
                 lamport_clock.next(),
             );
 
@@ -359,12 +357,9 @@ impl RunTree {
             return self.insert_run_at_origin(run);
         }
 
-        // Get the leaf index of the EditRun that contains the anchor of the
-        // Insertion.
         let anchor_idx = self
             .run_indices
-            .get(run.anchor().replica_id())
-            .idx_at_offset(insertion.anchor_ts(), run.anchor().offset);
+            .idx_at_anchor(run.anchor(), insertion.anchor_ts());
 
         let anchor = self.gtree.leaf(anchor_idx);
 
@@ -446,7 +441,7 @@ impl RunTree {
         debug_assert!(at_offset < splitting.len());
 
         let split_id = splitting.replica_id();
-        let split_insertion = splitting.insertion_ts();
+        let split_insertion = splitting.run_ts();
         let split_at_offset = splitting.start() + at_offset;
 
         let run_len = run.len();
@@ -489,7 +484,7 @@ pub(crate) struct EditRun {
     text: Text,
 
     /// TODO: docs
-    insertion_ts: InsertionTs,
+    run_ts: RunTs,
 
     /// TODO: docs
     lamport_ts: LamportTs,
@@ -506,7 +501,7 @@ impl core::fmt::Debug for EditRun {
             self.text,
             self.inserted_at,
             self.lamport_ts,
-            self.insertion_ts,
+            self.run_ts,
             if self.is_deleted { " 🪦" } else { "" },
         )
     }
@@ -535,8 +530,8 @@ impl PartialOrd for EditRun {
 
 impl EditRun {
     #[inline(always)]
-    pub fn anchor(&self) -> &Anchor {
-        &self.inserted_at
+    pub fn anchor(&self) -> Anchor {
+        self.inserted_at
     }
 
     #[inline]
@@ -624,15 +619,15 @@ impl EditRun {
         Self {
             inserted_at: *insertion.anchor(),
             text: insertion.text().clone(),
-            insertion_ts: insertion.insertion_ts(),
+            run_ts: insertion.run_ts(),
             lamport_ts: insertion.lamport_ts(),
             is_deleted: false,
         }
     }
 
     #[inline(always)]
-    pub fn insertion_ts(&self) -> InsertionTs {
-        self.insertion_ts
+    pub fn run_ts(&self) -> RunTs {
+        self.run_ts
     }
 
     /// TODO: docs
@@ -646,10 +641,10 @@ impl EditRun {
     pub fn new(
         inserted_at: Anchor,
         text: Text,
-        insertion_ts: InsertionTs,
+        run_ts: RunTs,
         lamport_ts: LamportTs,
     ) -> Self {
-        Self { inserted_at, text, insertion_ts, lamport_ts, is_deleted: false }
+        Self { inserted_at, text, run_ts, lamport_ts, is_deleted: false }
     }
 
     #[inline(always)]
@@ -706,7 +701,7 @@ impl core::fmt::Debug for Anchor {
 }
 
 impl Anchor {
-    #[inline]
+    #[inline(always)]
     pub fn character_ts(&self) -> Length {
         self.offset
     }
@@ -721,13 +716,18 @@ impl Anchor {
         Self { replica_id, offset }
     }
 
+    #[inline(always)]
+    pub fn offset(&self) -> Length {
+        self.offset
+    }
+
     /// A special value used to create an anchor at the start of the document.
     #[inline]
     pub const fn origin() -> Self {
         Self { replica_id: ReplicaId::zero(), offset: 0 }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn replica_id(&self) -> ReplicaId {
         self.replica_id
     }
@@ -779,7 +779,7 @@ impl gtree::Join for EditRun {
     #[inline]
     fn prepend(&mut self, other: Self) -> Result<(), Self> {
         if self.can_prepend(&other) {
-            debug_assert_eq!(self.insertion_ts, other.insertion_ts);
+            debug_assert_eq!(self.run_ts, other.run_ts);
             *self.start_mut() = other.start();
             Ok(())
         } else {

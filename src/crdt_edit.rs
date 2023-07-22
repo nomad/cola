@@ -44,13 +44,13 @@ impl CrdtEdit {
     #[inline]
     pub(crate) fn insertion(
         anchor: Anchor,
-        anchor_ts: InsertionTs,
+        anchor_ts: RunTs,
         text: Text,
         lamport_ts: LamportTs,
-        insertion_ts: InsertionTs,
+        run_ts: RunTs,
     ) -> Self {
         let insertion =
-            Insertion { anchor, anchor_ts, text, lamport_ts, insertion_ts };
+            Insertion { anchor, anchor_ts, text, lamport_ts, run_ts };
         Self { kind: CrdtEditKind::Insertion(insertion) }
     }
 
@@ -83,15 +83,15 @@ pub(crate) struct Insertion {
     /// The anchor point of the insertion.
     anchor: Anchor,
 
-    /// The insertion timestamp of the [`EditRun`] containing the anchor.
-    anchor_ts: InsertionTs,
+    /// The run timestamp of the [`EditRun`] containing the anchor.
+    anchor_ts: RunTs,
 
     /// Contains the replica that made the insertion and the temporal range
     /// of the text that was inserted.
     text: Text,
 
-    /// The insertion timestamp of this insertion.
-    insertion_ts: InsertionTs,
+    /// The run timestamp of this insertion.
+    run_ts: RunTs,
 
     /// The Lamport timestamp of this insertion.
     lamport_ts: LamportTs,
@@ -104,7 +104,7 @@ impl Insertion {
     }
 
     #[inline(always)]
-    pub fn anchor_ts(&self) -> InsertionTs {
+    pub fn anchor_ts(&self) -> RunTs {
         self.anchor_ts
     }
 
@@ -119,8 +119,8 @@ impl Insertion {
     }
 
     #[inline(always)]
-    pub fn insertion_ts(&self) -> InsertionTs {
-        self.insertion_ts
+    pub fn run_ts(&self) -> RunTs {
+        self.run_ts
     }
 
     #[inline(always)]

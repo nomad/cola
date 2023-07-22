@@ -2,7 +2,8 @@ use core::ops::{Index, IndexMut};
 
 use crate::*;
 
-/// TODO: docs
+/// A data structure used when merging remote edits to efficiently map
+/// an [`Anchor`] to the [`LeafIdx`] of the [`EditRun`] that contains it.
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunIndices {
@@ -24,41 +25,55 @@ impl RunIndices {
 
             for (idx, splits) in indices.splits().enumerate() {
                 for split in splits.leaves() {
-                    let run = run_tree.run(split.idx_in_run_tree);
+                    let run = run_tree.run(split.idx);
                     assert_eq!(replica_id, run.replica_id());
                     assert_eq!(split.len, run.len());
                     assert_eq!(offset, run.start());
-                    assert_eq!(idx, run.insertion_ts() as usize);
+                    assert_eq!(idx, run.run_ts() as usize);
                     offset += split.len;
                 }
             }
         }
     }
 
-    /// TODO: docs
-    #[inline]
-    pub fn get(&self, id: ReplicaId) -> &ReplicaIndices {
-        self.map.get(&id).unwrap()
-    }
-
-    /// TODO: docs
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
         self.map.entry(id).or_insert_with(ReplicaIndices::new)
     }
 
-    /// TODO: docs
+    /// Returns the [`LeafIdx`] of the [`EditRun`] that contains the given
+    /// [`Anchor`].
+    #[inline]
+    pub fn idx_at_anchor(
+        &self,
+        anchor: Anchor,
+        anchor_ts: RunTs,
+    ) -> LeafIdx<EditRun> {
+        self.map
+            .get(&anchor.replica_id())
+            .unwrap()
+            .idx_at_offset(anchor_ts, anchor.offset())
+    }
+
     #[inline]
     pub fn new() -> Self {
         Self { map: ReplicaIdMap::default() }
     }
 }
 
-/// TODO: docs
+/// Contains the [`LeafIdx`]s of all the [`EditRun`]s that have been inserted
+/// by a given `Replica`.
 #[derive(Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ReplicaIndices {
-    vec: Vec<(InsertionSplits, Length)>,
+    /// The [`Fragments`] are stored sequentially and in order of insertion.
+    ///
+    /// When a new [`EditRun`] is created we append a new [`Fragments`] to the
+    /// vector. As long as the following insertions continue that run we simply
+    /// increase the length of the last [`Fragments`].
+    ///
+    /// Once that run ends we append new [`Fragments`], and so on.
+    vec: Vec<(Fragments, Length)>,
 }
 
 impl core::fmt::Debug for ReplicaIndices {
@@ -69,34 +84,39 @@ impl core::fmt::Debug for ReplicaIndices {
     }
 }
 
-/// TODO: docs
-impl Index<InsertionTs> for ReplicaIndices {
-    type Output = (InsertionSplits, Length);
+/// We can use the `RunTs` as an index into the `vec` because it is only
+/// incremented when the current run is interrupted and a new one is started.
+///
+/// Using the `RunTs` as an index allows us to find the `Fragments`
+/// corresponding to a given offset in `O(1)` instead of having to do a binary
+/// search.
+impl Index<RunTs> for ReplicaIndices {
+    type Output = (Fragments, Length);
 
     #[inline]
-    fn index(&self, insertion_ts: InsertionTs) -> &Self::Output {
-        &self.vec[insertion_ts as usize]
+    fn index(&self, run_ts: RunTs) -> &Self::Output {
+        &self.vec[run_ts as usize]
     }
 }
 
-impl IndexMut<InsertionTs> for ReplicaIndices {
+impl IndexMut<RunTs> for ReplicaIndices {
     #[inline]
-    fn index_mut(&mut self, insertion_ts: InsertionTs) -> &mut Self::Output {
-        &mut self.vec[insertion_ts as usize]
+    fn index_mut(&mut self, run_ts: RunTs) -> &mut Self::Output {
+        &mut self.vec[run_ts as usize]
     }
 }
 
 impl ReplicaIndices {
     #[inline]
     pub fn append(&mut self, len: Length, idx: LeafIdx<EditRun>) {
-        let split = Split::new(len, idx);
+        let fragment = Fragment::new(len, idx);
 
-        let new_last = InsertionSplits::new(split);
+        let new_last = Fragments::new(fragment);
 
         let (last_offset, last_len) = self
             .vec
             .last()
-            .map(|(splits, offset)| (splits.len(), *offset))
+            .map(|(fragments, offset)| (fragments.len(), *offset))
             .unwrap_or((0, 0));
 
         self.vec.push((new_last, last_offset + last_len));
@@ -104,7 +124,7 @@ impl ReplicaIndices {
 
     #[inline]
     pub fn append_to_last(&mut self, len: Length, idx: LeafIdx<EditRun>) {
-        let split = Split::new(len, idx);
+        let split = Fragment::new(len, idx);
         self.vec.last_mut().unwrap().0.append(split);
     }
 
@@ -124,34 +144,34 @@ impl ReplicaIndices {
     }
 
     #[inline]
-    pub fn idx_at_offset(
+    fn idx_at_offset(
         &self,
-        insertion_ts: InsertionTs,
+        run_ts: RunTs,
         at_offset: Length,
     ) -> LeafIdx<EditRun> {
-        let (splits, offset) = &self[insertion_ts];
-        splits.split_at_offset(at_offset - offset).idx_in_run_tree
+        let (splits, offset) = &self[run_ts];
+        splits.fragment_at_offset(at_offset - offset).idx
     }
 
     #[inline]
     pub fn move_len_to_next_split(
         &mut self,
-        insertion_ts: InsertionTs,
+        run_ts: RunTs,
         split_at_offset: Length,
         len_moved: Length,
     ) {
-        let (splits, offset) = &mut self[insertion_ts];
-        splits.move_len_to_next_split(split_at_offset - *offset, len_moved);
+        let (splits, offset) = &mut self[run_ts];
+        splits.move_len_to_next_fragment(split_at_offset - *offset, len_moved);
     }
 
     #[inline]
     pub fn move_len_to_prev_split(
         &mut self,
-        insertion_ts: InsertionTs,
+        run_ts: RunTs,
         split_at_offset: Length,
         len_moved: Length,
     ) {
-        let (splits, offset) = &mut self[insertion_ts];
+        let (splits, offset) = &mut self[run_ts];
         splits.move_len_to_prev_split(split_at_offset - *offset, len_moved);
     }
 
@@ -163,43 +183,44 @@ impl ReplicaIndices {
     #[inline]
     pub fn split(
         &mut self,
-        insertion_ts: InsertionTs,
+        run_ts: RunTs,
         at_offset: Length,
         right_idx: LeafIdx<EditRun>,
     ) {
-        let (splits, offset) = &mut self[insertion_ts];
+        let (splits, offset) = &mut self[run_ts];
         splits.split(at_offset - *offset, right_idx);
     }
 
     #[inline]
-    fn splits(&self) -> impl Iterator<Item = &InsertionSplits> {
+    fn splits(&self) -> impl Iterator<Item = &Fragments> {
         self.vec.iter().map(|(splits, _)| splits)
     }
 }
 
-/// TODO: docs
-const INSERTION_SPLITS_INLINE: usize = 8;
+const FRAGMENTS_INLINE: usize = 8;
 
-type InsertionSplits = run_splits::InsertionSplits<INSERTION_SPLITS_INLINE>;
+type Fragments = fragments::Fragments<FRAGMENTS_INLINE>;
 
-mod run_splits {
+mod fragments {
     use super::*;
 
-    /// TODO: docs
+    /// The `Fragment`s that an insertion run has been fragmented into.
     #[derive(Clone, PartialEq)]
     #[cfg_attr(
         feature = "encode",
         derive(serde::Serialize, serde::Deserialize)
     )]
-    pub(crate) enum InsertionSplits<const INLINE: usize> {
-        /// TODO: docs
+    pub(crate) enum Fragments<const INLINE: usize> {
+        /// The first `INLINE` fragments are stored inline to avoid
+        /// allocating a `Gtree` for runs that are not heavily fragmented.
         Array(Array<INLINE>),
 
-        /// TODO: docs
-        Gtree(Gtree<INLINE, Split>),
+        /// Once the number of fragments exceeds `INLINE` we switch to a
+        /// `Gtree`.
+        Gtree(Gtree<INLINE, Fragment>),
     }
 
-    impl<const N: usize> core::fmt::Debug for InsertionSplits<N> {
+    impl<const N: usize> core::fmt::Debug for Fragments<N> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             match self {
                 Self::Array(array) => array.fmt(f),
@@ -212,7 +233,7 @@ mod run_splits {
         }
     }
 
-    impl<const INLINE: usize> InsertionSplits<INLINE> {
+    impl<const INLINE: usize> Fragments<INLINE> {
         pub fn assert_invariants(&self) {
             match self {
                 Self::Array(array) => array.assert_invariants(),
@@ -221,25 +242,23 @@ mod run_splits {
         }
 
         #[inline]
-        pub fn append(&mut self, split: Split) {
+        pub fn append(&mut self, fragment: Fragment) {
             match self {
-                InsertionSplits::Array(array) => {
+                Fragments::Array(array) => {
                     if array.len == INLINE {
                         let mut gtree = Gtree::from_leaves(
-                            array.splits().iter().copied(),
+                            array.fragments().iter().copied(),
                             array.total_len,
                         );
-                        gtree.append(split);
+                        gtree.append(fragment);
                         *self = Self::Gtree(gtree);
                     } else {
-                        array.total_len += split.len;
-                        array.splits[array.len] = split;
-                        array.len += 1;
+                        array.append(fragment);
                     }
                 },
 
-                InsertionSplits::Gtree(splits) => {
-                    splits.append(split);
+                Fragments::Gtree(gtree) => {
+                    gtree.append(fragment);
                 },
             }
         }
@@ -247,15 +266,28 @@ mod run_splits {
         #[inline]
         pub fn extend(&mut self, extend_by: Length) {
             match self {
-                InsertionSplits::Array(Array { splits, len, total_len }) => {
-                    splits[*len - 1].len += extend_by;
-                    *total_len += extend_by;
+                Fragments::Array(array) => {
+                    array.extend_last(extend_by);
                 },
 
-                InsertionSplits::Gtree(splits) => {
-                    splits.with_last_leaf_mut(|last| {
+                Fragments::Gtree(gtree) => {
+                    gtree.with_last_leaf_mut(|last| {
                         last.len += extend_by;
                     });
+                },
+            }
+        }
+
+        #[inline]
+        pub fn fragment_at_offset(&self, at_offset: Length) -> &Fragment {
+            debug_assert!(at_offset <= self.len());
+
+            match self {
+                Self::Array(array) => array.fragment_at_offset(at_offset),
+
+                Self::Gtree(gtree) => {
+                    let (leaf_idx, _) = gtree.leaf_at_offset(at_offset);
+                    gtree.leaf(leaf_idx)
                 },
             }
         }
@@ -269,37 +301,29 @@ mod run_splits {
         }
 
         #[inline]
-        pub fn move_len_to_next_split(
+        pub fn move_len_to_next_fragment(
             &mut self,
-            at_offset: Length,
+            fragment_at_offset: Length,
             len_move: Length,
         ) {
-            debug_assert!(at_offset < self.len());
+            debug_assert!(fragment_at_offset < self.len());
             debug_assert!(len_move > 0);
 
             match self {
-                Self::Array(Array { splits, .. }) => {
-                    let mut leaf_idx = 0;
-                    let mut next_idx = 0;
-                    let mut offset = 0;
-                    for (idx, split) in splits.iter().enumerate() {
-                        offset += split.len;
-                        if offset > at_offset {
-                            leaf_idx = idx;
-                            next_idx = idx + 1;
-                            break;
-                        }
-                    }
-                    let (this, next) =
-                        crate::get_two_mut(splits, leaf_idx, next_idx);
-                    this.len -= len_move;
-                    next.len += len_move;
+                Self::Array(array) => {
+                    array.move_len_to_next_fragment(
+                        fragment_at_offset,
+                        len_move,
+                    );
                 },
 
-                Self::Gtree(splits) => {
-                    let (leaf_idx, _) = splits.leaf_at_offset(at_offset);
-                    let next_idx = splits.next_leaf(leaf_idx);
-                    splits.with_two_mut(leaf_idx, next_idx, |this, next| {
+                Self::Gtree(gtree) => {
+                    let (leaf_idx, _) =
+                        gtree.leaf_at_offset(fragment_at_offset);
+
+                    let next_idx = gtree.next_leaf(leaf_idx);
+
+                    gtree.with_two_mut(leaf_idx, next_idx, |this, next| {
                         this.len -= len_move;
                         next.len += len_move;
                     });
@@ -317,28 +341,16 @@ mod run_splits {
             debug_assert!(len_move > 0);
 
             match self {
-                Self::Array(Array { splits, .. }) => {
-                    let mut prev_idx = 0;
-                    let mut leaf_idx = 0;
-                    let mut offset = 0;
-                    for (idx, split) in splits.iter().enumerate() {
-                        offset += split.len;
-                        if offset > at_offset {
-                            leaf_idx = idx;
-                            prev_idx = idx - 1;
-                            break;
-                        }
-                    }
-                    let (prev, this) =
-                        crate::get_two_mut(splits, prev_idx, leaf_idx);
-                    this.len -= len_move;
-                    prev.len += len_move;
+                Self::Array(array) => {
+                    array.move_len_to_prev_fragment(at_offset, len_move)
                 },
 
-                Self::Gtree(splits) => {
-                    let (leaf_idx, _) = splits.leaf_at_offset(at_offset);
-                    let prev_idx = splits.prev_leaf(leaf_idx);
-                    splits.with_two_mut(prev_idx, leaf_idx, |prev, this| {
+                Self::Gtree(gtree) => {
+                    let (leaf_idx, _) = gtree.leaf_at_offset(at_offset);
+
+                    let prev_idx = gtree.prev_leaf(leaf_idx);
+
+                    gtree.with_two_mut(prev_idx, leaf_idx, |prev, this| {
                         this.len -= len_move;
                         prev.len += len_move;
                     });
@@ -347,94 +359,55 @@ mod run_splits {
         }
 
         #[inline]
-        pub fn new(first_split: Split) -> Self {
-            let mut array = [Split::null(); INLINE];
+        pub fn new(first_split: Fragment) -> Self {
+            let mut array = [Fragment::null(); INLINE];
             let total_len = first_split.len;
             array[0] = first_split;
-            Self::Array(Array { splits: array, len: 1, total_len })
+            Self::Array(Array { fragments: array, len: 1, total_len })
         }
 
         #[inline]
-        pub fn split(
-            &mut self,
-            at_offset: Length,
-            right_idx: LeafIdx<EditRun>,
-        ) {
+        pub fn split(&mut self, at_offset: Length, new_idx: LeafIdx<EditRun>) {
             match self {
-                InsertionSplits::Array(Array { splits, len, total_len }) => {
-                    if *len < INLINE {
-                        let mut offset = 0;
-                        for (idx, split) in splits.iter_mut().enumerate() {
-                            offset += split.len;
-                            if offset > at_offset {
-                                offset -= split.len;
-                                let new_split =
-                                    split.split(at_offset - offset, right_idx);
-                                crate::insert_in_slice(
-                                    splits,
-                                    new_split,
-                                    idx + 1,
-                                );
-                                *len += 1;
-                                return;
-                            }
-                        }
-                        unreachable!();
-                    } else {
+                Fragments::Array(array) => {
+                    if array.len == INLINE {
                         let gtree = Gtree::from_leaves(
-                            splits.iter().copied(),
-                            *total_len,
+                            array.fragments().iter().copied(),
+                            array.total_len,
                         );
-                        *self = InsertionSplits::Gtree(gtree);
-                        self.split(at_offset, right_idx);
+                        *self = Fragments::Gtree(gtree);
+                        self.split(at_offset, new_idx);
+                    } else {
+                        array.split(at_offset, new_idx);
                     }
                 },
 
-                InsertionSplits::Gtree(splits) => {
-                    let (split_idx, split_offset) =
-                        splits.leaf_at_offset(at_offset);
+                Fragments::Gtree(gtree) => {
+                    let (fragment_idx, fragment_offset) =
+                        gtree.leaf_at_offset(at_offset);
 
-                    splits.split_leaf(split_idx, |split| {
-                        split.split(at_offset - split_offset, right_idx)
+                    gtree.split_leaf(fragment_idx, |fragment| {
+                        fragment.split(at_offset - fragment_offset, new_idx)
                     });
                 },
             };
-        }
-
-        #[inline]
-        pub fn split_at_offset(&self, at_offset: Length) -> &Split {
-            debug_assert!(at_offset <= self.len());
-
-            match self {
-                Self::Array(array) => {
-                    let mut offset = 0;
-                    for split in array.splits() {
-                        offset += split.len;
-                        if offset >= at_offset {
-                            return split;
-                        }
-                    }
-                    unreachable!();
-                },
-
-                Self::Gtree(gtree) => {
-                    let (leaf_idx, _) = gtree.leaf_at_offset(at_offset);
-                    gtree.leaf(leaf_idx)
-                },
-            }
         }
     }
 
     #[derive(Clone, PartialEq)]
     pub(crate) struct Array<const N: usize> {
-        splits: [Split; N],
+        fragments: [Fragment; N],
+
+        /// The number of non-null `Fragment`s in the array.
         len: usize,
+
+        /// The total length of all `Fragment`s in the array.
         total_len: Length,
     }
 
     impl<const N: usize> core::fmt::Debug for Array<N> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            self.splits().fmt(f)
+            self.fragments().fmt(f)
         }
     }
 
@@ -443,21 +416,103 @@ mod run_splits {
         fn assert_invariants(&self) {
             let mut total_len = 0;
 
-            for split in self.splits[..self.len].iter() {
-                total_len += split.len;
-                assert!(!split.is_null());
+            for fragment in self.fragments() {
+                total_len += fragment.len;
+                assert!(!fragment.is_null());
             }
 
             assert_eq!(self.total_len, total_len);
 
-            for split in self.splits[self.len..].iter() {
-                assert!(split.is_null());
+            for fragment in self.fragments() {
+                assert!(fragment.is_null());
             }
         }
 
         #[inline]
-        fn splits(&self) -> &[Split] {
-            &self.splits[..self.len]
+        fn append(&mut self, fragment: Fragment) {
+            debug_assert!(self.len < N);
+
+            self.total_len += fragment.len;
+            self.fragments[self.len] = fragment;
+            self.len += 1;
+        }
+
+        #[inline]
+        fn extend_last(&mut self, extend_by: Length) {
+            self.fragments[self.len - 1].len += extend_by;
+            self.total_len += extend_by;
+        }
+
+        #[inline]
+        fn fragment_at_offset(&self, at_offset: Length) -> &Fragment {
+            let (idx, _) = self.idx_at_offset(at_offset);
+            &self.fragments[idx]
+        }
+
+        #[inline]
+        fn fragments(&self) -> &[Fragment] {
+            &self.fragments[..self.len]
+        }
+
+        #[inline]
+        fn fragments_mut(&mut self) -> &mut [Fragment] {
+            &mut self.fragments[..self.len]
+        }
+
+        #[inline]
+        fn idx_at_offset(&self, at_offset: Length) -> (usize, Length) {
+            let mut offset = 0;
+            for (idx, fragment) in self.fragments().iter().enumerate() {
+                offset += fragment.len;
+                if offset >= at_offset {
+                    return (idx, offset - fragment.len);
+                }
+            }
+            unreachable!();
+        }
+
+        #[inline]
+        fn move_len_to_next_fragment(
+            &mut self,
+            fragment_at_offset: Length,
+            len_move: Length,
+        ) {
+            let (this, _) = self.idx_at_offset(fragment_at_offset);
+            let next = this + 1;
+            let (this, next) =
+                crate::get_two_mut(self.fragments_mut(), this, next);
+            this.len -= len_move;
+            next.len += len_move;
+        }
+
+        #[inline]
+        fn move_len_to_prev_fragment(
+            &mut self,
+            fragment_at_offset: Length,
+            len_move: Length,
+        ) {
+            let (this, _) = self.idx_at_offset(fragment_at_offset);
+            let prev = this - 1;
+            let (prev, this) =
+                crate::get_two_mut(self.fragments_mut(), prev, this);
+            this.len -= len_move;
+            prev.len += len_move;
+        }
+
+        #[inline]
+        fn split(&mut self, at_offset: Length, new_idx: LeafIdx<EditRun>) {
+            let (idx, fragment_offset) = self.idx_at_offset(at_offset);
+
+            let fragments = self.fragments_mut();
+
+            let fragment = &mut fragments[idx];
+
+            let new_fragment =
+                fragment.split(at_offset - fragment_offset, new_idx);
+
+            crate::insert_in_slice(fragments, new_fragment, idx + 1);
+
+            self.len += 1;
         }
     }
 
@@ -537,8 +592,9 @@ mod run_splits {
                                             ),
                                         );
                                     }
-                                    splits_vec =
-                                        Some(map.next_value::<Vec<Split>>()?);
+                                    splits_vec = Some(
+                                        map.next_value::<Vec<Fragment>>()?,
+                                    );
                                 },
 
                                 _ => {
@@ -575,7 +631,7 @@ mod run_splits {
                             ));
                         }
 
-                        let mut splits = [Split::null(); N];
+                        let mut splits = [Fragment::null(); N];
 
                         splits[..len].copy_from_slice(splits_vec.as_slice());
 
@@ -588,9 +644,9 @@ mod run_splits {
         }
     }
 
-    impl<const N: usize> gtree::Join for InsertionSplits<N> {}
+    impl<const N: usize> gtree::Join for Fragments<N> {}
 
-    impl<const N: usize> gtree::Leaf for InsertionSplits<N> {
+    impl<const N: usize> gtree::Leaf for Fragments<N> {
         type Length = Length;
 
         #[inline]
@@ -599,12 +655,12 @@ mod run_splits {
         }
     }
 
-    impl<const N: usize> InsertionSplits<N> {
+    impl<const N: usize> Fragments<N> {
         #[inline]
         pub fn leaves(&self) -> RunSplitLeaves<'_> {
             match self {
                 Self::Array(array) => {
-                    let iter = Box::new(array.splits().iter()) as _;
+                    let iter = Box::new(array.fragments().iter()) as _;
                     RunSplitLeaves { iter }
                 },
 
@@ -619,11 +675,11 @@ mod run_splits {
     }
 
     pub(crate) struct RunSplitLeaves<'a> {
-        iter: Box<dyn Iterator<Item = &'a Split> + 'a>,
+        iter: Box<dyn Iterator<Item = &'a Fragment> + 'a>,
     }
 
     impl<'a> Iterator for RunSplitLeaves<'a> {
-        type Item = &'a Split;
+        type Item = &'a Fragment;
 
         fn next(&mut self) -> Option<Self::Item> {
             self.iter.next()
@@ -631,27 +687,24 @@ mod run_splits {
     }
 }
 
-/// TODO: docs
+/// The length and [`LeafIdx`] of a fragment of a single insertion run.
 #[derive(Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-pub(crate) struct Split {
-    /// TODO: docs
+pub(crate) struct Fragment {
     len: Length,
-
-    /// TODO: docs
-    idx_in_run_tree: LeafIdx<EditRun>,
+    idx: LeafIdx<EditRun>,
 }
 
-impl core::fmt::Debug for Split {
+impl core::fmt::Debug for Fragment {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{} @ {:?}", self.len, self.idx_in_run_tree)
+        write!(f, "{} @ {:?}", self.len, self.idx)
     }
 }
 
-impl Split {
+impl Fragment {
     #[inline]
     const fn null() -> Self {
-        Self { len: 0, idx_in_run_tree: LeafIdx::dangling() }
+        Self { len: 0, idx: LeafIdx::dangling() }
     }
 
     #[inline]
@@ -661,7 +714,7 @@ impl Split {
 
     #[inline]
     fn new(len: Length, idx: LeafIdx<EditRun>) -> Self {
-        Self { idx_in_run_tree: idx, len }
+        Self { idx, len }
     }
 
     #[inline]
@@ -673,13 +726,13 @@ impl Split {
         debug_assert!(at_offset < self.len);
         let right_len = self.len - at_offset;
         self.len = at_offset;
-        Self { idx_in_run_tree: right_idx, len: right_len }
+        Self { idx: right_idx, len: right_len }
     }
 }
 
-impl gtree::Join for Split {}
+impl gtree::Join for Fragment {}
 
-impl gtree::Leaf for Split {
+impl gtree::Leaf for Fragment {
     type Length = Length;
 
     #[inline]

@@ -46,10 +46,10 @@ pub struct Replica {
     /// The value of the Lamport clock at this replica.
     lamport_clock: LamportClock,
 
-    /// A local clock that's incremented every time a new insertion is created
-    /// at this replica. If an insertion is merged into the previous one the
+    /// A local clock that's incremented every time a new insertion run is
+    /// created at this replica. If an insertion continues the current run the
     /// clock is not incremented.
-    insertion_clock: InsertionClock,
+    run_clock: RunClock,
 
     /// Contains the latest character timestamps of all the replicas that this
     /// replica has seen so far.
@@ -248,7 +248,7 @@ impl Replica {
         let replica = Self {
             id,
             run_tree,
-            insertion_clock: InsertionClock::new(),
+            run_clock: RunClock::new(),
             lamport_clock,
             version_map,
             deletion_map,
@@ -361,7 +361,7 @@ impl Replica {
         Self {
             id: new_id,
             run_tree: self.run_tree.clone(),
-            insertion_clock: InsertionClock::new(),
+            run_clock: RunClock::new(),
             lamport_clock: self.lamport_clock,
             version_map: self.version_map.fork(new_id, 0),
             deletion_map: self.deletion_map.fork(new_id, 1),
@@ -427,7 +427,7 @@ impl Replica {
         let (anchor, anchor_ts) = self.run_tree.insert(
             at_offset,
             text.clone(),
-            &mut self.insertion_clock,
+            &mut self.run_clock,
             &mut self.lamport_clock,
         );
 
@@ -436,7 +436,7 @@ impl Replica {
             anchor_ts,
             text,
             self.lamport_clock.last(),
-            self.insertion_clock.last(),
+            self.run_clock.last(),
         )
     }
 
@@ -641,7 +641,7 @@ impl Replica {
     {
         let id = id.into();
 
-        let mut insertion_clock = InsertionClock::new();
+        let mut run_clock = RunClock::new();
 
         let mut lamport_clock = LamportClock::new();
 
@@ -650,7 +650,7 @@ impl Replica {
         let origin_run = EditRun::new(
             Anchor::origin(),
             initial_text,
-            insertion_clock.next(),
+            run_clock.next(),
             lamport_clock.next(),
         );
 
@@ -659,7 +659,7 @@ impl Replica {
         Self {
             id,
             run_tree,
-            insertion_clock,
+            run_clock,
             lamport_clock,
             version_map: VersionMap::new(id, len),
             deletion_map: DeletionMap::new(id, 1),
@@ -731,21 +731,21 @@ impl LamportClock {
     }
 }
 
-pub type InsertionTs = u64;
+pub type RunTs = u64;
 
-/// A local clock used to determine the order of insertions.
+/// A local clock used increased every time a new insertion run is started.
 #[derive(Copy, Clone)]
-pub struct InsertionClock(InsertionTs);
+pub struct RunClock(RunTs);
 
-impl core::fmt::Debug for InsertionClock {
+impl core::fmt::Debug for RunClock {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl InsertionClock {
+impl RunClock {
     #[inline]
-    fn last(&self) -> InsertionTs {
+    fn last(&self) -> RunTs {
         self.0.saturating_sub(1)
     }
 
@@ -755,7 +755,7 @@ impl InsertionClock {
     }
 
     #[inline]
-    pub fn next(&mut self) -> InsertionTs {
+    pub fn next(&mut self) -> RunTs {
         let next = self.0;
         self.0 += 1;
         next
@@ -913,7 +913,7 @@ mod debug {
                 .field("run_tree", &self.debug_run_tree)
                 .field("run_indices", &replica.run_tree.run_indices())
                 .field("lamport_clock", &replica.lamport_clock)
-                .field("insertion_clock", &replica.insertion_clock)
+                .field("run_clock", &replica.run_clock)
                 .field("version_map", &replica.version_map)
                 .field("deletion_map", &replica.deletion_map)
                 .field("backlog", &replica.backlog)
