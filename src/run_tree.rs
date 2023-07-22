@@ -21,9 +21,9 @@ impl RunTree {
         run: EditRun,
         append_to: LeafIdx<EditRun>,
     ) -> (Length, InsertionOutcome) {
-        let appending_to = self.gtree.get_leaf(append_to);
+        let appending_to = self.gtree.leaf(append_to);
 
-        debug_assert!(self.gtree.get_leaf(append_to).can_append(&run));
+        debug_assert!(self.gtree.leaf(append_to).can_append(&run));
 
         let replica_id = appending_to.replica_id();
         let leaf_len = appending_to.len();
@@ -188,7 +188,7 @@ impl RunTree {
 
     #[inline]
     pub fn get_run(&self, run_idx: LeafIdx<EditRun>) -> &EditRun {
-        self.gtree.get_leaf(run_idx)
+        self.gtree.leaf(run_idx)
     }
 
     #[inline]
@@ -315,7 +315,7 @@ impl RunTree {
 
         let replica_id = run.replica_id();
 
-        let mut leaves = self.gtree.leaves_from_start();
+        let mut leaves = self.gtree.leaves_from_first();
 
         let (mut prev_idx, first_leaf) = leaves.next().unwrap();
 
@@ -366,7 +366,7 @@ impl RunTree {
             .get(run.anchor().replica_id())
             .idx_at_offset(insertion.anchor_ts(), run.anchor().offset);
 
-        let anchor = self.gtree.get_leaf(anchor_idx);
+        let anchor = self.gtree.leaf(anchor_idx);
 
         // If the insertion is anchored in the middle of the anchor run then
         // there can't be any other runs that are tied with it. In this case we
@@ -432,7 +432,7 @@ impl RunTree {
         at_offset: Length,
     ) -> (Length, InsertionOutcome) {
         debug_assert!(at_offset > 0);
-        let splitting = self.gtree.get_leaf(insert_into);
+        let splitting = self.gtree.leaf(insert_into);
 
         debug_assert!(at_offset < splitting.len());
 

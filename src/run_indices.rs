@@ -246,7 +246,7 @@ mod run_splits {
 
                 Self::Gtree(gtree) => f
                     .debug_list()
-                    .entries(gtree.leaves_from_start().map(|(_, split)| split))
+                    .entries(gtree.leaves_from_first().map(|(_, split)| split))
                     .finish(),
             }
         }
@@ -293,7 +293,7 @@ mod run_splits {
                 },
 
                 InsertionSplits::Gtree(splits) => {
-                    splits.get_last_leaf_mut(|last| {
+                    splits.with_last_leaf_mut(|last| {
                         last.len += extend_by;
                     });
                 },
@@ -338,7 +338,7 @@ mod run_splits {
 
                 Self::Gtree(splits) => {
                     let (leaf_idx, _) = splits.leaf_at_offset(at_offset);
-                    let next_idx = splits.get_next_leaf(leaf_idx);
+                    let next_idx = splits.next_leaf(leaf_idx);
                     splits.with_two_mut(leaf_idx, next_idx, |this, next| {
                         this.len -= len_move;
                         next.len += len_move;
@@ -377,7 +377,7 @@ mod run_splits {
 
                 Self::Gtree(splits) => {
                     let (leaf_idx, _) = splits.leaf_at_offset(at_offset);
-                    let prev_idx = splits.get_prev_leaf(leaf_idx);
+                    let prev_idx = splits.prev_leaf(leaf_idx);
                     splits.with_two_mut(prev_idx, leaf_idx, |prev, this| {
                         this.len -= len_move;
                         prev.len += len_move;
@@ -459,7 +459,7 @@ mod run_splits {
 
                 Self::Gtree(gtree) => {
                     let (leaf_idx, _) = gtree.leaf_at_offset(at_offset);
-                    gtree.get_leaf(leaf_idx)
+                    gtree.leaf(leaf_idx)
                 },
             }
         }
@@ -650,7 +650,7 @@ mod run_splits {
 
                 Self::Gtree(gtree) => {
                     let iter = Box::new(
-                        gtree.leaves_from_start().map(|(_idx, leaf)| leaf),
+                        gtree.leaves_from_first().map(|(_idx, leaf)| leaf),
                     ) as _;
                     RunSplitLeaves { iter }
                 },
