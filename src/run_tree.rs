@@ -551,7 +551,7 @@ pub(crate) struct EditRun {
     insertion_ts: InsertionTs,
 
     /// TODO: docs
-    lamport_ts: LamportTimestamp,
+    lamport_ts: LamportTs,
 
     /// TODO: docs
     is_deleted: bool,
@@ -706,7 +706,7 @@ impl EditRun {
         inserted_at: Anchor,
         text: Text,
         insertion_ts: InsertionTs,
-        lamport_ts: LamportTimestamp,
+        lamport_ts: LamportTs,
     ) -> Self {
         Self { inserted_at, text, insertion_ts, lamport_ts, is_deleted: false }
     }

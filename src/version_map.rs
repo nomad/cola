@@ -1,8 +1,8 @@
 use core::cmp::{Ordering, PartialOrd};
 
-use crate::{DeletionClock, Length, ReplicaId, ReplicaIdMap};
+use crate::{DeletionTs, Length, ReplicaId, ReplicaIdMap};
 
-pub type DeletionMap = BaseMap<DeletionClock>;
+pub type DeletionMap = BaseMap<DeletionTs>;
 
 pub type VersionMap = BaseMap<Length>;
 

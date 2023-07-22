@@ -46,7 +46,7 @@ impl CrdtEdit {
         anchor: Anchor,
         anchor_ts: InsertionTs,
         text: Text,
-        lamport_ts: LamportTimestamp,
+        lamport_ts: LamportTs,
         insertion_ts: InsertionTs,
     ) -> Self {
         let insertion =
@@ -94,7 +94,7 @@ pub(crate) struct Insertion {
     insertion_ts: InsertionTs,
 
     /// The Lamport timestamp of this insertion.
-    lamport_ts: LamportTimestamp,
+    lamport_ts: LamportTs,
 }
 
 impl Insertion {
@@ -124,7 +124,7 @@ impl Insertion {
     }
 
     #[inline(always)]
-    pub fn lamport_ts(&self) -> LamportTimestamp {
+    pub fn lamport_ts(&self) -> LamportTs {
         self.lamport_ts
     }
 

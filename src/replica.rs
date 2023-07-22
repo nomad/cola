@@ -36,28 +36,35 @@ use crate::*;
 /// Basically, you tell your `Replica` how your buffer changes, and it tells
 /// you how your buffer *should* change when receiving remote edits.
 pub struct Replica {
-    /// TODO: docs
+    /// The unique identifier of this replica.
     id: ReplicaId,
 
-    /// TODO: docs
+    /// Contains all the [`EditRun`]s that have been applied to this replica so
+    /// far. This is the main data structure.
     run_tree: RunTree,
 
-    /// TODO: docs
+    /// A secondary data structure that allows to quickly find the
+    /// [`LeafIdx`](crate::LeafIdx) of the run that contains a given
+    /// [`Anchor`].
     run_indices: RunIndices,
 
-    /// TODO: docs
+    /// The value of the Lamport clock at this replica.
     lamport_clock: LamportClock,
 
-    /// TODO: docs
+    /// A local clock that's incremented every time a new insertion is created
+    /// at this replica. If an insertion is merged into the previous one the
+    /// clock is not incremented.
     insertion_clock: InsertionClock,
 
-    /// TODO: docs
+    /// Contains the latest character timestamps of all the replicas that this
+    /// replica has seen so far.
     version_map: VersionMap,
 
-    /// TODO: docs
+    /// A clock that keeps track of the order in which insertions happened at
+    /// this replica.
     deletion_map: DeletionMap,
 
-    /// TODO: docs
+    /// A collection of remote edits waiting to be merged.
     backlog: Backlog,
 }
 
@@ -134,28 +141,31 @@ impl Replica {
         Backlogged::from_replica(self)
     }
 
-    /// TOOD: docs
     #[inline]
     pub(crate) fn backlog_mut(&mut self) -> &mut Backlog {
         &mut self.backlog
     }
 
-    /// TODO: docs
+    /// Returns `true` if this `Replica` is ready to merge the given
+    /// `Deletion`.
     #[inline]
     pub(crate) fn can_merge_deletion(&self, deletion: &Deletion) -> bool {
         debug_assert!(!self.has_merged_deletion(deletion));
 
         (
-            // TODO: docs
+            // Makes sure that we merge deletions in the same order they were
+            // created.
             self.deletion_map.get(deletion.deleted_by()) + 1
                 == deletion.deletion_ts()
         ) && (
-            // TODO: docs
+            // Makes sure that we have already merged all the insertions that
+            // the remote `Replica` had when it generated the deletion.
             self.version_map >= *deletion.version_map()
         )
     }
 
-    /// TODO: docs
+    /// Returns `true` if this `Replica` is ready to merge the given
+    /// `Insertion`.
     #[inline]
     pub(crate) fn can_merge_insertion(&self, insertion: &Insertion) -> bool {
         debug_assert!(!self.has_merged_insertion(insertion));
@@ -378,6 +388,11 @@ impl Replica {
         self.run_tree.count_empty_leaves()
     }
 
+    /// Returns `true` if the given `Replica` shares the same document state as
+    /// this one.
+    ///
+    /// This is used in tests to make sure that an encode-decode roundtrip was
+    /// successful.
     #[doc(hidden)]
     pub fn eq_decoded(&self, other: &Self) -> bool {
         self.run_tree == other.run_tree
@@ -439,13 +454,15 @@ impl Replica {
         }
     }
 
-    /// TODO: docs
+    /// Returns `true` if this `Replica` has already merged the given
+    /// `Deletion`.
     #[inline]
     fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
         self.deletion_map.get(deletion.deleted_by()) > deletion.deletion_ts()
     }
 
-    /// TODO: docs
+    /// Returns `true` if this `Replica` has already merged the given
+    /// `Insertion`.
     #[inline]
     fn has_merged_insertion(&self, insertion: &Insertion) -> bool {
         self.version_map.get(insertion.inserted_by()) > insertion.start()
@@ -599,7 +616,6 @@ impl Replica {
         }
     }
 
-    /// TODO: docs
     #[inline]
     fn merge_deletion(&mut self, deletion: &Deletion) -> Option<TextEdit> {
         debug_assert!(!self.has_merged_deletion(deletion));
@@ -612,7 +628,6 @@ impl Replica {
         }
     }
 
-    /// TODO: docs
     #[inline]
     fn merge_insertion(&mut self, insertion: &Insertion) -> Option<TextEdit> {
         debug_assert!(!self.has_merged_insertion(insertion));
@@ -625,7 +640,8 @@ impl Replica {
         }
     }
 
-    /// TODO: docs
+    /// Merges the given [`Deletion`] without checking whether it can be
+    /// merged.
     #[inline]
     pub(crate) fn merge_unchecked_deletion(
         &mut self,
@@ -649,7 +665,8 @@ impl Replica {
         }
     }
 
-    /// TODO: docs
+    /// Merges the given [`Insertion`] without checking whether it can be
+    /// merged.
     #[inline]
     pub(crate) fn merge_unchecked_insertion(
         &mut self,
@@ -768,53 +785,58 @@ impl core::fmt::Debug for Replica {
     }
 }
 
-/// TODO: docs
-#[derive(Copy, Clone, Default)]
+pub type LamportTs = u64;
+
+/// A distributed logical clock used to determine if a run was in the document
+/// when another run was inserted.
+///
+/// If it was then its [`LamportTs`] is guaranteed to be strictly less than the
+/// new run's [`LamportTs`].
+///
+/// See [this](https://en.wikipedia.org/wiki/Lamport_timestamp) for more.
+#[derive(Copy, Clone)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-pub struct LamportClock(u64);
+pub struct LamportClock(LamportTs);
 
 impl core::fmt::Debug for LamportClock {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "LamportClock({})", self.0)
+        self.0.fmt(f)
     }
 }
 
 impl LamportClock {
     #[inline]
-    fn last(&self) -> LamportTimestamp {
+    fn last(&self) -> LamportTs {
         self.0.saturating_sub(1)
     }
 
     #[inline]
     fn new() -> Self {
-        Self::default()
+        Self(0)
     }
 
-    /// TODO: docs
     #[inline]
-    pub fn next(&mut self) -> LamportTimestamp {
+    pub fn next(&mut self) -> LamportTs {
         let next = self.0;
         self.0 += 1;
         next
     }
 
-    /// TODO: docs
     #[inline]
-    fn update(&mut self, other: LamportTimestamp) {
+    fn update(&mut self, other: LamportTs) {
         self.0 = self.0.max(other) + 1;
     }
 }
 
-/// TODO: docs
-pub type LamportTimestamp = u64;
+pub type InsertionTs = u64;
 
-/// TODO: docs
-#[derive(Copy, Clone, Default)]
-pub struct InsertionClock(u64);
+/// A local clock used to determine the order of insertions.
+#[derive(Copy, Clone)]
+pub struct InsertionClock(InsertionTs);
 
 impl core::fmt::Debug for InsertionClock {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "InsertionClock({})", self.0)
+        self.0.fmt(f)
     }
 }
 
@@ -826,10 +848,9 @@ impl InsertionClock {
 
     #[inline]
     fn new() -> Self {
-        Self::default()
+        Self(0)
     }
 
-    /// TODO: docs
     #[inline]
     pub fn next(&mut self) -> InsertionTs {
         let next = self.0;
@@ -838,14 +859,7 @@ impl InsertionClock {
     }
 }
 
-/// TODO: docs
-pub type InsertionTs = u64;
-
-/// TODO: docs
-pub type DeletionClock = u64;
-
-/// TODO: docs
-pub type DeletionTs = DeletionClock;
+pub type DeletionTs = u64;
 
 #[cfg(feature = "encode")]
 mod encode {
@@ -856,7 +870,6 @@ mod encode {
     type EncodedFields =
         (RunTree, RunIndices, LamportClock, VersionMap, DeletionMap, Backlog);
 
-    /// TODO: docs
     #[inline]
     pub(super) fn encode(replica: &Replica) -> Vec<u8> {
         let mut encoded = Vec::new();
@@ -871,7 +884,6 @@ mod encode {
         encoded
     }
 
-    /// TODO: docs
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Option<EncodedFields> {
         let (run_tree, bytes) = decode_field(bytes)?;
