@@ -230,7 +230,6 @@ impl Replica {
 
         let Some((
             run_tree,
-            run_indices,
             lamport_clock,
             mut version_map,
             mut deletion_map,
@@ -249,7 +248,6 @@ impl Replica {
         let replica = Self {
             id,
             run_tree,
-            run_indices,
             insertion_clock: InsertionClock::new(),
             lamport_clock,
             version_map,
@@ -773,14 +771,13 @@ mod encode {
     use super::*;
 
     type EncodedFields =
-        (RunTree, RunIndices, LamportClock, VersionMap, DeletionMap, Backlog);
+        (RunTree, LamportClock, VersionMap, DeletionMap, Backlog);
 
     #[inline]
     pub(super) fn encode(replica: &Replica) -> Vec<u8> {
         let mut encoded = Vec::new();
 
         encode_field(&mut encoded, &replica.run_tree);
-        encode_field(&mut encoded, &replica.run_indices);
         encode_field(&mut encoded, &replica.lamport_clock);
         encode_field(&mut encoded, &replica.version_map);
         encode_field(&mut encoded, &replica.deletion_map);
@@ -792,21 +789,13 @@ mod encode {
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Option<EncodedFields> {
         let (run_tree, bytes) = decode_field(bytes)?;
-        let (run_indices, bytes) = decode_field(bytes)?;
         let (lamport_clock, bytes) = decode_field(bytes)?;
         let (version_map, bytes) = decode_field(bytes)?;
         let (deletion_map, bytes) = decode_field(bytes)?;
         let (backlog, bytes) = decode_field(bytes)?;
 
         if bytes.is_empty() {
-            Some((
-                run_tree,
-                run_indices,
-                lamport_clock,
-                version_map,
-                deletion_map,
-                backlog,
-            ))
+            Some((run_tree, lamport_clock, version_map, deletion_map, backlog))
         } else {
             None
         }
