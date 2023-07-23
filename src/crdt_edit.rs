@@ -33,11 +33,20 @@ impl CrdtEdit {
     #[inline]
     pub(crate) fn deletion(
         start: Anchor,
+        start_ts: RunTs,
         end: Anchor,
+        end_ts: RunTs,
         version_map: VersionMap,
         deletion_ts: DeletionTs,
     ) -> Self {
-        let deletion = Deletion { start, end, version_map, deletion_ts };
+        let deletion = Deletion {
+            start,
+            start_ts,
+            end,
+            end_ts,
+            version_map,
+            deletion_ts,
+        };
         Self { kind: CrdtEditKind::Deletion(deletion) }
     }
 
@@ -154,8 +163,14 @@ pub(crate) struct Deletion {
     /// The anchor point of the start of the deleted range.
     start: Anchor,
 
+    /// The run timestamp of the [`EditRun`] containing the start `Anchor`.
+    start_ts: RunTs,
+
     /// The anchor point of the end of the deleted range.
     end: Anchor,
+
+    /// The run timestamp of the [`EditRun`] containing the end `Anchor`.
+    end_ts: RunTs,
 
     /// The version map of the replica at the time of the deletion. This is
     /// used by a `Replica` merging this deletion to determine:

@@ -292,13 +292,21 @@ impl Replica {
 
         let deleted_range = (start..end).into();
 
-        let (start, end) = self.run_tree.delete(deleted_range);
+        let (start, start_ts, end, end_ts) =
+            self.run_tree.delete(deleted_range);
 
         let deletion_ts = self.deletion_map.this();
 
         *self.deletion_map.this_mut() += 1;
 
-        CrdtEdit::deletion(start, end, self.version_map.clone(), deletion_ts)
+        CrdtEdit::deletion(
+            start,
+            start_ts,
+            end,
+            end_ts,
+            self.version_map.clone(),
+            deletion_ts,
+        )
     }
 
     #[doc(hidden)]

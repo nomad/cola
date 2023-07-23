@@ -70,7 +70,10 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn delete(&mut self, range: Range<Length>) -> (Anchor, Anchor) {
+    pub fn delete(
+        &mut self,
+        range: Range<Length>,
+    ) -> (Anchor, RunTs, Anchor, RunTs) {
         let mut id_start = ReplicaId::zero();
         let mut run_ts_start = 0;
         let mut offset_start = 0;
@@ -131,7 +134,9 @@ impl RunTree {
 
             return (
                 Anchor::new(id_start, offset_start),
+                run_ts_start,
                 Anchor::new(id_end, offset_end),
+                run_ts_end,
             );
         }
 
@@ -185,7 +190,7 @@ impl RunTree {
         let anchor_end =
             Anchor::new(id_range, deleted_range_offset + deleted_range.end);
 
-        (anchor_start, anchor_end)
+        (anchor_start, run_ts_range, anchor_end, run_ts_range)
     }
 
     #[inline]
