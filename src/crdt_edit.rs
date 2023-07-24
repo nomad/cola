@@ -204,8 +204,18 @@ impl Deletion {
     }
 
     #[inline(always)]
+    pub fn end_ts(&self) -> RunTs {
+        self.end_ts
+    }
+
+    #[inline(always)]
     pub fn start(&self) -> Anchor {
         self.start
+    }
+
+    #[inline(always)]
+    pub fn start_ts(&self) -> RunTs {
+        self.start_ts
     }
 
     #[inline(always)]

@@ -575,7 +575,7 @@ impl Replica {
         *self.deletion_map.get_mut(deletion.deleted_by()) =
             deletion.deletion_ts();
 
-        match outcome {
+        match outcome? {
             MergedDeletion::Contiguous(range) => {
                 Some(TextEdit::ContiguousDeletion(range))
             },

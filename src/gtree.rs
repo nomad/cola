@@ -691,6 +691,23 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
+    /// Returns the offset of the given leaf from the start of the Gtree.
+    #[inline]
+    pub fn offset_of_leaf(&self, leaf_idx: LeafIdx<L>) -> L::Length {
+        let mut offset = L::Length::zero();
+
+        offset += self.offset_of_leaf_child(leaf_idx);
+
+        let mut inode_idx = self.lnode(leaf_idx).parent();
+
+        while !self.is_root(inode_idx) {
+            offset += self.offset_of_internal_child(inode_idx);
+            inode_idx = self.inode(inode_idx).parent();
+        }
+
+        offset
+    }
+
     /// Prepends a new leaf node to start of the Gtree, returning its newly
     /// created leaf index.
     #[inline]
@@ -2033,23 +2050,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
 
         unreachable!();
-    }
-
-    /// Returns the offset of the given leaf from the start of the Gtree.
-    #[inline]
-    fn offset_of_leaf(&self, leaf_idx: LeafIdx<L>) -> L::Length {
-        let mut offset = L::Length::zero();
-
-        offset += self.offset_of_leaf_child(leaf_idx);
-
-        let mut inode_idx = self.lnode(leaf_idx).parent();
-
-        while !self.is_root(inode_idx) {
-            offset += self.offset_of_internal_child(inode_idx);
-            inode_idx = self.inode(inode_idx).parent();
-        }
-
-        offset
     }
 
     /// Returns the offset of the given leaf in its parent, i.e. the sum of the
