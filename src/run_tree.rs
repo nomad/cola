@@ -370,74 +370,6 @@ impl RunTree {
     }
 
     #[inline]
-    fn stuff<'a, I>(
-        &mut self,
-        mut runs: I,
-        start_idx: LeafIdx<EditRun>,
-        end_idx: LeafIdx<EditRun>,
-        version_map: &VersionMap,
-    ) -> Outcome
-    where
-        I: Iterator<Item = (LeafIdx<EditRun>, &'a EditRun)>,
-    {
-        todo!();
-
-        // let mut len_skipped = 0;
-        //
-        // let mut len_deleted = 0;
-
-        // AAAAAAAAAAAAAAA this shit is fucking impossible to write.
-        //
-        // end -> return
-        //
-        // Deleted -> always skip
-        //
-        // Ends over
-        //   -> start is also over
-        //      -> is_first_whole || last_was_whole -> add to len_skipped cntn
-        //      -> not -> return
-        //
-        //   -> start is not over -> return
-        //
-        // Whole run is visible and present at deletion -> delete leaf and add
-        // to
-        //
-        //
-        // DOOOOH
-        //
-
-        // loop {
-        //     let Some((run_idx, run)) = runs.next() else {
-        //         return OutCome::IteratorEnded();
-        //         // return Stuff::Finish(len_deleted);
-        //     };
-        //
-        //     if run_idx == end_idx {
-        //         return Stuff::Done(len_deleted);
-        //     }
-        //
-        //     if run.is_deleted {
-        //         continue;
-        //     }
-        //
-        //     let delete_up_to = version_map.get(run.replica_id());
-        //
-        //     if run.end() > delete_up_to {
-        //         if run.start() >= delete_up_to && len_deleted == 0 {
-        //             len_skipped += run.len();
-        //         } else {
-        //             todo!();
-        //             // return Stuff::Dont((run_idx, len_deleted, delete_up_to));
-        //         }
-        //     }
-        //
-        //     len_deleted += run.len();
-        //
-        //     self.delete_leaf(run_idx);
-        // }
-    }
-
-    #[inline]
     pub fn merge_deletion(
         &mut self,
         deletion: &Deletion,
@@ -469,18 +401,25 @@ impl RunTree {
             }
         }
 
+        /// TODO: docs
+        enum DeletionState {
+            Deleting(Length),
+            Skipping,
+            Starting,
+        }
+
         let end_idx =
             self.run_indices.idx_at_anchor(deletion.end(), deletion.end_ts());
 
-        let mut deletion_run =
+        let mut state =
             if start.is_deleted || start.end() == deletion.start().offset {
-                DeletionRun::Starting
+                DeletionState::Starting
             } else {
                 let delete_from = deletion.start().offset - start.start();
                 visible_offset += delete_from;
                 let len = start.len();
                 self.delete_leaf_range(start_idx, (delete_from..len).into());
-                DeletionRun::Deleting(visible_offset + delete_from)
+                DeletionState::Deleting(visible_offset + delete_from)
             };
 
         let mut runs = self.gtree.leaves::<false>(start_idx);
@@ -492,12 +431,26 @@ impl RunTree {
 
             if run_idx == end_idx {
                 if run.is_deleted {
-                    todo!();
-                    break;
+                    if let DeletionState::Deleting(start_offset) = state {
+                        ranges.push(start_offset..visible_offset);
+                    }
                 } else {
-                    todo!();
-                    break;
+                    let delete_up_to = deletion.end().offset - run.start();
+
+                    self.delete_leaf_range(end_idx, (0..delete_up_to).into());
+
+                    let deletion_start =
+                        if let DeletionState::Deleting(start) = state {
+                            start
+                        } else {
+                            visible_offset
+                        };
+
+                    let deletion_end = visible_offset + delete_up_to;
+
+                    ranges.push(deletion_start..deletion_end);
                 }
+                break;
             }
 
             if run.is_deleted {
@@ -510,28 +463,18 @@ impl RunTree {
 
             if run.end() > deleted_up_to {
                 if run.start() >= deleted_up_to {
-                    match deletion_run {
-                        DeletionRun::Deleting(start_offset) => {
-                            ranges.push(start_offset..visible_offset);
-
-                            deletion_run =
-                                DeletionRun::Skipping(visible_offset);
-                        },
-
-                        DeletionRun::Starting => {
-                            deletion_run =
-                                DeletionRun::Skipping(visible_offset);
-                        },
-
-                        DeletionRun::Skipping(_) => {},
+                    if let DeletionState::Deleting(start_offset) = state {
+                        ranges.push(start_offset..visible_offset);
                     }
+
+                    state = DeletionState::Skipping;
                 } else {
                     let delete_up_to = deleted_up_to - run.start();
 
                     self.delete_leaf_range(run_idx, (0..delete_up_to).into());
 
                     let deletion_start =
-                        if let DeletionRun::Deleting(start) = deletion_run {
+                        if let DeletionState::Deleting(start) = state {
                             start
                         } else {
                             visible_offset
@@ -541,14 +484,16 @@ impl RunTree {
 
                     ranges.push(deletion_start..deletion_end);
 
-                    deletion_run = DeletionRun::Skipping(deletion_end);
+                    state = DeletionState::Skipping;
 
                     runs = self.gtree.leaves::<false>(run_idx);
                 }
             }
 
-            if !matches!(deletion_run, DeletionRun::Deleting(_)) {
-                deletion_run = DeletionRun::Deleting(visible_offset);
+            if !matches!(state, DeletionState::Deleting(_)) {
+                state = DeletionState::Deleting(visible_offset);
+
+                // TODO: delete run
             }
 
             visible_offset += run_len;
@@ -563,189 +508,6 @@ impl RunTree {
 
             _ => Some(MergedDeletion::Split(ranges)),
         }
-    }
-
-    #[inline]
-    pub fn merge_deletion_2(
-        &self,
-        deletion: &Deletion,
-    ) -> Option<MergedDeletion> {
-        todo!();
-
-        // let mut start_idx = if deletion.start().is_zero() {
-        //     todo!();
-        // } else {
-        //     self.run_indices
-        //         .idx_at_anchor(deletion.start(), deletion.start_ts())
-        // };
-        //
-        // let start_offset = self.gtree.offset_of_leaf(start_idx);
-        //
-        // let mut start = self.gtree.leaf(start_idx);
-        //
-        // let end_idx =
-        //     self.run_indices.idx_at_anchor(deletion.end(), deletion.end_ts());
-        //
-        // let mut state = DeletionState::Began(start_offset);
-        //
-        // let start_idx = loop {
-        //     let siblings = self.gtree.siblings::<true>(start_idx);
-        //
-        //     let (outcome, last_idx) =
-        //         self.stuff(siblings, end_idx, deletion.version_map());
-        //
-        //     start_idx = self.update_state(&mut state, outcome, last_idx);
-        //
-        //     match state {
-        //         DeletionState::Done(result) => return result,
-        //         DeletionState::Next => break start_idx,
-        //         _ => continue,
-        //     }
-        // };
-        //
-        // loop {
-        //     let leaves = self.gtree.leaves::<false>(start_idx);
-        //
-        //     let (outcome, last_idx) =
-        //         self.stuff(leaves, end_idx, deletion.version_map());
-        //
-        //     start_idx = self.update_state(&mut state, outcome, last_idx);
-        //
-        //     if let DeletionState::Done(result) = state {
-        //         return result;
-        //     }
-        // }
-
-        // 'outer: loop {
-        //     let mut last_idx = start_idx;
-        //
-        //     for (idx, run) in self.gtree.siblings::<true>(start_idx) {
-        //         if !run.is_deleted {
-        //             start = run;
-        //             break 'outer;
-        //         } else if idx == end_idx {
-        //             return None;
-        //         }
-        //         last_idx = idx;
-        //     }
-        //
-        //     for (idx, run) in self.gtree.leaves::<false>(last_idx) {
-        //         if !run.is_deleted {
-        //             start = run;
-        //             break 'outer;
-        //         } else if idx == end_idx {
-        //             return None;
-        //         }
-        //     }
-        //
-        //     unreachable!();
-        // }
-        //
-        // if start.contains(deletion.end()) {
-        //     let run = start;
-        //     let start = deletion.start().offset - run.start();
-        //     let end = deletion.end().offset - run.start();
-        //     let range = (start..end).into();
-        //     self.delete_leaf_range(start_idx, range);
-        //     return Some(MergedDeletion::Contiguous(
-        //         (range + start_offset).into(),
-        //     ));
-        // }
-        //
-        // let start_deletion = start_offset
-        //     + (
-        //         // TODO: this doesn't work if `start` is deleted or if start
-        //         // has been modified
-        //         deletion.start().offset - start.start()
-        //     );
-        //
-        // let siblings = self.gtree.siblings::<true>(start_idx);
-        //
-        // let (stopped_at_idx, len_skipped, len_deleted) =
-        //     self.stuff(siblings, start_idx, end_idx, deletion.version_map());
-        //
-        // if stopped_at_idx == end_idx {
-        //     let start = start_deletion + len_skipped;
-        //
-        //     let end = self.gtree.leaf(end_idx);
-        //
-        //     let end = if deletion.end().offset < end.len() {
-        //         let delete_up_to = deletion.end().offset - end.start();
-        //         self.delete_leaf_range(end_idx, (0..delete_up_to).into());
-        //         start + len_deleted + delete_up_to
-        //     } else {
-        //         let len = end.len();
-        //         self.delete_leaf(end_idx);
-        //         start + len_deleted + end.len()
-        //     };
-        //
-        //     return Some(MergedDeletion::Contiguous(start..end));
-        // }
-
-        // TODO: the `delete_leaf_range` logic should be handled by `stuff`
-        // (which is already deleting whole leaves).
-
-        // match self.stuff(siblings, start_idx, end_idx, deletion.version_map())
-        // {
-        //     Stuff::Dont(leaf_idx, len_deleted, delete_up_to) => {
-        //         let end = self.gtree.leaf(leaf_idx);
-        //         self.delete_leaf_range(end_idx, (0..delete_up_to).into());
-        //         let end_deletion = start_deletion + len_deleted + delete_up_to;
-        //         let deleted_range = start_deletion..end_deletion;
-        //         let mut ranges = vec![deleted_range];
-        //
-        //         let siblings = self.gtree.siblings::<false>(leaf_idx);
-        //
-        //         match self.stuff(
-        //             siblings,
-        //             start_idx,
-        //             end_idx,
-        //             deletion.version_map(),
-        //         ) {
-        //             _ => todo!(),
-        //         }
-        //     },
-        //
-        //     Stuff::Done(len_deleted) => {
-        //         let end = self.gtree.leaf(end_idx);
-        //         let delete_up_to = deletion.end().offset - end.start();
-        //         self.delete_leaf_range(end_idx, (0..delete_up_to).into());
-        //         let end_deletion = start_deletion + len_deleted + delete_up_to;
-        //         let deleted_range = start_deletion..end_deletion;
-        //         return Some(MergedDeletion::Contiguous(deleted_range));
-        //     },
-        //
-        //     Stuff::Finish(last_idx, len_deleted_in_siblings) => {
-        //         let leaves = self.gtree.leaves::<false>(last_idx);
-        //
-        //         match self.stuff(
-        //             leaves,
-        //             start_idx,
-        //             end_idx,
-        //             deletion.version_map(),
-        //         ) {
-        //             _ => todo!(),
-        //         }
-        //     },
-        // }
-
-        // when we use an iterator one of 3 things can happen:
-        //
-        // a) we find a run that shouldn't be deleted -> return and switch to
-        // split or push a new split to the array
-        //
-        // -> return the idx of that run and the offset at which we should
-        // delete
-        //
-        // b) we get to the end of the iterator (like for siblings)
-        //
-        // -> return the offset of the deletion wrt/ the start
-        //
-        // c) we find the end idx
-        //
-        // -> return the offset of the deletion wrt/ the start
-        //
-        // every time we should return
     }
 
     #[inline]
@@ -865,36 +627,6 @@ impl RunTree {
     }
 }
 
-// a)
-
-enum DeletionState {
-    Began(Length),
-
-    Done(Option<MergedDeletion>),
-}
-
-enum Stuff {
-    Dont(LeafIdx<EditRun>, Length, Length),
-    Done(Length),
-    Finish(LeafIdx<EditRun>, Length),
-}
-
-// we start at a leaf_idx
-//
-// if we first delete then we stop at the first leaf
-
-enum Outcome {
-    IteratorEndedWhileDeleting(LeafIdx<EditRun>, Length),
-
-    IteratorEndedWhileSkipping(LeafIdx<EditRun>, Length),
-
-    SkippedLeaves(LeafIdx<EditRun>, Length),
-
-    DeletedLeaves(LeafIdx<EditRun>, Length),
-
-    FoundEnd(LeafIdx<EditRun>, Length),
-}
-
 /// TODO: docs
 #[derive(Debug)]
 pub(crate) enum MergedDeletion {
@@ -955,12 +687,6 @@ impl PartialOrd for EditRun {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
-}
-
-enum DeletionRun {
-    Starting,
-    Deleting(Length),
-    Skipping(Length),
 }
 
 impl EditRun {
