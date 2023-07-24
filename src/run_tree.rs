@@ -6,11 +6,13 @@ use crate::*;
 
 const RUN_TREE_ARITY: usize = 32;
 
+type Gtree = crate::Gtree<RUN_TREE_ARITY, EditRun>;
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunTree {
     /// The tree of runs.
-    gtree: Gtree<RUN_TREE_ARITY, EditRun>,
+    gtree: Gtree,
 
     /// A secondary data structure that allows to quickly find the
     /// [`LeafIdx`](crate::LeafIdx) of the run that contains a given
@@ -350,13 +352,6 @@ impl RunTree {
     }
 
     #[inline]
-    fn delete_leaf(&mut self, leaf_idx: LeafIdx<EditRun>) {
-        // 1. update cursor
-
-        todo!();
-    }
-
-    #[inline]
     fn delete_leaf_range(
         &mut self,
         leaf_idx: LeafIdx<EditRun>,
@@ -498,12 +493,27 @@ impl RunTree {
 
                     runs = self.gtree.leaves::<false>(run_idx);
                 }
+
+                visible_offset += run_len;
+
+                continue;
             }
 
             if !matches!(state, DeletionState::Deleting(_)) {
                 state = DeletionState::Deleting(visible_offset);
-
-                // TODO: delete run
+                // This is awful but I'm not sure it can be avoided. We
+                // transmute a shared reference to the Gtree to an exclusive
+                // one to modify it while we're iterating over it.
+                //
+                // SAFETY: this is safe because deleting a whole run doesn't
+                // modify the Gtree's structure at all (no heap allocations,
+                // etc), only the lengths of all the nodes from the run we're
+                // deleting up to the root.
+                let gtree = unsafe {
+                    #[allow(mutable_transmutes)]
+                    core::mem::transmute::<_, &mut Gtree>(&self.gtree)
+                };
+                gtree.with_leaf_mut(run_idx, |run| run.delete());
             }
 
             visible_offset += run_len;
@@ -740,14 +750,19 @@ impl EditRun {
         self.text.range.end += extend_by;
     }
 
+    #[inline(always)]
+    fn delete(&mut self) {
+        self.is_deleted = true;
+    }
+
     #[inline]
     fn delete_from(&mut self, offset: Length) -> Option<Self> {
         if offset == 0 {
-            self.is_deleted = true;
+            self.delete();
             None
         } else if offset < self.len() {
             let mut del = self.split(offset)?;
-            del.is_deleted = true;
+            del.delete();
             Some(del)
         } else {
             None
@@ -770,7 +785,7 @@ impl EditRun {
         } else {
             let rest = self.split(end);
             let deleted = self.split(start).map(|mut d| {
-                d.is_deleted = true;
+                d.delete();
                 d
             });
             (deleted, rest)
@@ -783,10 +798,10 @@ impl EditRun {
             None
         } else if offset < self.len() {
             let rest = self.split(offset);
-            self.is_deleted = true;
+            self.delete();
             rest
         } else {
-            self.is_deleted = true;
+            self.delete();
             None
         }
     }
@@ -972,7 +987,7 @@ impl gtree::Join for EditRun {
 
 impl gtree::Delete for EditRun {
     fn delete(&mut self) {
-        self.is_deleted = true;
+        self.delete();
     }
 }
 

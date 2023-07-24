@@ -878,7 +878,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// Calls the closure with a mutable reference to the leaf at the given
     /// index.
     #[inline]
-    fn with_leaf_mut<F>(&mut self, leaf_idx: LeafIdx<L>, with_leaf: F)
+    pub fn with_leaf_mut<F>(&mut self, leaf_idx: LeafIdx<L>, with_leaf: F)
     where
         F: FnOnce(&mut L),
     {
