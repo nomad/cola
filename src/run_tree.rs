@@ -365,6 +365,7 @@ impl RunTree {
         // 1. if range starts at 0 try to merge it to previous run
         // 2. if range ends at len try to merge it to next run
         // 3. update cursor
+        // 4. update run indices
 
         todo!();
     }
@@ -375,7 +376,16 @@ impl RunTree {
         deletion: &Deletion,
     ) -> Option<MergedDeletion> {
         let start_idx = if deletion.start().is_zero() {
-            todo!();
+            // If the deletion starts at the beginning of the document we start
+            // from the first run that was visible when the deletion was made.
+            self.gtree
+                .leaves_from_first()
+                .find_map(|(run_idx, run)| {
+                    (run.start()
+                        < deletion.version_map().get(run.replica_id()))
+                    .then_some(run_idx)
+                })
+                .unwrap()
         } else {
             self.run_indices
                 .idx_at_anchor(deletion.start(), deletion.start_ts())
