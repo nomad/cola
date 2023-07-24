@@ -529,7 +529,7 @@ mod fragments {
                 serializer: S,
             ) -> Result<S::Ok, S::Error> {
                 let mut map = serializer.serialize_map(Some(3))?;
-                map.serialize_entry("splits", self.splits())?;
+                map.serialize_entry("fragments", self.fragments())?;
                 map.serialize_entry("len", &self.len)?;
                 map.serialize_entry("total_len", &self.total_len)?;
                 map.end()
@@ -560,7 +560,7 @@ mod fragments {
                     ) -> Result<Self::Value, V::Error> {
                         let mut len = None;
                         let mut total_len = None;
-                        let mut splits_vec = None;
+                        let mut fragments_vec = None;
 
                         while let Some(key) = map.next_key()? {
                             match key {
@@ -584,15 +584,15 @@ mod fragments {
                                     total_len = Some(map.next_value()?);
                                 },
 
-                                "splits" => {
-                                    if splits_vec.is_some() {
+                                "fragments" => {
+                                    if fragments_vec.is_some() {
                                         return Err(
                                             de::Error::duplicate_field(
-                                                "splits",
+                                                "fragments",
                                             ),
                                         );
                                     }
-                                    splits_vec = Some(
+                                    fragments_vec = Some(
                                         map.next_value::<Vec<Fragment>>()?,
                                     );
                                 },
@@ -600,7 +600,7 @@ mod fragments {
                                 _ => {
                                     return Err(de::Error::unknown_field(
                                         key,
-                                        &["splits", "len", "total_len"],
+                                        &["fragments", "len", "total_len"],
                                     ));
                                 },
                             }
@@ -613,29 +613,31 @@ mod fragments {
                             de::Error::missing_field("total_len")
                         })?;
 
-                        let splits_vec = splits_vec.ok_or_else(|| {
-                            de::Error::missing_field("splits")
-                        })?;
+                        let fragments_vec =
+                            fragments_vec.ok_or_else(|| {
+                                de::Error::missing_field("fragments")
+                            })?;
 
-                        if splits_vec.len() != len {
+                        if fragments_vec.len() != len {
                             return Err(de::Error::invalid_length(
-                                splits_vec.len(),
+                                fragments_vec.len(),
                                 &len.to_string().as_str(),
                             ));
                         }
 
-                        if splits_vec.len() > N {
+                        if fragments_vec.len() > N {
                             return Err(de::Error::invalid_length(
-                                splits_vec.len(),
+                                fragments_vec.len(),
                                 &format!("no more than {N}").as_str(),
                             ));
                         }
 
-                        let mut splits = [Fragment::null(); N];
+                        let mut fragments = [Fragment::null(); N];
 
-                        splits[..len].copy_from_slice(splits_vec.as_slice());
+                        fragments[..len]
+                            .copy_from_slice(fragments_vec.as_slice());
 
-                        Ok(Array { splits, len, total_len })
+                        Ok(Array { fragments, len, total_len })
                     }
                 }
 
