@@ -43,7 +43,7 @@ pub enum TextEdit {
     /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 deletes the "bc" in "abcd".
-    /// let deletion = replica1.delete(1..3);
+    /// let deletion = replica1.deleted(1..3);
     ///
     /// // Concurrently, peer 2 inserts a single character at start of the
     /// // document.
@@ -85,7 +85,7 @@ pub enum TextEdit {
     /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 deletes the "bc" in "abcd".
-    /// let deletion = replica1.delete(1..3);
+    /// let deletion = replica1.deleted(1..3);
     ///
     /// // Concurrently, peer 2 inserts a single character between the 'b' and
     /// // the 'c'.
@@ -131,8 +131,8 @@ impl Text {
     /// ```
     /// # use cola::{Replica, TextEdit};
     /// // Two peers start collaborating on an empty document.
-    /// let mut replica1 = Replica::new(0);
-    /// let mut replica2 = replica1.clone();
+    /// let mut replica1 = Replica::new(1, 0);
+    /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 inserts a character.
     /// let insertion = replica1.inserted(0, 1);
@@ -183,7 +183,7 @@ impl Text {
     ///
     /// # Examples
     /// ```
-    /// # use cola::{Replica};
+    /// # use cola::{Replica, TextEdit, Text};
     /// fn unwrap_text(edit: Option<TextEdit>) -> Text {
     ///     if let Some(TextEdit::Insertion(_, text)) = edit {
     ///         text
@@ -193,8 +193,8 @@ impl Text {
     /// }
     ///
     /// // Two peers start collaborating on an empty document.
-    /// let mut replica1 = Replica::new(0);
-    /// let mut replica2 = replica1.clone();
+    /// let mut replica1 = Replica::new(1, 0);
+    /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 inserts 1, 2, 3 and 4 characters at the start of the
     /// // document.

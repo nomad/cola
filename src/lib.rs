@@ -123,18 +123,18 @@ pub type ProtocolVersion = u64;
 ///
 /// ```
 /// # use cola::{Replica, TextEdit};
-/// fn insert_at_codepoint(s: &mut String, offset: usize, s: &str) {
+/// fn insert_at_codepoint(s: &mut String, offset: usize, insert: &str) {
 ///     let byte_offset = s.chars().take(offset).map(char::len_utf8).sum();
-///     s.insert_str(byte_offset, s);
+///     s.insert_str(byte_offset, insert);
 /// }
 ///
 /// // Peer 1 uses a String as its buffer and codepoints as its unit of
 /// // length.
 /// let mut buf1 = String::from("àc");
-/// let mut replica1 = Replica::new(2); // "àc" has 2 codepoints.
+/// let mut replica1 = Replica::new(1, 2); // "àc" has 2 codepoints.
 ///
 /// let mut buf2 = buf1.clone();
-/// let mut replica2 = replica1.clone();
+/// let mut replica2 = replica1.fork(2);
 ///
 /// // Peer 1 inserts a 'b' between 'à' and 'c' and sends the edit over to the
 /// // other peer.
@@ -143,7 +143,8 @@ pub type ProtocolVersion = u64;
 /// let insert_b = replica1.inserted(1, 1);
 ///
 /// // Peer 2 receives the edit.
-/// let Some(TextEdit::Insertion(offset)) = replica2.merge(insert_b) else {
+/// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insert_b)
+/// else {
 ///     unreachable!();
 /// };
 ///
@@ -166,15 +167,15 @@ pub type ProtocolVersion = u64;
 /// # use cola::{Replica, TextEdit};
 /// # let b = "b";
 /// # let mut buf2 = String::from("àc");
-/// # let mut replica1 = Replica::new(2);
-/// # let mut replica2 = replica1.clone();
+/// # let mut replica1 = Replica::new(1, 2);
+/// # let mut replica2 = replica1.fork(2);
 /// # let insert_b = replica1.inserted(1, 1);
 /// // ..same as before.
 ///
 /// assert_eq!(buf2, "àc");
 ///
 /// // Peer 2 receives the edit.
-/// let Some(TextEdit::Insertion(offset)) = replica2.merge(insert_b) else {
+/// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insert_b) else {
 ///     unreachable!();
 /// };
 ///

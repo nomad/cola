@@ -272,7 +272,7 @@ impl Replica {
     /// # Example
     ///
     /// ```
-    /// # use cola::{Replica, TextEdit};
+    /// # use cola::{Replica, CrdtEdit};
     /// // The buffer at peer 1 is "Hello World".
     /// let mut replica1 = Replica::new(1, 11);
     ///
@@ -354,7 +354,7 @@ impl Replica {
     /// # Example
     ///
     /// ```
-    /// # use cola::Replica;
+    /// # use cola::{Replica, ReplicaId};
     /// let replica1 = Replica::new(1, 0);
     /// let replica2 = replica1.fork(2);
     /// assert_eq!(replica2.id(), ReplicaId::from(2))
@@ -411,7 +411,7 @@ impl Replica {
     /// # Example
     ///
     /// ```
-    /// # use cola::{Replica, TextEdit};
+    /// # use cola::{Replica, CrdtEdit};
     /// // The buffer at peer 1 is "ab".
     /// let mut replica1 = Replica::new(1, 2);
     ///
@@ -502,9 +502,11 @@ impl Replica {
     /// // The deletion arrives at the first peer. There have not been any
     /// // insertions or deletions *before* the 'b', so its offset range should
     /// // still be 1..2.
-    /// let Some(TextEdit::ContiguousDeletion(range_b)) = replica1.merge(&deletion_at_2) else {
+    /// let Some(TextEdit::ContiguousDeletion(range_b)) =
+    ///     replica1.merge(&deletion_at_2)
+    /// else {
     ///     unreachable!();
-    /// }
+    /// };
     ///
     /// assert_eq!(range_b, 1..2);
     ///
@@ -512,7 +514,8 @@ impl Replica {
     /// // been deleted, so the offset at which we should insert the new
     /// // character is not 2, but 1. This is because the *intent* of the first
     /// // peer was to insert the character between the 'b' and the 'c'.
-    /// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insertion_at_1) else {
+    /// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insertion_at_1)
+    /// else {
     ///     unreachable!();
     /// };
     ///
