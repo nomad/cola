@@ -456,6 +456,29 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.delete_range(range, delete_range, delete_from, delete_up_to)
     }
 
+    #[inline]
+    pub fn delete_leaf_range<F>(
+        &mut self,
+        leaf_idx: LeafIdx<L>,
+        leaf_offset: L::Length,
+        range: Range<L::Length>,
+        delete_with: F,
+    ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
+    where
+        L: Delete,
+        F: FnOnce(&mut L, Range<L::Length>) -> (Option<L>, Option<L>),
+    {
+        let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
+
+        self.delete_range_in_leaf(
+            leaf_idx,
+            leaf_offset,
+            idx_in_parent,
+            range,
+            delete_with,
+        )
+    }
+
     /// Creates a new Gtree with from an iterator over some leaves and the
     /// total length of the all the leaves the iterator will yield.
     ///

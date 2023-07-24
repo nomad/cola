@@ -319,8 +319,6 @@ impl RunTree {
 
     #[inline]
     fn insert_run_at_origin(&mut self, run: EditRun) -> Length {
-        debug_assert!(run.anchor().is_zero());
-
         let replica_id = run.replica_id();
 
         let mut leaves = self.gtree.leaves_from_first();
@@ -355,14 +353,62 @@ impl RunTree {
     fn delete_leaf_range(
         &mut self,
         leaf_idx: LeafIdx<EditRun>,
+        leaf_offset: Length,
         range: Range<Length>,
     ) {
-        // 1. if range starts at 0 try to merge it to previous run
-        // 2. if range ends at len try to merge it to next run
-        // 3. update cursor
-        // 4. update run indices
+        let run = self.gtree.leaf(leaf_idx);
 
-        todo!();
+        let id_range = run.replica_id();
+        let run_ts_range = run.run_ts();
+        let deleted_range_offset = run.start();
+        let deleted_range_run_len = run.len();
+
+        let (first_idx, second_idx) = self.gtree.delete_leaf_range(
+            leaf_idx,
+            leaf_offset,
+            range,
+            |run, range| run.delete_range(range),
+        );
+
+        match (first_idx, second_idx) {
+            (Some(first), Some(second)) => {
+                let range = range + deleted_range_offset;
+                let indices = self.run_indices.get_mut(id_range);
+                indices.split(run_ts_range, range.start, first);
+                indices.split(run_ts_range, range.end, second);
+            },
+
+            (Some(first), _) => {
+                let offset = deleted_range_offset
+                    + if range.start == 0 { range.end } else { range.start };
+
+                self.run_indices.get_mut(id_range).split(
+                    run_ts_range,
+                    offset,
+                    first,
+                );
+            },
+
+            (None, None) if range.len() < deleted_range_run_len => {
+                if range.start == 0 {
+                    self.run_indices.get_mut(id_range).move_len_to_prev_split(
+                        run_ts_range,
+                        deleted_range_offset + range.end,
+                        range.len(),
+                    );
+                } else if range.end == deleted_range_run_len {
+                    self.run_indices.get_mut(id_range).move_len_to_next_split(
+                        run_ts_range,
+                        deleted_range_offset + range.start,
+                        range.len(),
+                    );
+                } else {
+                    unreachable!();
+                }
+            },
+
+            _ => {},
+        };
     }
 
     #[inline]
@@ -399,7 +445,7 @@ impl RunTree {
                 let start = deletion.start().offset - run.start();
                 let end = deletion.end().offset - run.start();
                 let range = (start..end).into();
-                self.delete_leaf_range(start_idx, range);
+                self.delete_leaf_range(start_idx, visible_offset, range);
                 return Some(MergedDeletion::Contiguous(
                     (range + visible_offset).into(),
                 ));
@@ -421,9 +467,13 @@ impl RunTree {
                 DeletionState::Starting
             } else {
                 let delete_from = deletion.start().offset - start.start();
-                visible_offset += delete_from;
                 let len = start.len();
-                self.delete_leaf_range(start_idx, (delete_from..len).into());
+                self.delete_leaf_range(
+                    start_idx,
+                    visible_offset,
+                    (delete_from..len).into(),
+                );
+                visible_offset += delete_from;
                 DeletionState::Deleting(visible_offset + delete_from)
             };
 
@@ -442,7 +492,11 @@ impl RunTree {
                 } else {
                     let delete_up_to = deletion.end().offset - run.start();
 
-                    self.delete_leaf_range(end_idx, (0..delete_up_to).into());
+                    self.delete_leaf_range(
+                        end_idx,
+                        visible_offset,
+                        (0..delete_up_to).into(),
+                    );
 
                     let deletion_start =
                         if let DeletionState::Deleting(start) = state {
@@ -476,7 +530,11 @@ impl RunTree {
                 } else {
                     let delete_up_to = deleted_up_to - run.start();
 
-                    self.delete_leaf_range(run_idx, (0..delete_up_to).into());
+                    self.delete_leaf_range(
+                        run_idx,
+                        visible_offset,
+                        (0..delete_up_to).into(),
+                    );
 
                     let deletion_start =
                         if let DeletionState::Deleting(start) = state {
@@ -711,7 +769,7 @@ impl PartialOrd for EditRun {
 
 impl EditRun {
     #[inline(always)]
-    pub fn anchor(&self) -> Anchor {
+    fn anchor(&self) -> Anchor {
         self.inserted_at
     }
 
