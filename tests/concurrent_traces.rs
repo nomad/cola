@@ -1,7 +1,7 @@
 mod common;
 
 use common::Replica;
-use traces::{ConcurrentTraceInfos, Edit};
+use traces::{ConcurrentTraceInfos, Crdt, Edit};
 
 fn test_trace<const N: usize>(trace: ConcurrentTraceInfos<N, Replica>) {
     let ConcurrentTraceInfos { trace, mut peers, final_content, .. } = trace;
@@ -9,13 +9,13 @@ fn test_trace<const N: usize>(trace: ConcurrentTraceInfos<N, Replica>) {
     for edit in trace.edits() {
         match edit {
             Edit::Insertion(idx, offset, text) => {
-                peers[*idx].insert(*offset, text);
+                peers[*idx].local_insert(*offset, text);
             },
             Edit::Deletion(idx, start, end) => {
-                peers[*idx].delete(*start..*end);
+                peers[*idx].local_delete(*start, *end);
             },
             Edit::Merge(idx, edit) => {
-                peers[*idx].merge(edit);
+                peers[*idx].remote_merge(edit);
             },
         }
     }

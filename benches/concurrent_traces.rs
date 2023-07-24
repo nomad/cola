@@ -30,7 +30,7 @@ impl Crdt for Replica {
         self.0.deleted(start as Length..end as Length)
     }
 
-    fn merge(&mut self, remote_edit: &Self::EDIT) {
+    fn remote_merge(&mut self, remote_edit: &Self::EDIT) {
         self.0.merge(remote_edit);
     }
 }
@@ -55,7 +55,7 @@ fn bench<const N: usize>(
                         peers[*idx].local_delete(*start, *end);
                     },
                     Edit::Merge(idx, edit) => {
-                        peers[*idx].merge(edit);
+                        peers[*idx].remote_merge(edit);
                     },
                 }
             }

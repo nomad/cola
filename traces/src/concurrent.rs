@@ -47,7 +47,7 @@ pub trait Crdt: Sized {
     fn fork(&self) -> Self;
     fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT;
     fn local_delete(&mut self, start: usize, end: usize) -> Self::EDIT;
-    fn merge(&mut self, remote_edit: &Self::EDIT);
+    fn remote_merge(&mut self, remote_edit: &Self::EDIT);
 }
 
 pub struct ConcurrentTraceInfos<const NUM_PEERS: usize, C: Crdt> {
@@ -92,7 +92,7 @@ impl<const NUM_PEERS: usize, C: Crdt> ConcurrentTrace<NUM_PEERS, C> {
 
             for idx in txn.parents {
                 for edit in &batches[idx] {
-                    peer.merge(edit);
+                    peer.remote_merge(edit);
                     edits.push(Edit::Merge(txn.agent, edit.clone()));
                 }
             }

@@ -45,6 +45,10 @@ impl Replica {
         assert_eq!(self.buffer.len(), self.crdt.len());
     }
 
+    fn char_to_byte(&self, char_offset: usize) -> usize {
+        self.buffer.chars().take(char_offset).map(char::len_utf8).sum()
+    }
+
     pub fn edit(&mut self, edit: RandomEdit) -> Edit {
         match edit {
             RandomEdit::Insertion(byte_offset, text) => {
@@ -190,14 +194,17 @@ impl traces::Crdt for Replica {
     }
 
     fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT {
+        let offset = self.char_to_byte(offset);
         self.insert(offset, text)
     }
 
     fn local_delete(&mut self, start: usize, end: usize) -> Self::EDIT {
+        let start = self.char_to_byte(start);
+        let end = self.char_to_byte(end);
         self.delete(start..end)
     }
 
-    fn merge(&mut self, remote_edit: &Self::EDIT) {
+    fn remote_merge(&mut self, remote_edit: &Self::EDIT) {
         self.merge(remote_edit)
     }
 }
