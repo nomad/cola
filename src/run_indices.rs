@@ -416,14 +416,14 @@ mod fragments {
         fn assert_invariants(&self) {
             let mut total_len = 0;
 
-            for fragment in self.fragments() {
+            for fragment in &self.fragments[0..self.len] {
                 total_len += fragment.len;
                 assert!(!fragment.is_null());
             }
 
             assert_eq!(self.total_len, total_len);
 
-            for fragment in self.fragments() {
+            for fragment in &self.fragments[self.len..] {
                 assert!(fragment.is_null());
             }
         }
@@ -503,7 +503,9 @@ mod fragments {
         fn split(&mut self, at_offset: Length, new_idx: LeafIdx<EditRun>) {
             let (idx, fragment_offset) = self.idx_at_offset(at_offset);
 
-            let fragments = self.fragments_mut();
+            self.len += 1;
+
+            let fragments = &mut self.fragments[0..self.len];
 
             let fragment = &mut fragments[idx];
 
@@ -511,8 +513,6 @@ mod fragments {
                 fragment.split(at_offset - fragment_offset, new_idx);
 
             crate::insert_in_slice(fragments, new_fragment, idx + 1);
-
-            self.len += 1;
         }
     }
 
