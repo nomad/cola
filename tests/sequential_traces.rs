@@ -1,31 +1,31 @@
-use cola::{Length, Replica};
+mod common;
+
+use common::Replica;
 use traces::SequentialTrace;
 
 fn test_trace(trace: &SequentialTrace) {
     let trace = trace.chars_to_bytes();
 
-    let mut replica = Replica::new(0, trace.start_content().len() as Length);
+    let mut replica = Replica::new(0, trace.start_content());
 
     for i in 0..1 {
         for (start, end, text) in trace.edits() {
-            let start = start as Length;
-            let end = end as Length;
-
             if end > start {
-                replica.deleted(start..end);
+                replica.delete(start..end);
                 replica.assert_invariants();
             }
 
             if !text.is_empty() {
-                replica.inserted(start, text.len() as Length);
+                replica.insert(start, text);
                 replica.assert_invariants();
             }
         }
 
-        assert_eq!(
-            replica.len(),
-            (trace.end_content().len() * (i + 1)) as Length
-        );
+        if i == 0 {
+            assert_eq!(replica, trace.end_content());
+        } else {
+            assert_eq!(replica.len(), (trace.end_content().len() * (i + 1)));
+        }
     }
 }
 

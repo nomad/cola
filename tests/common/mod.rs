@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::ops::Range;
 
 use cola::{CrdtEdit, Length, ReplicaId, TextEdit};
-use rand::Rng;
 
 pub struct Replica {
     pub buffer: String,
@@ -84,6 +83,10 @@ impl Replica {
         let edit =
             self.crdt.inserted(byte_offset as Length, text.len() as Length);
         (text, edit)
+    }
+
+    pub fn len(&self) -> usize {
+        self.buffer.len()
     }
 
     pub fn merge(&mut self, (string, edit): &Edit) {
