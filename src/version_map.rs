@@ -106,82 +106,52 @@ impl<T: core::fmt::Debug> core::fmt::Debug for BaseMap<T> {
 impl PartialOrd for VersionMap {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        fn confirm_left_greater(
-            left: &VersionMap,
-            right: &VersionMap,
-        ) -> bool {
-            for (right_id, right_value) in right.iter() {
-                let left_value = left.get(right_id);
-                if right_value > left_value {
-                    return false;
-                }
-            }
-
-            true
-        }
-
-        match self.this().cmp(&other.get(self.this_id)) {
-            Ordering::Greater => {
-                return if confirm_left_greater(self, other) {
-                    Some(Ordering::Greater)
-                } else {
-                    None
-                };
-            },
-
-            Ordering::Less => {
-                return if confirm_left_greater(other, self) {
-                    Some(Ordering::Less)
-                } else {
-                    None
-                };
-            },
-
-            Ordering::Equal => {},
-        }
-
-        let mut cmp = Ordering::Equal;
-
-        let mut checked = 0;
-
-        for (this_id, this) in &self.rest {
-            if let Some(other) = other.rest.get(this_id) {
-                match this.cmp(other) {
+        #[inline]
+        fn update_order<I>(iter: I, mut order: Ordering) -> Option<Ordering>
+        where
+            I: Iterator<Item = (Length, Length)>,
+        {
+            for (this_value, other_value) in iter {
+                match this_value.cmp(&other_value) {
                     Ordering::Greater => {
-                        if cmp == Ordering::Less {
+                        if order == Ordering::Less {
                             return None;
-                        } else {
-                            cmp = Ordering::Greater;
                         }
+                        order = Ordering::Greater;
                     },
 
                     Ordering::Less => {
-                        if cmp == Ordering::Greater {
+                        if order == Ordering::Greater {
                             return None;
-                        } else {
-                            cmp = Ordering::Less;
                         }
+                        order = Ordering::Less;
                     },
 
                     Ordering::Equal => {},
                 }
-                checked += 1;
-            } else if cmp == Ordering::Less {
-                return None;
-            } else {
-                cmp = Ordering::Greater;
             }
+
+            Some(order)
         }
 
-        if checked < other.rest.len() {
-            if cmp == Ordering::Greater {
-                None
-            } else {
-                Some(Ordering::Less)
-            }
-        } else {
-            debug_assert_eq!(checked, other.rest.len());
-            Some(cmp)
-        }
+        let mut order = Ordering::Equal;
+
+        let iter = self.iter().filter(|(_, value)| *value > 0).map(
+            |(this_id, this_value)| {
+                let other_value = other.get(this_id);
+                (this_value, other_value)
+            },
+        );
+
+        order = update_order(iter, order)?;
+
+        let iter = other.iter().filter(|(_, value)| *value > 0).map(
+            |(other_id, other_value)| {
+                let this_value = self.get(other_id);
+                (this_value, other_value)
+            },
+        );
+
+        update_order(iter, order)
     }
 }
