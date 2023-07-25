@@ -243,7 +243,7 @@ impl Replica {
 
         version_map.fork_in_place(id, 0);
 
-        deletion_map.fork_in_place(id, 1);
+        deletion_map.fork_in_place(id, 0);
 
         let replica = Self {
             id,
@@ -295,8 +295,6 @@ impl Replica {
         let (start, start_ts, end, end_ts) =
             self.run_tree.delete(deleted_range);
 
-        let deletion_ts = self.deletion_map.this();
-
         *self.deletion_map.this_mut() += 1;
 
         CrdtEdit::deletion(
@@ -305,7 +303,7 @@ impl Replica {
             end,
             end_ts,
             self.version_map.clone(),
-            deletion_ts,
+            self.deletion_map.this(),
         )
     }
 
@@ -372,7 +370,7 @@ impl Replica {
             run_clock: RunClock::new(),
             lamport_clock: self.lamport_clock,
             version_map: self.version_map.fork(new_id, 0),
-            deletion_map: self.deletion_map.fork(new_id, 1),
+            deletion_map: self.deletion_map.fork(new_id, 0),
             backlog: self.backlog.clone(),
         }
     }
@@ -673,7 +671,7 @@ impl Replica {
             run_clock,
             lamport_clock,
             version_map: VersionMap::new(id, len),
-            deletion_map: DeletionMap::new(id, 1),
+            deletion_map: DeletionMap::new(id, 0),
             backlog: Backlog::new(),
         }
     }

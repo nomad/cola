@@ -51,15 +51,6 @@ impl<T: Copy> BaseMap<T> {
     }
 
     #[inline]
-    pub fn get_opt(&self, replica_id: ReplicaId) -> Option<T> {
-        if replica_id == self.this_id {
-            Some(self.this_value)
-        } else {
-            self.rest.get(&replica_id).copied()
-        }
-    }
-
-    #[inline]
     pub fn fork(&self, new_id: ReplicaId, restart_at: T) -> Self {
         let mut forked = self.clone();
         forked.fork_in_place(new_id, restart_at);
@@ -76,6 +67,12 @@ impl<T: Copy> BaseMap<T> {
     #[inline]
     pub fn insert(&mut self, replica_id: ReplicaId, value: T) {
         self.rest.insert(replica_id, value);
+    }
+
+    #[inline]
+    fn iter(&self) -> impl Iterator<Item = (ReplicaId, T)> + '_ {
+        let this_entry = core::iter::once((self.this_id, self.this_value));
+        this_entry.chain(self.rest.iter().map(|(&id, &value)| (id, value)))
     }
 
     #[inline]
@@ -106,32 +103,23 @@ impl<T: core::fmt::Debug> core::fmt::Debug for BaseMap<T> {
     }
 }
 
-impl<T: Ord + Copy + Default> PartialOrd for BaseMap<T> {
+impl PartialOrd for VersionMap {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        fn confirm_left_greater<T: Ord + Copy>(
-            left: &BaseMap<T>,
-            right: &BaseMap<T>,
-        ) -> bool {
-            let mut checked = 0;
+        println!("checking if {:?} is less than {:?}", self, other);
 
-            if let Some(&right) = right.rest.get(&left.this_id) {
-                if right > left.this() {
+        fn confirm_left_greater(
+            left: &VersionMap,
+            right: &VersionMap,
+        ) -> bool {
+            for (right_id, right_value) in right.iter() {
+                let left_value = left.get(right_id);
+                if right_value > left_value {
                     return false;
                 }
-                checked += 1;
             }
 
-            for (&left_id, &left) in &left.rest {
-                if let Some(right) = right.get_opt(left_id) {
-                    if right > left {
-                        return false;
-                    }
-                    checked += 1;
-                }
-            }
-
-            checked == right.rest.len()
+            true
         }
 
         match self.this().cmp(&other.get(self.this_id)) {
