@@ -134,26 +134,6 @@ impl<T: Ord + Copy + Default> PartialOrd for BaseMap<T> {
             checked == right.rest.len()
         }
 
-        match self.rest.len().cmp(&other.rest.len()) {
-            Ordering::Greater => {
-                return if confirm_left_greater(self, other) {
-                    Some(Ordering::Greater)
-                } else {
-                    None
-                };
-            },
-
-            Ordering::Less => {
-                return if confirm_left_greater(other, self) {
-                    Some(Ordering::Less)
-                } else {
-                    None
-                };
-            },
-
-            Ordering::Equal => {},
-        }
-
         match self.this().cmp(&other.get(self.this_id)) {
             Ordering::Greater => {
                 return if confirm_left_greater(self, other) {
