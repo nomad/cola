@@ -452,15 +452,17 @@ impl RunTree {
             }
         }
 
+        let mut leaf_offset = visible_offset;
+
+        let end_idx =
+            self.run_indices.idx_at_anchor(deletion.end(), deletion.end_ts());
+
         /// TODO: docs
         enum DeletionState {
             Deleting(Length),
             Skipping,
             Starting,
         }
-
-        let end_idx =
-            self.run_indices.idx_at_anchor(deletion.end(), deletion.end_ts());
 
         let mut state = if start.is_deleted
             || start.end() == deletion.start().offset
@@ -475,6 +477,7 @@ impl RunTree {
                 (delete_from..len).into(),
             );
             let state = DeletionState::Deleting(visible_offset + delete_from);
+            leaf_offset += delete_from;
             visible_offset += len;
             state
         };
@@ -496,7 +499,7 @@ impl RunTree {
 
                     self.delete_leaf_range(
                         end_idx,
-                        visible_offset,
+                        leaf_offset,
                         (0..delete_up_to).into(),
                     );
 
@@ -529,12 +532,14 @@ impl RunTree {
                     }
 
                     state = DeletionState::Skipping;
+
+                    leaf_offset += run_len;
                 } else {
                     let delete_up_to = deleted_up_to - run.start();
 
                     self.delete_leaf_range(
                         run_idx,
-                        visible_offset,
+                        leaf_offset,
                         (0..delete_up_to).into(),
                     );
 
@@ -550,6 +555,8 @@ impl RunTree {
                     ranges.push(deletion_start..deletion_end);
 
                     state = DeletionState::Skipping;
+
+                    leaf_offset += delete_up_to;
 
                     runs = self.gtree.leaves::<false>(run_idx);
                 }
