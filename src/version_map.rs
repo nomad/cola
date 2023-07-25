@@ -106,8 +106,6 @@ impl<T: core::fmt::Debug> core::fmt::Debug for BaseMap<T> {
 impl PartialOrd for VersionMap {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        println!("checking if {:?} is less than {:?}", self, other);
-
         fn confirm_left_greater(
             left: &VersionMap,
             right: &VersionMap,

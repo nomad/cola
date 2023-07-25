@@ -462,20 +462,22 @@ impl RunTree {
         let end_idx =
             self.run_indices.idx_at_anchor(deletion.end(), deletion.end_ts());
 
-        let mut state =
-            if start.is_deleted || start.end() == deletion.start().offset {
-                DeletionState::Starting
-            } else {
-                let delete_from = deletion.start().offset - start.start();
-                let len = start.len();
-                self.delete_leaf_range(
-                    start_idx,
-                    visible_offset,
-                    (delete_from..len).into(),
-                );
-                visible_offset += delete_from;
-                DeletionState::Deleting(visible_offset + delete_from)
-            };
+        let mut state = if start.is_deleted
+            || start.end() == deletion.start().offset
+        {
+            DeletionState::Starting
+        } else {
+            let delete_from = deletion.start().offset - start.start();
+            let len = start.len();
+            self.delete_leaf_range(
+                start_idx,
+                visible_offset,
+                (delete_from..len).into(),
+            );
+            let state = DeletionState::Deleting(visible_offset + delete_from);
+            visible_offset += len;
+            state
+        };
 
         let mut runs = self.gtree.leaves::<false>(start_idx);
 
