@@ -436,7 +436,7 @@ impl RunTree {
 
         let start = self.gtree.leaf(start_idx);
 
-        if start.contains(deletion.end()) {
+        if start.contains_anchor(deletion.end()) {
             let run = start;
 
             if run.is_deleted {
@@ -788,9 +788,12 @@ impl EditRun {
     }
 
     #[inline]
-    fn contains(&self, anchor: Anchor) -> bool {
+    fn contains_anchor(&self, anchor: Anchor) -> bool {
+        debug_assert!(!anchor.is_zero());
+
         self.replica_id() == anchor.replica_id()
-            && self.text.temporal_range().contains(&anchor.offset)
+            && self.text.start() < anchor.offset
+            && self.text.end() >= anchor.offset
     }
 
     #[inline(always)]

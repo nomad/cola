@@ -125,6 +125,11 @@ impl core::fmt::Debug for Text {
 }
 
 impl Text {
+    #[inline]
+    pub(crate) fn end(&self) -> Length {
+        self.range.end
+    }
+
     /// Returns the id of the `Replica` that inserted this text.
     ///
     /// # Examples
@@ -158,6 +163,11 @@ impl Text {
     #[inline]
     pub(crate) fn new(inserted_by: ReplicaId, range: Range<Length>) -> Self {
         Self { inserted_by, range }
+    }
+
+    #[inline]
+    pub(crate) fn start(&self) -> Length {
+        self.range.start
     }
 
     /// Returns the temporal range of this text in the `Replica` that inserted
