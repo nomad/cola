@@ -40,11 +40,11 @@ struct Transaction {
 #[derive(Deserialize)]
 struct Patch(usize, usize, String);
 
-pub trait Crdt: Sized {
+pub trait Crdt: core::fmt::Debug + Sized {
     type EDIT: Clone;
 
-    fn from_str(s: &str) -> Self;
-    fn fork(&self) -> Self;
+    fn from_str(id: u64, s: &str) -> Self;
+    fn fork(&self, new_id: u64) -> Self;
     fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT;
     fn local_delete(&mut self, start: usize, end: usize) -> Self::EDIT;
     fn remote_merge(&mut self, remote_edit: &Self::EDIT);
@@ -126,13 +126,13 @@ impl<const NUM_PEERS: usize, C: Crdt> ConcurrentTrace<NUM_PEERS, C> {
     fn init_peers(starting_text: &str) -> Vec<C> {
         let mut peers = Vec::with_capacity(NUM_PEERS);
 
-        let first_peer = C::from_str(starting_text);
+        let first_peer = C::from_str(0, starting_text);
 
         peers.push(first_peer);
 
-        for _ in 1..NUM_PEERS {
+        for i in 1..NUM_PEERS {
             let first_peer = &peers[0];
-            peers.push(first_peer.fork());
+            peers.push(first_peer.fork(i as _));
         }
 
         assert_eq!(peers.len(), NUM_PEERS);

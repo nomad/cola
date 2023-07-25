@@ -185,12 +185,12 @@ pub enum RandomEdit {
 impl traces::Crdt for Replica {
     type EDIT = Edit;
 
-    fn from_str(s: &str) -> Self {
-        Self::new(rand::random::<u64>(), s)
+    fn from_str(id: u64, s: &str) -> Self {
+        Self::new(id, s)
     }
 
-    fn fork(&self) -> Self {
-        self.fork(rand::random::<u64>())
+    fn fork(&self, new_id: u64) -> Self {
+        self.fork(new_id)
     }
 
     fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT {

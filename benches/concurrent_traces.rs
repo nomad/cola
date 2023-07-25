@@ -9,17 +9,18 @@ use criterion::{
 };
 use traces::{ConcurrentTraceInfos, Crdt, Edit};
 
+#[derive(Debug)]
 struct Replica(cola::Replica);
 
 impl Crdt for Replica {
     type EDIT = CrdtEdit;
 
-    fn from_str(s: &str) -> Self {
-        Self(cola::Replica::new(rand::random::<u64>(), s.len() as Length))
+    fn from_str(id: u64, s: &str) -> Self {
+        Self(cola::Replica::new(id, s.len() as Length))
     }
 
-    fn fork(&self) -> Self {
-        Self(self.0.fork(rand::random::<u64>()))
+    fn fork(&self, new_id: u64) -> Self {
+        Self(self.0.fork(new_id))
     }
 
     fn local_insert(&mut self, offset: usize, text: &str) -> Self::EDIT {
