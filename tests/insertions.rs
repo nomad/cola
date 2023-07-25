@@ -115,12 +115,14 @@ fn test_random_insertions(
         replicas.push(replicas[0].fork(ReplicaId::from(i as u64)));
     }
 
+    let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
+
     for _ in 0..num_cycles {
-        let edits = (0..replicas.len())
-            .map(|idx| {
+        let insertions = replicas
+            .iter_mut()
+            .map(|replica| {
                 (0..insertions_per_cycle)
                     .map(|_| {
-                        let replica = &mut replicas[idx];
                         let (offset, text) =
                             replica.random_insert(rng, max_insertion_len);
                         replica.insert(offset, text)
@@ -129,11 +131,9 @@ fn test_random_insertions(
             })
             .collect::<Vec<_>>();
 
-        let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
-
         merge_order.shuffle(rng);
 
-        for replica_idx in merge_order {
+        for &replica_idx in &merge_order {
             let len = replicas.len();
 
             let replica = &mut replicas[replica_idx];
@@ -143,9 +143,84 @@ fn test_random_insertions(
 
             merge_order.shuffle(rng);
 
-            for edits_idx in merge_order {
-                for edit in &edits[edits_idx] {
-                    replica.merge(edit);
+            for idx in merge_order {
+                for insertion in &insertions[idx] {
+                    replica.merge(insertion);
+                }
+            }
+
+            replica.merge_backlogged();
+        }
+
+        for replica in &replicas {
+            replica.assert_invariants();
+        }
+
+        assert_convergence!(replicas);
+    }
+}
+
+#[test]
+fn random_deletions() {
+    // let seed = rand::random::<u64>();
+    let seed = 8825035322277949063;
+    println!("seed: {}", seed);
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    test_random_deletions(&mut rng, 20, 2, 8, 1, 2);
+}
+
+fn test_random_deletions(
+    rng: &mut impl Rng,
+    initial_len: usize,
+    num_replicas: usize,
+    num_cycles: usize,
+    deletions_per_cycle: usize,
+    max_deletion_len: usize,
+) {
+    assert!(num_replicas > 1);
+    assert!(max_deletion_len > 0);
+    assert!(deletions_per_cycle > 0);
+    assert!(deletions_per_cycle * max_deletion_len * num_cycles < initial_len);
+
+    let first_replica = Replica::new_with_len(0, initial_len, rng);
+
+    let mut replicas = vec![first_replica];
+
+    for i in 1..num_replicas {
+        replicas.push(replicas[0].fork(ReplicaId::from(i as u64)));
+    }
+
+    let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
+
+    for _ in 0..num_cycles {
+        let deletions = replicas
+            .iter_mut()
+            .map(|replica| {
+                (0..deletions_per_cycle)
+                    .map(|_| {
+                        let range =
+                            replica.random_delete(rng, max_deletion_len);
+                        replica.delete(range)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        merge_order.shuffle(rng);
+
+        for &replica_idx in &merge_order {
+            let len = replicas.len();
+
+            let replica = &mut replicas[replica_idx];
+
+            let mut merge_order =
+                (0..len).filter(|&idx| idx != replica_idx).collect::<Vec<_>>();
+
+            merge_order.shuffle(rng);
+
+            for idx in merge_order {
+                for deletion in &deletions[idx] {
+                    replica.merge(deletion);
                 }
             }
 

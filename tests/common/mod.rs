@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::ops::Range;
 
 use cola::{CrdtEdit, Length, ReplicaId, TextEdit};
+use rand::Rng;
 
 pub struct Replica {
     pub buffer: String,
@@ -148,6 +149,16 @@ impl Replica {
         Self { buffer, crdt, history }
     }
 
+    pub fn new_with_len(
+        id: impl Into<ReplicaId>,
+        max_len: usize,
+        rng: &mut impl Rng,
+    ) -> Self {
+        let string =
+            (0..max_len).map(|_| rng.gen_range('a'..='z')).collect::<String>();
+        Self::new(id, string)
+    }
+
     pub fn random_insert(
         &self,
         rng: &mut impl rand::Rng,
@@ -159,6 +170,26 @@ impl Replica {
         let letter = rng.gen_range('a'..='z');
         let text = (0..text_len).map(|_| letter).collect::<String>();
         (offset, text)
+    }
+
+    pub fn random_delete(
+        &self,
+        rng: &mut impl rand::Rng,
+        max_len: usize,
+    ) -> Range<usize> {
+        assert!(!self.buffer.is_empty());
+
+        let start = rng.gen_range(0..self.buffer.len());
+
+        let len = rng.gen_range(1..=max_len);
+
+        let end = if start + len > self.buffer.len() {
+            self.buffer.len()
+        } else {
+            start + len
+        };
+
+        start..end
     }
 
     pub fn random_edit(
