@@ -93,7 +93,7 @@ fn random_insertions() {
     let seed = rand::random::<u64>();
     println!("seed: {}", seed);
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    test_random_insertions(&mut rng, 5, 1_000, 5, 5);
+    test_random_insertions(&mut rng, 5, 1000, 5, 5);
 }
 
 fn test_random_insertions(
@@ -180,7 +180,10 @@ fn test_random_deletions(
     assert!(num_replicas > 1);
     assert!(max_deletion_len > 0);
     assert!(deletions_per_cycle > 0);
-    assert!(deletions_per_cycle * max_deletion_len * num_cycles < initial_len);
+    assert!(
+        num_replicas * deletions_per_cycle * max_deletion_len * num_cycles
+            < initial_len
+    );
 
     let first_replica = Replica::new_with_len(0, initial_len, rng);
 
