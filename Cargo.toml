@@ -24,9 +24,5 @@ rand_chacha = "0.3"
 traces = { path = "./traces" }
 
 [[bench]]
-name = "concurrent_traces"
-harness = false
-
-[[bench]]
-name = "sequential_traces"
+name = "traces"
 harness = false
