@@ -62,11 +62,7 @@ impl Replica {
 
     pub fn delete(&mut self, byte_range: Range<usize>) -> Edit {
         self.buffer.replace_range(byte_range.clone(), "");
-
-        let edit = self
-            .crdt
-            .deleted(byte_range.start as Length..byte_range.end as Length);
-
+        let edit = self.crdt.deleted(byte_range);
         (String::new(), edit)
     }
 
@@ -85,8 +81,7 @@ impl Replica {
     ) -> Edit {
         let text = text.into();
         self.buffer.insert_str(byte_offset, text.as_str());
-        let edit =
-            self.crdt.inserted(byte_offset as Length, text.len() as Length);
+        let edit = self.crdt.inserted(byte_offset, text.len());
         (text, edit)
     }
 
@@ -144,7 +139,7 @@ impl Replica {
 
     pub fn new<T: Into<String>>(id: impl Into<ReplicaId>, text: T) -> Self {
         let buffer = text.into();
-        let crdt = cola::Replica::new(id, buffer.len() as Length);
+        let crdt = cola::Replica::new(id, buffer.len());
         let history = HashMap::new();
         Self { buffer, crdt, history }
     }

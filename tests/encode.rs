@@ -15,8 +15,7 @@ mod encode {
     fn encode_automerge() {
         let automerge = traces::automerge().chars_to_bytes();
 
-        let mut replica =
-            Replica::new(0, automerge.start_content().len() as Length);
+        let mut replica = Replica::new(0, automerge.start_content().len());
 
         for (start, end, text) in automerge.edits() {
             replica.deleted(start..end);
