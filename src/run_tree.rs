@@ -571,21 +571,22 @@ impl RunTree {
                 continue;
             }
 
+            // This is awful but I'm not sure it can be avoided. We
+            // transmute a shared reference to the Gtree to an exclusive
+            // one to modify it while we're iterating over it.
+            //
+            // SAFETY: this is safe because deleting a whole run doesn't
+            // modify the Gtree's structure at all (no heap allocations,
+            // etc), only the lengths of all the nodes from the run we're
+            // deleting up to the root.
+            let gtree = unsafe {
+                #[allow(mutable_transmutes)]
+                core::mem::transmute::<_, &mut Gtree>(&self.gtree)
+            };
+            gtree.with_leaf_mut(run_idx, |run| run.delete());
+
             if !matches!(state, DeletionState::Deleting(_)) {
                 state = DeletionState::Deleting(visible_offset);
-                // This is awful but I'm not sure it can be avoided. We
-                // transmute a shared reference to the Gtree to an exclusive
-                // one to modify it while we're iterating over it.
-                //
-                // SAFETY: this is safe because deleting a whole run doesn't
-                // modify the Gtree's structure at all (no heap allocations,
-                // etc), only the lengths of all the nodes from the run we're
-                // deleting up to the root.
-                let gtree = unsafe {
-                    #[allow(mutable_transmutes)]
-                    core::mem::transmute::<_, &mut Gtree>(&self.gtree)
-                };
-                gtree.with_leaf_mut(run_idx, |run| run.delete());
             }
 
             visible_offset += run_len;
