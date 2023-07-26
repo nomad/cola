@@ -24,7 +24,6 @@ fn bench_upstream(
             let mut replica = Replica::new(0, trace.start_content().len());
 
             for (start, end, text) in trace.edits() {
-                let start = start;
                 replica.deleted(start..end);
                 replica.inserted(start, text.len());
             }
