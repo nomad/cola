@@ -469,8 +469,10 @@ impl RunTree {
         } else if start.end() == deletion.start().offset {
             leaf_offset += start.len();
             visible_offset += start.len();
-            DeletionState::Skipping
+            DeletionState::Starting
         } else {
+            // TODO: handle case where the end of the start is not included in
+            // the deletion.
             let delete_from = deletion.start().offset - start.start();
             let len = start.len();
             self.delete_leaf_range(

@@ -1245,8 +1245,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         F: FnOnce(&mut L, Range<L::Length>) -> (Option<L>, Option<L>),
     {
         debug_assert!(range.start < range.end);
-        debug_assert!(range.end - range.start <= self.leaf(leaf_idx).len());
+        debug_assert!(range.len() <= self.leaf(leaf_idx).len());
         debug_assert_eq!(idx_in_parent, self.idx_of_leaf_in_parent(leaf_idx));
+        debug_assert_eq!(leaf_offset, self.offset_of_leaf(leaf_idx));
 
         let lnode = self.lnode_mut(leaf_idx);
 
