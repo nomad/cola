@@ -494,6 +494,8 @@ impl RunTree {
 
             if run_idx == end_idx {
                 if run.is_deleted {
+                    self.gtree.remove_cursor();
+
                     if let DeletionState::Deleting(start_offset) = state {
                         ranges.push(start_offset..visible_offset);
                     }

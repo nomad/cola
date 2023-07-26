@@ -785,6 +785,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
     }
 
+    /// Removes the cursor.
+    #[inline]
+    pub fn remove_cursor(&mut self) {
+        self.cursor = None;
+    }
+
     /// Returns an iterator over the siblings of the leaf at the given index.
     #[inline]
     pub fn siblings<const INCLUDE_LEAF: bool>(
