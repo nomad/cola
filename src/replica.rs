@@ -675,6 +675,11 @@ impl Replica {
             backlog: Backlog::new(),
         }
     }
+
+    #[doc(hidden)]
+    pub fn num_runs(&self) -> usize {
+        self.run_tree.count_empty_leaves().1
+    }
 }
 
 impl core::fmt::Debug for Replica {
