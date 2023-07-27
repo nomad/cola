@@ -190,15 +190,17 @@ impl Replica {
     pub fn random_edit(
         &self,
         rng: &mut impl rand::Rng,
-        max_len: usize,
+        max_insertion_len: usize,
+        max_deletion_len: usize,
     ) -> RandomEdit {
-        let create_insertion = rand::random::<bool>();
+        let create_insertion = rng.gen::<bool>() || self.buffer.is_empty();
 
         if create_insertion {
-            let (offset, text) = self.random_insert(rng, max_len);
+            let (offset, text) = self.random_insert(rng, max_insertion_len);
             RandomEdit::Insertion(offset, text)
         } else {
-            todo!();
+            let range = self.random_delete(rng, max_deletion_len);
+            RandomEdit::Deletion(range)
         }
     }
 }

@@ -435,7 +435,7 @@ impl RunTree {
             )
         };
 
-        let mut visible_offset = self.gtree.offset_of_leaf(start_idx);
+        let mut leaf_offset = self.gtree.offset_of_leaf(start_idx);
 
         let start = self.gtree.leaf(start_idx);
 
@@ -445,12 +445,17 @@ impl RunTree {
             if run.is_deleted {
                 return None;
             } else {
-                let start = deletion.start().offset - run.start();
-                let end = deletion.end().offset - run.start();
-                let range = (start..end).into();
-                self.delete_leaf_range(start_idx, visible_offset, range);
+                let delete_from = if deletion.start().is_zero() {
+                    0
+                } else {
+                    deletion.start().offset - run.start()
+                };
+
+                let delete_up_to = deletion.end().offset - run.start();
+                let delete_range = (delete_from..delete_up_to).into();
+                self.delete_leaf_range(start_idx, leaf_offset, delete_range);
                 return Some(MergedDeletion::Contiguous(
-                    (range + visible_offset).into(),
+                    (delete_range + leaf_offset).into(),
                 ));
             }
         }
@@ -468,28 +473,57 @@ impl RunTree {
             Starting,
         }
 
-        let mut leaf_offset = visible_offset;
+        let mut ranges = Vec::new();
+
+        let mut visible_offset = leaf_offset;
 
         let mut state = if start.is_deleted {
             DeletionState::Starting
         } else {
-            // TODO: handle case where the end of the start is not included in
-            // the deletion.
-            let delete_from = deletion.start().offset - start.start();
-            let len = start.len();
-            self.delete_leaf_range(
-                start_idx,
-                visible_offset,
-                (delete_from..len).into(),
-            );
-            leaf_offset += delete_from;
-            visible_offset += len;
-            DeletionState::Deleting(leaf_offset)
+            let delete_from = if deletion.start().is_zero() {
+                0
+            } else {
+                deletion.start().offset - start.start()
+            };
+
+            let deleted_up_to = deletion.version_map().get(start.replica_id());
+
+            if start.end() > deleted_up_to {
+                let delete_up_to = deleted_up_to - start.start();
+
+                self.delete_leaf_range(
+                    start_idx,
+                    leaf_offset,
+                    (delete_from..delete_up_to).into(),
+                );
+
+                let deletion_start = leaf_offset + delete_from;
+                let deletion_end = leaf_offset + delete_up_to;
+                ranges.push(deletion_start..deletion_end);
+
+                leaf_offset += delete_from;
+
+                visible_offset += delete_up_to;
+
+                DeletionState::Skipping
+            } else {
+                let len = start.len();
+
+                self.delete_leaf_range(
+                    start_idx,
+                    leaf_offset,
+                    (delete_from..len).into(),
+                );
+
+                leaf_offset += delete_from;
+
+                visible_offset += len;
+
+                DeletionState::Deleting(leaf_offset)
+            }
         };
 
         let mut runs = self.gtree.leaves::<false>(start_idx);
-
-        let mut ranges = Vec::new();
 
         loop {
             let (run_idx, run) = runs.next().unwrap();
