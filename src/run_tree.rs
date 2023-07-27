@@ -249,8 +249,9 @@ impl RunTree {
             anchor = Anchor::new(run.replica_id(), split_at_offset);
 
             if run.len() == offset
+                && run.end() == text.start()
                 && run.replica_id() == text.inserted_by()
-                && run.end() == text.range.start
+                && run.lamport_ts() == lamport_clock.highest()
             {
                 run.extend(text.len());
                 return (None, None);
@@ -828,16 +829,20 @@ impl EditRun {
 
     #[inline]
     pub fn can_append(&self, other: &Self) -> bool {
-        self.is_deleted == other.is_deleted
+        self.end() == other.start()
             && self.replica_id() == other.replica_id()
-            && self.end() == other.start()
+            && self.lamport_ts() == other.lamport_ts()
+            && self.run_ts() == other.run_ts()
+            && self.is_deleted == other.is_deleted
     }
 
     #[inline]
     pub fn can_prepend(&self, other: &Self) -> bool {
-        self.is_deleted == other.is_deleted
+        self.start() == other.end()
             && self.replica_id() == other.replica_id()
-            && other.end() == self.start()
+            && self.lamport_ts() == other.lamport_ts()
+            && self.run_ts() == other.run_ts()
+            && self.is_deleted == other.is_deleted
     }
 
     #[inline]
@@ -932,8 +937,8 @@ impl EditRun {
     }
 
     #[inline(always)]
-    pub fn run_ts(&self) -> RunTs {
-        self.run_ts
+    pub fn lamport_ts(&self) -> LamportTs {
+        self.lamport_ts
     }
 
     /// TODO: docs
@@ -956,6 +961,11 @@ impl EditRun {
     #[inline(always)]
     pub fn replica_id(&self) -> ReplicaId {
         self.text.inserted_by()
+    }
+
+    #[inline(always)]
+    pub fn run_ts(&self) -> RunTs {
+        self.run_ts
     }
 
     /// TODO: docs

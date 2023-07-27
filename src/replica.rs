@@ -445,7 +445,7 @@ impl Replica {
             anchor,
             anchor_ts,
             text,
-            self.lamport_clock.last(),
+            self.lamport_clock.highest(),
             self.run_clock.last(),
         )
     }
@@ -729,7 +729,7 @@ impl core::fmt::Debug for LamportClock {
 
 impl LamportClock {
     #[inline]
-    fn last(&self) -> LamportTs {
+    pub fn highest(&self) -> LamportTs {
         self.0.saturating_sub(1)
     }
 
