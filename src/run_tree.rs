@@ -428,8 +428,11 @@ impl RunTree {
                 })
                 .unwrap()
         } else {
-            self.run_indices
-                .idx_at_anchor(deletion.start(), deletion.start_ts())
+            self.run_indices.idx_at_anchor(
+                deletion.start(),
+                deletion.start_ts(),
+                AnchorBias::Right,
+            )
         };
 
         let mut visible_offset = self.gtree.offset_of_leaf(start_idx);
@@ -452,8 +455,11 @@ impl RunTree {
             }
         }
 
-        let end_idx =
-            self.run_indices.idx_at_anchor(deletion.end(), deletion.end_ts());
+        let end_idx = self.run_indices.idx_at_anchor(
+            deletion.end(),
+            deletion.end_ts(),
+            AnchorBias::Left,
+        );
 
         /// TODO: docs
         enum DeletionState {
@@ -465,10 +471,6 @@ impl RunTree {
         let mut leaf_offset = visible_offset;
 
         let mut state = if start.is_deleted {
-            DeletionState::Starting
-        } else if start.end() == deletion.start().offset {
-            leaf_offset += start.len();
-            visible_offset += start.len();
             DeletionState::Starting
         } else {
             // TODO: handle case where the end of the start is not included in
@@ -611,9 +613,11 @@ impl RunTree {
             return self.insert_run_at_origin(run);
         }
 
-        let anchor_idx = self
-            .run_indices
-            .idx_at_anchor(run.anchor(), insertion.anchor_ts());
+        let anchor_idx = self.run_indices.idx_at_anchor(
+            run.anchor(),
+            insertion.anchor_ts(),
+            AnchorBias::Left,
+        );
 
         let anchor = self.gtree.leaf(anchor_idx);
 

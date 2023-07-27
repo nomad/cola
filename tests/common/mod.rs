@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use cola::{CrdtEdit, Length, ReplicaId, TextEdit};
+use cola::{CrdtEdit, ReplicaId, TextEdit};
 use rand::Rng;
 
 pub struct Replica {

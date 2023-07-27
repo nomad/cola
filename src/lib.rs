@@ -72,7 +72,7 @@ pub use replica::Replica;
 use replica::*;
 pub use replica_id::ReplicaId;
 use replica_id::{ReplicaIdMap, ReplicaIdMapValuesMut};
-use run_indices::RunIndices;
+use run_indices::{AnchorBias, RunIndices};
 use run_tree::*;
 pub use text_edit::{Text, TextEdit};
 use utils::*;

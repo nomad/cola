@@ -16,6 +16,13 @@ impl core::fmt::Debug for RunIndices {
     }
 }
 
+/// TODO: docs
+#[derive(PartialEq, Eq)]
+pub(crate) enum AnchorBias {
+    Left,
+    Right,
+}
+
 impl RunIndices {
     pub fn assert_invariants(&self, run_tree: &RunTree) {
         for (&replica_id, indices) in self.map.iter() {
@@ -48,11 +55,13 @@ impl RunIndices {
         &self,
         anchor: Anchor,
         anchor_ts: RunTs,
+        bias: AnchorBias,
     ) -> LeafIdx<EditRun> {
-        self.map
-            .get(&anchor.replica_id())
-            .unwrap()
-            .idx_at_offset(anchor_ts, anchor.offset())
+        self.map.get(&anchor.replica_id()).unwrap().idx_at_offset(
+            anchor_ts,
+            anchor.offset(),
+            bias,
+        )
     }
 
     #[inline]
@@ -148,9 +157,10 @@ impl ReplicaIndices {
         &self,
         run_ts: RunTs,
         at_offset: Length,
+        bias: AnchorBias,
     ) -> LeafIdx<EditRun> {
         let (splits, offset) = &self[run_ts];
-        splits.fragment_at_offset(at_offset - offset).idx
+        splits.fragment_at_offset(at_offset - offset, bias).idx
     }
 
     #[inline]
@@ -279,15 +289,34 @@ mod fragments {
         }
 
         #[inline]
-        pub fn fragment_at_offset(&self, at_offset: Length) -> &Fragment {
-            debug_assert!(at_offset <= self.len());
+        pub fn fragment_at_offset(
+            &self,
+            at_offset: Length,
+            bias: AnchorBias,
+        ) -> &Fragment {
+            debug_assert!(
+                at_offset < self.len()
+                    || at_offset == self.len() && bias == AnchorBias::Left
+            );
 
             match self {
-                Self::Array(array) => array.fragment_at_offset(at_offset),
+                Self::Array(array) => {
+                    array.fragment_at_offset(at_offset, bias)
+                },
 
                 Self::Gtree(gtree) => {
-                    let (leaf_idx, _) = gtree.leaf_at_offset(at_offset);
-                    gtree.leaf(leaf_idx)
+                    let (leaf_idx, fragment_offset) =
+                        gtree.leaf_at_offset(at_offset);
+
+                    let fragment = gtree.leaf(leaf_idx);
+
+                    if fragment_offset + fragment.len == at_offset
+                        && bias == AnchorBias::Right
+                    {
+                        gtree.leaf(gtree.next_leaf(leaf_idx))
+                    } else {
+                        fragment
+                    }
                 },
             }
         }
@@ -444,9 +473,20 @@ mod fragments {
         }
 
         #[inline]
-        fn fragment_at_offset(&self, at_offset: Length) -> &Fragment {
-            let (idx, _) = self.idx_at_offset(at_offset);
-            &self.fragments[idx]
+        fn fragment_at_offset(
+            &self,
+            at_offset: Length,
+            bias: AnchorBias,
+        ) -> &Fragment {
+            let (idx, fragment_offset) = self.idx_at_offset(at_offset);
+            let fragment = &self.fragments[idx];
+            if fragment_offset + fragment.len == at_offset
+                && bias == AnchorBias::Right
+            {
+                &self.fragments[idx + 1]
+            } else {
+                fragment
+            }
         }
 
         #[inline]
