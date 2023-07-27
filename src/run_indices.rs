@@ -164,6 +164,11 @@ impl ReplicaIndices {
     }
 
     #[inline]
+    pub fn len(&self) -> usize {
+        self.vec.len()
+    }
+
+    #[inline]
     pub fn move_len_to_next_split(
         &mut self,
         run_ts: RunTs,

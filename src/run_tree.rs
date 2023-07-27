@@ -296,9 +296,7 @@ impl RunTree {
         run: EditRun,
         insert_after: LeafIdx<EditRun>,
     ) -> Length {
-        let append_to_last = !run.anchor().is_zero()
-            && run.anchor().replica_id() == run.replica_id()
-            && run.anchor().offset == run.start();
+        let run_ts = run.run_ts();
 
         let replica_id = run.replica_id();
 
@@ -309,7 +307,7 @@ impl RunTree {
 
         let indices = self.run_indices.get_mut(replica_id);
 
-        if append_to_last {
+        if run_ts + 1 == indices.len() as RunTs {
             indices.append_to_last(run_len, idx);
         } else {
             indices.append(run_len, idx);
