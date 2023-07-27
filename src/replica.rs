@@ -604,7 +604,7 @@ impl Replica {
 
         *self.version_map.get_mut(insertion.inserted_by()) += insertion.len();
 
-        self.lamport_clock.update(insertion.lamport_ts());
+        self.lamport_clock.merge(insertion.lamport_ts());
 
         TextEdit::Insertion(offset, insertion.text().clone())
     }
@@ -734,6 +734,13 @@ impl LamportClock {
     }
 
     #[inline]
+    fn merge(&mut self, remote_ts: LamportTs) {
+        if remote_ts >= self.0 {
+            self.0 = remote_ts + 1;
+        }
+    }
+
+    #[inline]
     fn new() -> Self {
         Self(0)
     }
@@ -743,11 +750,6 @@ impl LamportClock {
         let next = self.0;
         self.0 += 1;
         next
-    }
-
-    #[inline]
-    fn update(&mut self, other: LamportTs) {
-        self.0 = self.0.max(other) + 1;
     }
 }
 
