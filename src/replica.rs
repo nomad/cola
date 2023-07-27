@@ -217,6 +217,10 @@ impl Replica {
     where
         Id: Into<ReplicaId>,
     {
+        let id = id.into();
+
+        assert!(id.as_u64() != 0);
+
         if encoded.protocol_version() != PROTOCOL_VERSION {
             return Err(DecodeError::DifferentProtocol {
                 encoded_on: encoded.protocol_version(),
@@ -238,8 +242,6 @@ impl Replica {
         else {
             return Err(DecodeError::InvalidData);
         };
-
-        let id = id.into();
 
         version_map.fork_in_place(id, 0);
 
@@ -363,6 +365,8 @@ impl Replica {
         Id: Into<ReplicaId>,
     {
         let new_id = new_id.into();
+
+        assert!(new_id.as_u64() != 0);
 
         Self {
             id: new_id,
@@ -629,13 +633,13 @@ impl Replica {
     /// # use cola::Replica;
     /// // A text editor initializes a new Replica on the main thread where the
     /// // buffer is "foo".
-    /// let replica_main = Replica::new(0, 3);
+    /// let replica_main = Replica::new(1, 3);
     ///
     /// // It then starts a plugin on a separate thread and wants to give it a
     /// // Replica to keep its buffer synchronized with the one on the main
     /// // thread. It does *not* call `new()` again, but instead clones the
     /// // existing Replica and sends it to the new thread.
-    /// let replica_plugin = replica_main.fork(1);
+    /// let replica_plugin = replica_main.fork(2);
     ///
     /// thread::spawn(move || {
     ///     // The plugin can now use its Replica to exchange edits with the
@@ -649,6 +653,8 @@ impl Replica {
         Id: Into<ReplicaId>,
     {
         let id = id.into();
+
+        assert!(id.as_u64() != 0);
 
         let mut run_clock = RunClock::new();
 

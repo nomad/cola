@@ -8,8 +8,8 @@ use rand_chacha::ChaCha8Rng;
 
 #[test]
 fn join_consecutive_deletions() {
-    let mut replica1 = Replica::new(0, "abc");
-    let mut replica2 = replica1.fork(1);
+    let mut replica1 = Replica::new(1, "abc");
+    let mut replica2 = replica1.fork(2);
 
     let del_c = replica1.delete(2..3);
     let del_b = replica1.delete(1..2);
@@ -45,12 +45,12 @@ fn test_random_deletions(
             <= initial_len
     );
 
-    let first_replica = Replica::new_with_len(0, initial_len, rng);
+    let first_replica = Replica::new_with_len(1, initial_len, rng);
 
     let mut replicas = vec![first_replica];
 
     for i in 1..num_replicas {
-        replicas.push(replicas[0].fork(ReplicaId::from(i as u64)));
+        replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
     }
 
     let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();

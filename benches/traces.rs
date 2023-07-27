@@ -21,7 +21,7 @@ fn bench_upstream(
 
     group.bench_function(BenchmarkId::new("upstream", trace_name), |b| {
         b.iter(|| {
-            let mut replica = Replica::new(0, trace.start_content().len());
+            let mut replica = Replica::new(1, trace.start_content().len());
 
             for (start, end, text) in trace.edits() {
                 replica.deleted(start..end);
@@ -40,7 +40,7 @@ fn bench_downstream(
 ) {
     let trace = trace.chars_to_bytes();
 
-    let mut upstream = Replica::new(0, trace.start_content().len());
+    let mut upstream = Replica::new(1, trace.start_content().len());
 
     let edits = trace
         .edits()
@@ -60,9 +60,9 @@ fn bench_downstream(
 
     group.bench_function(BenchmarkId::new("downstream", trace_name), |b| {
         b.iter(|| {
-            let upstream = Replica::new(0, trace.start_content().len());
+            let upstream = Replica::new(1, trace.start_content().len());
 
-            let mut downstream = upstream.fork(1);
+            let mut downstream = upstream.fork(2);
 
             for edit in &edits {
                 downstream.merge(edit);

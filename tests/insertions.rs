@@ -107,12 +107,12 @@ fn test_random_insertions(
     assert!(max_insertion_len > 0);
     assert!(insertions_per_cycle > 0);
 
-    let first_replica = Replica::new(0, "");
+    let first_replica = Replica::new(1, "");
 
     let mut replicas = vec![first_replica];
 
     for i in 1..num_replicas {
-        replicas.push(replicas[0].fork(ReplicaId::from(i as u64)));
+        replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
     }
 
     let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();

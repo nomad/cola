@@ -6,7 +6,7 @@ use traces::SequentialTrace;
 fn test_trace(trace: &SequentialTrace) {
     let trace = trace.chars_to_bytes();
 
-    let mut upstream = Replica::new(0, trace.start_content());
+    let mut upstream = Replica::new(1, trace.start_content());
 
     let mut len = 0;
 
@@ -28,9 +28,9 @@ fn test_trace(trace: &SequentialTrace) {
         })
         .collect::<Vec<_>>();
 
-    let upstream = Replica::new(0, trace.start_content());
+    let upstream = Replica::new(1, trace.start_content());
 
-    let mut downstream = upstream.fork(1);
+    let mut downstream = upstream.fork(2);
 
     for (edit, len) in &edits {
         downstream.merge(edit);

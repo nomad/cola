@@ -126,13 +126,13 @@ impl<const NUM_PEERS: usize, C: Crdt> ConcurrentTrace<NUM_PEERS, C> {
     fn init_peers(starting_text: &str) -> Vec<C> {
         let mut peers = Vec::with_capacity(NUM_PEERS);
 
-        let first_peer = C::from_str(0, starting_text);
+        let first_peer = C::from_str(1, starting_text);
 
         peers.push(first_peer);
 
         for i in 1..NUM_PEERS {
             let first_peer = &peers[0];
-            peers.push(first_peer.fork(i as _));
+            peers.push(first_peer.fork(i as u64 + 1));
         }
 
         assert_eq!(peers.len(), NUM_PEERS);
