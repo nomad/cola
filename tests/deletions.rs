@@ -22,6 +22,26 @@ fn join_consecutive_deletions() {
 }
 
 #[test]
+fn deletion_start_continued() {
+    let mut replica1 = Replica::new(1, "");
+    let mut replica2 = replica1.fork(2);
+
+    let ins_ff = replica1.insert(0, "ff");
+    let ins_s = replica2.insert(0, "s");
+
+    replica1.merge(&ins_s);
+    replica2.merge(&ins_ff);
+
+    let ins_kkk = replica1.insert(2, "kkk");
+    let del_fs = replica2.delete(1..3);
+
+    replica1.merge(&del_fs);
+    replica2.merge(&ins_kkk);
+
+    assert_convergence!(replica1, replica2, "fkkk");
+}
+
+#[test]
 fn random_deletions() {
     let seed = rand::random::<u64>();
     println!("seed: {}", seed);
