@@ -47,25 +47,25 @@ fn woot_figure_2() {
 
 #[test]
 fn conflicting_insertions() {
-    let peer0 = Replica::new(0, "aa");
-    let mut peer1 = peer0.fork(1);
-    let mut peer2 = peer0.fork(2);
+    let peer1 = Replica::new(1, "aa");
+    let mut peer2 = peer1.fork(2);
+    let mut peer3 = peer1.fork(3);
 
-    let one_a = peer1.insert(2, "bb");
-    let one_b = peer1.insert(2, "cc");
-    let one_c = peer1.insert(6, "dd");
-    let one_d = peer1.insert(4, "ee");
+    let bb = peer2.insert(2, "bb");
+    let cc = peer2.insert(2, "cc");
+    let dd = peer2.insert(6, "dd");
+    let ee = peer2.insert(4, "ee");
 
-    let two_a = peer2.insert(2, "ff");
+    let ff = peer3.insert(2, "ff");
 
-    peer1.merge(&two_a);
+    peer2.merge(&ff);
 
-    peer2.merge(&one_a);
-    peer2.merge(&one_b);
-    peer2.merge(&one_c);
-    peer2.merge(&one_d);
+    peer3.merge(&bb);
+    peer3.merge(&cc);
+    peer3.merge(&dd);
+    peer3.merge(&ee);
 
-    assert_convergence!(peer1, peer2);
+    assert_convergence!(peer2, peer3);
 }
 
 #[test]
