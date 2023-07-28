@@ -582,6 +582,8 @@ impl RunTree {
                     state = DeletionState::Skipping;
 
                     leaf_offset += run_len;
+
+                    visible_offset += run_len;
                 } else {
                     let delete_up_to = deleted_up_to - run.start();
 
@@ -604,14 +606,14 @@ impl RunTree {
 
                     state = DeletionState::Skipping;
 
+                    visible_offset += delete_up_to;
+
                     runs = if got_merged {
                         self.gtree.leaves::<true>(run_idx)
                     } else {
                         self.gtree.leaves::<false>(run_idx)
                     };
                 }
-
-                visible_offset += run_len;
 
                 continue;
             }
