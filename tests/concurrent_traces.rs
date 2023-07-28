@@ -20,6 +20,10 @@ fn test_trace<const N: usize>(trace: ConcurrentTraceInfos<N, Replica>) {
         }
     }
 
+    for replica in &mut peers {
+        replica.merge_backlogged();
+    }
+
     for replica in &peers {
         assert_eq!(replica.buffer, final_content);
     }
