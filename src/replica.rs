@@ -383,7 +383,7 @@ impl Replica {
     /// `Deletion`.
     #[inline]
     fn has_merged_deletion(&self, deletion: &Deletion) -> bool {
-        self.deletion_map.get(deletion.deleted_by()) > deletion.deletion_ts()
+        self.deletion_map.get(deletion.deleted_by()) >= deletion.deletion_ts()
     }
 
     /// Returns `true` if this `Replica` has already merged the given
