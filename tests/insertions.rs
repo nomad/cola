@@ -159,3 +159,75 @@ fn test_random_insertions(
         assert_convergence!(replicas);
     }
 }
+
+#[test]
+fn random_edits() {
+    let seed = rand::random::<u64>();
+    println!("seed: {}", seed);
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    test_random_edits(&mut rng, 5, 1000, 5, 10, 10);
+}
+
+fn test_random_edits(
+    rng: &mut impl Rng,
+    num_replicas: usize,
+    num_cycles: usize,
+    edits_per_cycle: usize,
+    max_insertion_len: usize,
+    max_deletion_len: usize,
+) {
+    let first_replica = Replica::new(1, "");
+
+    let mut replicas = vec![first_replica];
+
+    for i in 1..num_replicas {
+        replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
+    }
+
+    let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
+
+    for _ in 0..num_cycles {
+        let edits = replicas
+            .iter_mut()
+            .map(|replica| {
+                (0..edits_per_cycle)
+                    .map(|_| {
+                        let edit = replica.random_edit(
+                            rng,
+                            max_insertion_len,
+                            max_deletion_len,
+                        );
+                        replica.edit(edit)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        merge_order.shuffle(rng);
+
+        for &replica_idx in &merge_order {
+            let len = replicas.len();
+
+            let replica = &mut replicas[replica_idx];
+
+            let mut merge_order =
+                (0..len).filter(|&idx| idx != replica_idx).collect::<Vec<_>>();
+
+            merge_order.shuffle(rng);
+
+            for idx in merge_order {
+                for edit in &edits[idx] {
+                    replica.merge(edit);
+                }
+            }
+
+            replica.merge_backlogged();
+        }
+
+        for replica in &replicas {
+            replica.assert_invariants();
+        }
+
+        assert_convergence!(replicas);
+    }
+}
