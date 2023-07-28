@@ -354,7 +354,7 @@ impl RunTree {
         leaf_idx: LeafIdx<EditRun>,
         leaf_offset: Length,
         range: Range<Length>,
-    ) {
+    ) -> bool {
         let run = self.gtree.leaf(leaf_idx);
 
         let id_range = run.replica_id();
@@ -395,6 +395,8 @@ impl RunTree {
                         deleted_range_offset + range.end,
                         range.len(),
                     );
+
+                    return true;
                 } else if range.end == deleted_range_run_len {
                     self.run_indices.get_mut(id_range).move_len_to_next_split(
                         run_ts_range,
@@ -408,6 +410,8 @@ impl RunTree {
 
             _ => {},
         };
+
+        false
     }
 
     #[inline]
@@ -476,8 +480,8 @@ impl RunTree {
 
         let mut visible_offset = leaf_offset;
 
-        let mut state = if start.is_deleted {
-            DeletionState::Starting
+        let (start_merged, mut state) = if start.is_deleted {
+            (false, DeletionState::Starting)
         } else {
             let delete_from = if deletion.start().is_zero() {
                 0
@@ -490,7 +494,7 @@ impl RunTree {
             if start.end() > deleted_up_to {
                 let delete_up_to = deleted_up_to - start.start();
 
-                self.delete_leaf_range(
+                let start_merged = self.delete_leaf_range(
                     start_idx,
                     leaf_offset,
                     (delete_from..delete_up_to).into(),
@@ -504,11 +508,11 @@ impl RunTree {
 
                 visible_offset += delete_up_to;
 
-                DeletionState::Skipping
+                (start_merged, DeletionState::Skipping)
             } else {
                 let len = start.len();
 
-                self.delete_leaf_range(
+                let start_merged = self.delete_leaf_range(
                     start_idx,
                     leaf_offset,
                     (delete_from..len).into(),
@@ -518,11 +522,15 @@ impl RunTree {
 
                 visible_offset += len;
 
-                DeletionState::Deleting(leaf_offset)
+                (start_merged, DeletionState::Deleting(leaf_offset))
             }
         };
 
-        let mut runs = self.gtree.leaves::<false>(start_idx);
+        let mut runs = if start_merged {
+            self.gtree.leaves::<true>(start_idx)
+        } else {
+            self.gtree.leaves::<false>(start_idx)
+        };
 
         loop {
             let (run_idx, run) = runs.next().unwrap();
