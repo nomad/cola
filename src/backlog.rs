@@ -14,12 +14,16 @@ pub(crate) struct Backlog {
 }
 
 impl Backlog {
-    pub fn assert_invariants(&self) {
+    pub fn assert_invariants(
+        &self,
+        version_map: &VersionMap,
+        deletion_map: &DeletionMap,
+    ) {
         for (&id, insertions) in self.insertions.iter() {
-            insertions.assert_invariants(id);
+            insertions.assert_invariants(id, version_map);
         }
         for (&id, deletions) in self.deletions.iter() {
-            deletions.assert_invariants(id);
+            deletions.assert_invariants(id, deletion_map);
         }
     }
 
@@ -78,7 +82,13 @@ impl core::fmt::Debug for InsertionsBacklog {
 }
 
 impl InsertionsBacklog {
-    fn assert_invariants(&self, id: ReplicaId) {
+    fn assert_invariants(&self, id: ReplicaId, version_map: &VersionMap) {
+        let Some(first) = self.insertions.front() else {
+            return;
+        };
+
+        assert!(version_map.get(id) <= first.start());
+
         let mut prev_end = 0;
 
         for insertion in &self.insertions {
@@ -118,7 +128,13 @@ impl core::fmt::Debug for DeletionsBacklog {
 }
 
 impl DeletionsBacklog {
-    fn assert_invariants(&self, id: ReplicaId) {
+    fn assert_invariants(&self, id: ReplicaId, deletion_map: &DeletionMap) {
+        let Some(first) = self.deletions.front() else {
+            return;
+        };
+
+        assert!(deletion_map.get(id) <= first.deletion_ts());
+
         let mut prev_ts = 0;
 
         for deletion in &self.deletions {
