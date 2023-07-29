@@ -108,8 +108,8 @@ pub(crate) struct Insertion {
 
 impl Insertion {
     #[inline(always)]
-    pub fn anchor(&self) -> &Anchor {
-        &self.anchor
+    pub fn anchor(&self) -> Anchor {
+        self.anchor
     }
 
     #[inline(always)]

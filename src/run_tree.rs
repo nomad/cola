@@ -217,12 +217,8 @@ impl RunTree {
         let text_len = text.len();
 
         if offset == 0 {
-            let run = EditRun::new(
-                Anchor::origin(),
-                text,
-                run_clock.next(),
-                lamport_clock.next(),
-            );
+            let run =
+                EditRun::new(text, run_clock.next(), lamport_clock.next());
 
             let inserted_idx = self.gtree.prepend(run);
 
@@ -259,12 +255,8 @@ impl RunTree {
 
             let split = run.split(offset);
 
-            let new_run = EditRun::new(
-                anchor,
-                text,
-                run_clock.next(),
-                lamport_clock.next(),
-            );
+            let new_run =
+                EditRun::new(text, run_clock.next(), lamport_clock.next());
 
             (Some(new_run), split)
         };
@@ -654,12 +646,12 @@ impl RunTree {
     pub fn merge_insertion(&mut self, insertion: &Insertion) -> Length {
         let run = EditRun::from_insertion(insertion);
 
-        if run.anchor().is_zero() {
+        if insertion.anchor().is_zero() {
             return self.insert_run_at_origin(run);
         }
 
         let anchor_idx = self.run_indices.idx_at_anchor(
-            run.anchor(),
+            insertion.anchor(),
             insertion.anchor_ts(),
             AnchorBias::Left,
         );
@@ -669,8 +661,8 @@ impl RunTree {
         // If the insertion is anchored in the middle of the anchor run then
         // there can't be any other runs that are tied with it. In this case we
         // can just split the anchor run and insert the new run after it.
-        if run.anchor().offset < anchor.end() {
-            let insert_at = run.anchor().offset - anchor.start();
+        if insertion.anchor().offset < anchor.end() {
+            let insert_at = insertion.anchor().offset - anchor.start();
             return self.split_run_with_another(run, anchor_idx, insert_at);
         }
 
@@ -781,9 +773,6 @@ pub(crate) enum MergedDeletion {
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct EditRun {
     /// TODO: docs
-    inserted_at: Anchor,
-
-    /// TODO: docs
     text: Text,
 
     /// TODO: docs
@@ -800,9 +789,8 @@ impl core::fmt::Debug for EditRun {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,
-            "{:?} |@ {:?} - L({}) I({}){}",
+            "{:?} L({}) I({}){}",
             self.text,
-            self.inserted_at,
             self.lamport_ts,
             self.run_ts,
             if self.is_deleted { " 🪦" } else { "" },
@@ -832,11 +820,6 @@ impl PartialOrd for EditRun {
 }
 
 impl EditRun {
-    #[inline(always)]
-    fn anchor(&self) -> Anchor {
-        self.inserted_at
-    }
-
     #[inline]
     pub fn can_append(&self, other: &Self) -> bool {
         self.end() == other.start()
@@ -938,7 +921,6 @@ impl EditRun {
     #[inline(always)]
     pub fn from_insertion(insertion: &Insertion) -> Self {
         Self {
-            inserted_at: *insertion.anchor(),
             text: insertion.text().clone(),
             run_ts: insertion.run_ts(),
             lamport_ts: insertion.lamport_ts(),
@@ -959,13 +941,8 @@ impl EditRun {
 
     /// TODO: docs
     #[inline]
-    pub fn new(
-        inserted_at: Anchor,
-        text: Text,
-        run_ts: RunTs,
-        lamport_ts: LamportTs,
-    ) -> Self {
-        Self { inserted_at, text, run_ts, lamport_ts, is_deleted: false }
+    pub fn new(text: Text, run_ts: RunTs, lamport_ts: LamportTs) -> Self {
+        Self { text, run_ts, lamport_ts, is_deleted: false }
     }
 
     #[inline(always)]
