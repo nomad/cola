@@ -407,10 +407,7 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn merge_deletion(
-        &mut self,
-        deletion: &Deletion,
-    ) -> Option<MergedDeletion> {
+    pub fn merge_deletion(&mut self, deletion: &Deletion) -> Ranges {
         let start_idx = if deletion.start().is_zero() {
             // If the deletion starts at the beginning of the document we start
             // from the first run that was visible when the deletion was made.
@@ -438,7 +435,7 @@ impl RunTree {
             let run = start;
 
             if run.is_deleted {
-                return None;
+                return Ranges::New;
             } else {
                 let delete_from = if deletion.start().is_zero() {
                     0
@@ -449,9 +446,7 @@ impl RunTree {
                 let delete_up_to = deletion.end().offset - run.start();
                 let delete_range = (delete_from..delete_up_to).into();
                 self.delete_leaf_range(start_idx, leaf_offset, delete_range);
-                return Some(MergedDeletion::Contiguous(
-                    (delete_range + leaf_offset).into(),
-                ));
+                return Ranges::Single((delete_range + leaf_offset).into());
             }
         }
 
@@ -468,7 +463,7 @@ impl RunTree {
             Starting,
         }
 
-        let mut ranges = Vec::new();
+        let mut ranges = Ranges::new();
 
         let mut visible_offset = leaf_offset;
 
@@ -631,15 +626,7 @@ impl RunTree {
             visible_offset += run_len;
         }
 
-        match ranges.len() {
-            0 => None,
-
-            1 => Some(MergedDeletion::Contiguous(
-                ranges.into_iter().next().unwrap(),
-            )),
-
-            _ => Some(MergedDeletion::Split(ranges)),
-        }
+        ranges
     }
 
     #[inline]
@@ -761,11 +748,26 @@ impl RunTree {
     }
 }
 
-/// TODO: docs
-#[derive(Debug)]
-pub(crate) enum MergedDeletion {
-    Contiguous(ops::Range<Length>),
-    Split(Vec<ops::Range<Length>>),
+pub(crate) enum Ranges {
+    New,
+    Single(ops::Range<Length>),
+    Multiple(Vec<ops::Range<Length>>),
+}
+
+impl Ranges {
+    #[inline]
+    fn new() -> Self {
+        Self::New
+    }
+
+    #[inline]
+    fn push(&mut self, range: ops::Range<Length>) {
+        match self {
+            Self::New => *self = Self::Single(range),
+            Self::Single(r) => *self = Self::Multiple(vec![r.clone(), range]),
+            Self::Multiple(ranges) => ranges.push(range),
+        }
+    }
 }
 
 /// TODO: docs

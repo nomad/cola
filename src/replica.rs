@@ -598,19 +598,15 @@ impl Replica {
     ) -> Option<TextEdit> {
         debug_assert!(self.can_merge_deletion(deletion));
 
-        let outcome = self.run_tree.merge_deletion(deletion);
+        let ranges = self.run_tree.merge_deletion(deletion);
 
         *self.deletion_map.get_mut(deletion.deleted_by()) =
             deletion.deletion_ts();
 
-        match outcome? {
-            MergedDeletion::Contiguous(range) => {
-                Some(TextEdit::ContiguousDeletion(range))
-            },
-
-            MergedDeletion::Split(ranges) => {
-                Some(TextEdit::SplitDeletion(ranges))
-            },
+        match ranges {
+            Ranges::New => None,
+            Ranges::Single(range) => Some(TextEdit::ContiguousDeletion(range)),
+            Ranges::Multiple(ranges) => Some(TextEdit::SplitDeletion(ranges)),
         }
     }
 
