@@ -1,5 +1,6 @@
 use core::ops::RangeBounds;
 
+use crate::panic_messages as panic;
 use crate::*;
 
 /// A CRDT for text.
@@ -209,6 +210,7 @@ impl Replica {
     /// ```
     #[cfg(feature = "encode")]
     #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
+    #[track_caller]
     #[inline]
     pub fn decode<Id>(
         id: Id,
@@ -218,6 +220,10 @@ impl Replica {
         Id: Into<ReplicaId>,
     {
         let id = id.into();
+
+        if id.as_u64() == 0 {
+            panic::replica_id_is_zero();
+        }
 
         assert!(id.as_u64() != 0);
 
@@ -281,12 +287,21 @@ impl Replica {
     /// // Peer 1 deletes "Hello ".
     /// let edit: CrdtEdit = replica1.deleted(..6);
     /// ```
+    #[track_caller]
     #[inline]
     pub fn deleted<R>(&mut self, range: R) -> CrdtEdit
     where
         R: RangeBounds<Length>,
     {
         let (start, end) = range_bounds_to_start_end(range, 0, self.len());
+
+        if end > self.len() {
+            panic::offset_out_of_bounds(end, self.len());
+        }
+
+        if start > end {
+            panic::start_greater_than_end(start, end);
+        }
 
         if start == end {
             return CrdtEdit::no_op();
@@ -359,6 +374,7 @@ impl Replica {
     /// let replica2 = replica1.fork(2);
     /// assert_eq!(replica2.id(), ReplicaId::from(2))
     /// ```
+    #[track_caller]
     #[inline]
     pub fn fork<Id>(&self, new_id: Id) -> Self
     where
@@ -366,7 +382,9 @@ impl Replica {
     {
         let new_id = new_id.into();
 
-        assert!(new_id.as_u64() != 0);
+        if new_id.as_u64() == 0 {
+            panic::replica_id_is_zero();
+        }
 
         Self {
             id: new_id,
@@ -420,8 +438,13 @@ impl Replica {
     /// // Peer 1 inserts two characters between the 'a' and the 'b'.
     /// let edit: CrdtEdit = replica1.inserted(1, 2);
     /// ```
+    #[track_caller]
     #[inline]
     pub fn inserted(&mut self, at_offset: Length, len: Length) -> CrdtEdit {
+        if at_offset > self.len() {
+            panic::offset_out_of_bounds(at_offset, self.len());
+        }
+
         if len == 0 {
             return CrdtEdit::no_op();
         }
@@ -647,6 +670,7 @@ impl Replica {
     ///     println!("{replica_plugin:?}");
     /// });
     /// ```
+    #[track_caller]
     #[inline]
     pub fn new<Id>(id: Id, len: Length) -> Self
     where
@@ -654,7 +678,9 @@ impl Replica {
     {
         let id = id.into();
 
-        assert!(id.as_u64() != 0);
+        if id.as_u64() == 0 {
+            panic::replica_id_is_zero();
+        }
 
         let mut run_clock = RunClock::new();
 

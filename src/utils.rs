@@ -126,3 +126,36 @@ where
 
     (start, end)
 }
+
+pub mod panic_messages {
+    use crate::Length;
+
+    #[track_caller]
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn offset_out_of_bounds(offset: Length, len: Length) -> ! {
+        debug_assert!(offset > len);
+        panic!(
+            "offset out of bounds: the offset is {offset} but the length is \
+             {len}"
+        );
+    }
+
+    #[track_caller]
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn replica_id_is_zero() -> ! {
+        panic!("invalid ReplicaId: must not be zero");
+    }
+
+    #[track_caller]
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn start_greater_than_end(start: Length, end: Length) -> ! {
+        debug_assert!(start > end);
+        panic!(
+            "offset range's start is greater than its end: the start is \
+             {start} but the end is {end}"
+        );
+    }
+}
