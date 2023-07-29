@@ -10,12 +10,15 @@ fn test_trace<const N: usize>(trace: ConcurrentTraceInfos<N, Replica>) {
         match edit {
             Edit::Insertion(idx, offset, text) => {
                 peers[*idx].local_insert(*offset, text);
+                peers[*idx].assert_invariants();
             },
             Edit::Deletion(idx, start, end) => {
                 peers[*idx].local_delete(*start, *end);
+                peers[*idx].assert_invariants();
             },
             Edit::Merge(idx, edit) => {
                 peers[*idx].remote_merge(edit);
+                peers[*idx].assert_invariants();
             },
         }
     }

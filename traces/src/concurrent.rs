@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Read;
 
 use flate2::bufread::GzDecoder;
@@ -41,7 +42,7 @@ struct Transaction {
 struct Patch(usize, usize, String);
 
 pub trait Crdt: core::fmt::Debug + Sized {
-    type EDIT: Clone;
+    type EDIT: Clone + core::fmt::Debug;
 
     fn from_str(id: u64, s: &str) -> Self;
     fn fork(&self, new_id: u64) -> Self;
@@ -69,6 +70,7 @@ pub struct ConcurrentTrace<const NUM_PEERS: usize, C: Crdt> {
     edits: Vec<Edit<C>>,
 }
 
+#[derive(Debug)]
 pub enum Edit<C: Crdt> {
     Insertion(AgentIdx, usize, String),
     Deletion(AgentIdx, usize, usize),
@@ -81,46 +83,68 @@ impl<const NUM_PEERS: usize, C: Crdt> ConcurrentTrace<NUM_PEERS, C> {
     }
 
     fn from_txns(txns: Vec<Transaction>) -> (Self, Vec<C>) {
-        let mut edits = Vec::new();
+        let mut edits_in_txns = Vec::new();
 
-        let mut batches: Vec<Vec<C::EDIT>> = Vec::new();
+        let mut version_vectors = HashMap::new();
 
-        let mut peers = Self::init_peers("");
+        let mut agents = Self::init_peers("");
 
-        for txn in txns {
-            let peer = &mut peers[txn.agent];
+        let mut ops = Vec::new();
 
-            for idx in txn.parents {
-                for edit in &batches[idx] {
-                    peer.remote_merge(edit);
-                    edits.push(Edit::Merge(txn.agent, edit.clone()));
-                }
+        for (txn_idx, txn) in txns.iter().enumerate() {
+            let agent = &mut agents[txn.agent];
+
+            let version_vector =
+                version_vectors.entry(txn.agent).or_insert_with(Vec::new);
+
+            for &parent_idx in &txn.parents {
+                recursive_merge(
+                    agent,
+                    txn.agent,
+                    txns.as_slice(),
+                    &edits_in_txns,
+                    version_vector,
+                    &mut ops,
+                    parent_idx,
+                );
             }
 
-            let mut batch = Vec::new();
+            let mut edits = Vec::new();
 
             for &Patch(pos, del, ref text) in &txn.patches {
                 if del > 0 {
-                    batch.push(peer.local_delete(pos, pos + del));
-                    edits.push(Edit::Deletion(txn.agent, pos, pos + del));
+                    edits.push(agent.local_delete(pos, pos + del));
+                    ops.push(Edit::Deletion(txn.agent, pos, pos + del));
                 }
                 if !text.is_empty() {
-                    batch.push(peer.local_insert(pos, text));
-                    edits.push(Edit::Insertion(txn.agent, pos, text.clone()));
+                    edits.push(agent.local_insert(pos, text));
+                    ops.push(Edit::Insertion(txn.agent, pos, text.clone()));
                 }
             }
 
-            batches.push(batch);
+            edits_in_txns.push(edits);
+
+            version_vector.push(txn_idx);
         }
 
-        // Here we regenerate the peers vector, which in general will produce a
-        // different vector of peers from the one we used to generate the
-        // edits.
-        //
-        // In theory this doesn't matter because the concurrent data sets are
-        // guaranteed not to contain any concurrent insertions.
+        for (agent_idx, agent) in agents.iter_mut().enumerate() {
+            let version_vector =
+                version_vectors.entry(agent_idx).or_insert_with(Vec::new);
 
-        (Self { edits }, Self::init_peers(""))
+            for txn_idx in 0..txns.len() {
+                recursive_merge(
+                    agent,
+                    agent_idx,
+                    txns.as_slice(),
+                    &edits_in_txns,
+                    version_vector,
+                    &mut ops,
+                    txn_idx,
+                );
+            }
+        }
+
+        (Self { edits: ops }, Self::init_peers(""))
     }
 
     fn init_peers(starting_text: &str) -> Vec<C> {
@@ -143,6 +167,43 @@ impl<const NUM_PEERS: usize, C: Crdt> ConcurrentTrace<NUM_PEERS, C> {
     pub fn num_edits(&self) -> usize {
         self.edits.len()
     }
+}
+
+fn recursive_merge<C: Crdt>(
+    agent: &mut C,
+    agent_idx: AgentIdx,
+    txns: &[Transaction],
+    edits_in_txns: &[Vec<C::EDIT>],
+    version_vector: &mut Vec<TxnIdx>,
+    ops: &mut Vec<Edit<C>>,
+    txn_idx: TxnIdx,
+) {
+    if version_vector.contains(&txn_idx) {
+        return;
+    }
+
+    let txn = &txns[txn_idx];
+
+    for &parent_idx in &txn.parents {
+        recursive_merge::<C>(
+            agent,
+            agent_idx,
+            txns,
+            edits_in_txns,
+            version_vector,
+            ops,
+            parent_idx,
+        );
+    }
+
+    let edits = &edits_in_txns[txn_idx];
+
+    for edit in edits {
+        agent.remote_merge(edit);
+        ops.push(Edit::Merge(agent_idx, edit.clone()));
+    }
+
+    version_vector.push(txn_idx);
 }
 
 pub use traces::*;
