@@ -717,6 +717,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// Returns the offset of the given leaf from the start of the Gtree.
     #[inline]
     pub fn offset_of_leaf(&self, leaf_idx: LeafIdx<L>) -> L::Length {
+        if let Some(cursor) = self.cursor {
+            if leaf_idx == cursor.leaf_idx {
+                return cursor.offset;
+            }
+        }
+
         let mut offset = L::Length::zero();
 
         offset += self.offset_of_leaf_child(leaf_idx);
