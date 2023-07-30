@@ -851,7 +851,7 @@ impl EditRun {
 
     #[inline(always)]
     pub fn end(&self) -> Length {
-        self.text.range.end
+        self.text.end()
     }
 
     #[inline(always)]
@@ -938,7 +938,7 @@ impl EditRun {
     /// TODO: docs
     #[inline]
     pub fn len(&self) -> Length {
-        self.end() - self.start()
+        self.text.len()
     }
 
     /// TODO: docs
@@ -972,7 +972,7 @@ impl EditRun {
 
     #[inline(always)]
     pub fn start(&self) -> Length {
-        self.text.range.start
+        self.text.start()
     }
 
     #[inline(always)]
