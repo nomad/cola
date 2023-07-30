@@ -31,7 +31,7 @@
 //! # Code tour of cola's API
 //!
 //! ```
-//! # use cola::{Replica, TextEdit};
+//! # use cola::Replica;
 //! ```
 //!
 //! # Feature flags
@@ -124,7 +124,7 @@ pub type ProtocolVersion = u64;
 /// works as expected:
 ///
 /// ```
-/// # use cola::{Replica, TextEdit};
+/// # use cola::Replica;
 /// fn insert_at_codepoint(s: &mut String, offset: usize, insert: &str) {
 ///     let byte_offset = s.chars().take(offset).map(char::len_utf8).sum();
 ///     s.insert_str(byte_offset, insert);
@@ -145,10 +145,7 @@ pub type ProtocolVersion = u64;
 /// let insert_b = replica1.inserted(1, 1);
 ///
 /// // Peer 2 receives the edit.
-/// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insert_b)
-/// else {
-///     unreachable!();
-/// };
+/// let offset = replica2.integrate_insertion(&insert_b).unwrap();
 ///
 /// assert_eq!(offset, 1);
 ///
@@ -166,7 +163,7 @@ pub type ProtocolVersion = u64;
 /// diverge or even cause the program to crash, like in the following example:
 ///
 /// ```should_panic
-/// # use cola::{Replica, TextEdit};
+/// # use cola::Replica;
 /// # let b = "b";
 /// # let mut buf2 = String::from("àc");
 /// # let mut replica1 = Replica::new(1, 2);
@@ -177,9 +174,7 @@ pub type ProtocolVersion = u64;
 /// assert_eq!(buf2, "àc");
 ///
 /// // Peer 2 receives the edit.
-/// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insert_b) else {
-///     unreachable!();
-/// };
+/// let offset = replica2.integrate_insertion(&insert_b).unwrap();
 ///
 /// assert_eq!(offset, 1);
 ///

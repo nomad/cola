@@ -11,95 +11,95 @@ use crate::{Length, ReplicaId};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
 pub enum TextEdit {
-    /// This variant represents the offset at which to perform an insertion and
-    /// the corresponding `Text`.
-    ///
-    /// Note that this variant doesn't actually store the text string to be
-    /// inserted into your buffer (nor does a [`Replica`](crate::Replica) ask
-    /// for it when calling [`inserted`](crate::Replica::inserted)).
-    ///
-    /// You, as the user of the library, are responsible for sending that
-    /// string from the peer that performed the insertion to the peer that
-    /// created this enum using the transport layer of your choice.
+    // This variant represents the offset at which to perform an insertion and
+    // the corresponding `Text`.
+    //
+    // Note that this variant doesn't actually store the text string to be
+    // inserted into your buffer (nor does a [`Replica`](crate::Replica) ask
+    // for it when calling [`inserted`](crate::Replica::inserted)).
+    //
+    // You, as the user of the library, are responsible for sending that
+    // string from the peer that performed the insertion to the peer that
+    // created this enum using the transport layer of your choice.
     Insertion(Length, Text),
 
-    /// This variant represents an offset range to be deleted.
-    ///
-    /// This variant is returned when there haven't been any concurrent edits
-    /// in the original region of text from the time the deletion was performed
-    /// to when it was merged into the replica that created this [`TextEdit`].
-    ///
-    /// In this case the deleted region is still contiguous and can be
-    /// represented with a single range.
-    ///
-    /// The start of the range is guaranteed to be strictly less than the end.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use cola::{Replica, TextEdit};
-    /// // Peer 1 starts with the text "abcd", and sends it to a second peer.
-    /// let mut replica1 = Replica::new(1, 4);
-    ///
-    /// let mut replica2 = replica1.fork(2);
-    ///
-    /// // Peer 1 deletes the "bc" in "abcd".
-    /// let deletion = replica1.deleted(1..3);
-    ///
-    /// // Concurrently, peer 2 inserts a single character at start of the
-    /// // document.
-    /// let _ = replica2.inserted(0, 1);
-    ///
-    /// // Now peer 2 receives the deletion from peer 1. Since the previous
-    /// // insertion was outside of the deleted region the latter is still
-    /// // contiguous at this peer.
-    /// let Some(TextEdit::Deletion(range)) = replica2.merge(&deletion) else {
-    ///     unreachable!();
-    /// };
-    ///
-    /// assert_eq!(range.as_slice(), &[2..4]);
-    /// ```
+    // This variant represents an offset range to be deleted.
+    //
+    // This variant is returned when there haven't been any concurrent edits
+    // in the original region of text from the time the deletion was performed
+    // to when it was merged into the replica that created this [`TextEdit`].
+    //
+    // In this case the deleted region is still contiguous and can be
+    // represented with a single range.
+    //
+    // The start of the range is guaranteed to be strictly less than the end.
+    //
+    // # Example
+    //
+    // ```
+    // # use cola::{Replica, TextEdit};
+    // // Peer 1 starts with the text "abcd", and sends it to a second peer.
+    // let mut replica1 = Replica::new(1, 4);
+    //
+    // let mut replica2 = replica1.fork(2);
+    //
+    // // Peer 1 deletes the "bc" in "abcd".
+    // let deletion = replica1.deleted(1..3);
+    //
+    // // Concurrently, peer 2 inserts a single character at start of the
+    // // document.
+    // let _ = replica2.inserted(0, 1);
+    //
+    // // Now peer 2 receives the deletion from peer 1. Since the previous
+    // // insertion was outside of the deleted region the latter is still
+    // // contiguous at this peer.
+    // let Some(TextEdit::Deletion(range)) = replica2.merge(&deletion) else {
+    //     unreachable!();
+    // };
+    //
+    // assert_eq!(range.as_slice(), &[2..4]);
+    // ```
     ContiguousDeletion(Range<Length>),
 
-    /// This variant represents a series of offset ranges to be deleted.
-    ///
-    /// This variant is returned when there's been one or more concurrent edits
-    /// in the original region of text from the time the deletion was performed
-    /// to when it was merged into the replica that created this [`TextEdit`].
-    ///
-    /// In this case the deleted region has been split into multiple ranges
-    /// which are stored in a [`Vec`].
-    ///
-    /// The ranges in the vector are guaranteed to be sorted in ascending order
-    /// and to not overlap, i.e. for any two indices `i` and `j` where `i < j`
-    /// and `j < ranges.len()` it holds that `ranges[i].end < ranges[j].start`
-    /// (and of course that `ranges[i].start < ranges[i].end`).
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use cola::{Replica, TextEdit};
-    /// // Peer 1 starts with the text "abcd", and sends it to a second peer.
-    /// let mut replica1 = Replica::new(1, 4);
-    ///
-    /// let mut replica2 = replica1.fork(2);
-    ///
-    /// // Peer 1 deletes the "bc" in "abcd".
-    /// let deletion = replica1.deleted(1..3);
-    ///
-    /// // Concurrently, peer 2 inserts a single character between the 'b' and
-    /// // the 'c'.
-    /// let _ = replica2.inserted(2, 1);
-    ///
-    /// // Now peer 2 receives the deletion from peer 1. Since the previous
-    /// // insertion was inside the deleted range, the latter has now been
-    /// // split into two separate ranges.
-    /// let Some(TextEdit::Deletion(ranges)) = replica2.merge(&deletion) else {
-    ///     unreachable!();
-    /// };
-    ///
-    /// assert_eq!(ranges.as_slice(), &[1..2, 3..4]);
-    /// ```
+    // This variant represents a series of offset ranges to be deleted.
+    //
+    // This variant is returned when there's been one or more concurrent edits
+    // in the original region of text from the time the deletion was performed
+    // to when it was merged into the replica that created this [`TextEdit`].
+    //
+    // In this case the deleted region has been split into multiple ranges
+    // which are stored in a [`Vec`].
+    //
+    // The ranges in the vector are guaranteed to be sorted in ascending order
+    // and to not overlap, i.e. for any two indices `i` and `j` where `i < j`
+    // and `j < ranges.len()` it holds that `ranges[i].end < ranges[j].start`
+    // (and of course that `ranges[i].start < ranges[i].end`).
+    //
+    // # Example
+    //
+    // ```
+    // # use cola::{Replica, TextEdit};
+    // // Peer 1 starts with the text "abcd", and sends it to a second peer.
+    // let mut replica1 = Replica::new(1, 4);
+    //
+    // let mut replica2 = replica1.fork(2);
+    //
+    // // Peer 1 deletes the "bc" in "abcd".
+    // let deletion = replica1.deleted(1..3);
+    //
+    // // Concurrently, peer 2 inserts a single character between the 'b' and
+    // // the 'c'.
+    // let _ = replica2.inserted(2, 1);
+    //
+    // // Now peer 2 receives the deletion from peer 1. Since the previous
+    // // insertion was inside the deleted range, the latter has now been
+    // // split into two separate ranges.
+    // let Some(TextEdit::Deletion(ranges)) = replica2.merge(&deletion) else {
+    //     unreachable!();
+    // };
+    //
+    // assert_eq!(ranges.as_slice(), &[1..2, 3..4]);
+    // ```
     Deletion(Vec<Range<Length>>),
 }
 
@@ -133,21 +133,12 @@ impl Text {
     ///
     /// # Examples
     /// ```
-    /// # use cola::{Replica, TextEdit};
-    /// // Two peers start collaborating on an empty document.
+    /// # use cola::Replica;
     /// let mut replica1 = Replica::new(1, 0);
-    /// let mut replica2 = replica1.fork(2);
     ///
-    /// // Peer 1 inserts a character.
     /// let insertion = replica1.inserted(0, 1);
     ///
-    /// // Peer 2 merges the insertion.
-    /// let Some(TextEdit::Insertion(_, text)) = replica2.merge(&insertion) else {
-    ///     unreachable!();
-    /// };
-    ///
-    /// // The text was inserted by peer 1.
-    /// assert_eq!(text.inserted_by(), replica1.id());
+    /// assert_eq!(insertion.text().inserted_by(), replica1.id());
     /// ```
     #[inline]
     pub fn inserted_by(&self) -> ReplicaId {
@@ -192,15 +183,7 @@ impl Text {
     ///
     /// # Examples
     /// ```
-    /// # use cola::{Replica, TextEdit, Text};
-    /// fn unwrap_text(edit: Option<TextEdit>) -> Text {
-    ///     if let Some(TextEdit::Insertion(_, text)) = edit {
-    ///         text
-    ///     } else {
-    ///         unreachable!();
-    ///     }
-    /// }
-    ///
+    /// # use cola::Replica;
     /// // Two peers start collaborating on an empty document.
     /// let mut replica1 = Replica::new(1, 0);
     /// let mut replica2 = replica1.fork(2);
@@ -212,8 +195,6 @@ impl Text {
     /// let insertion3 = replica1.inserted(0, 3);
     /// let insertion4 = replica1.inserted(0, 4);
     ///
-    /// // Peer 2 merges the insertions.
-    /// //
     /// // Notice how:
     /// // - the temporal range of the first insertion starts at zero;
     /// // - the start of each subsequent range is equal to the end of the
@@ -221,17 +202,13 @@ impl Text {
     /// // - the length of each range is equal to the length given to
     /// //   `replica1.insert`.
     ///
-    /// let text1 = unwrap_text(replica2.merge(&insertion1));
-    /// assert_eq!(text1.temporal_range(), 0..1);
+    /// assert_eq!(insertion1.text().temporal_range(), 0..1);
     ///
-    /// let text2 = unwrap_text(replica2.merge(&insertion2));
-    /// assert_eq!(text2.temporal_range(), 1..3);
+    /// assert_eq!(insertion2.text().temporal_range(), 1..3);
     ///
-    /// let text3 = unwrap_text(replica2.merge(&insertion3));
-    /// assert_eq!(text3.temporal_range(), 3..6);
+    /// assert_eq!(insertion3.text().temporal_range(), 3..6);
     ///
-    /// let text4 = unwrap_text(replica2.merge(&insertion4));
-    /// assert_eq!(text4.temporal_range(), 6..10);
+    /// assert_eq!(insertion4.text().temporal_range(), 6..10);
     /// ```
     #[inline]
     pub fn temporal_range(&self) -> Range<Length> {

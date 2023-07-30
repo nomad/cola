@@ -78,6 +78,12 @@ impl Replica {
         self.run_tree.average_inode_occupancy()
     }
 
+    /// TODO: docs
+    #[inline]
+    pub fn backlogged_deletions(&mut self) -> BackloggedDeletions<'_> {
+        BackloggedDeletions::from_replica(self)
+    }
+
     /// Sometimes the [`integrate_deletion`](Replica::integrate_deletion)
     /// method is not able to produce an edit for the given `Deletion` at the
     /// time it is called. This is usually because the `Deletion` is itself
@@ -96,7 +102,7 @@ impl Replica {
     ///
     /// # Example
     /// ```
-    /// # use cola::{Replica, TextEdit};
+    /// # use cola::Replica;
     /// // The buffer at peer 1 is "ab".
     /// let mut replica1 = Replica::new(1, 2);
     ///
@@ -112,33 +118,24 @@ impl Replica {
     /// // and they get to the second peer in the opposite order. Because each
     /// // edit depends on the previous one, peer 2 can't merge the insertions
     /// // of the 'd' and the 'e' until it sees the 'c'.
-    /// let none_e = replica2.merge(&insert_e);
-    /// let none_d = replica2.merge(&insert_d);
+    /// let none_e = replica2.integrate_insertion(&insert_e);
+    /// let none_d = replica2.integrate_insertion(&insert_d);
     ///
     /// assert!(none_e.is_none());
     /// assert!(none_d.is_none());
     ///
     /// // Finally, peer 2 receives the 'c' and it's able merge it right away.
-    /// let Some(TextEdit::Insertion(offset_c, _)) = replica2.merge(&insert_c)
-    /// else {
-    ///     unreachable!()
-    /// };
+    /// let offset_c = replica2.integrate_insertion(&insert_c).unwrap();
     ///
     /// assert_eq!(offset_c, 2);
     ///
     /// // Peer 2 now has all the context it needs to merge the rest of the
     /// // edits that were previously backlogged.
-    /// let mut backlogged = replica2.backlogged();
+    /// let mut backlogged = replica2.backlogged_insertions();
     ///
-    /// assert!(matches!(backlogged.next(), Some(TextEdit::Insertion(3, _))));
-    /// assert!(matches!(backlogged.next(), Some(TextEdit::Insertion(4, _))));
+    /// assert!(matches!(backlogged.next(), Some((3, _))));
+    /// assert!(matches!(backlogged.next(), Some((4, _))));
     /// ```
-    #[inline]
-    pub fn backlogged_deletions(&mut self) -> BackloggedDeletions<'_> {
-        BackloggedDeletions::from_replica(self)
-    }
-
-    /// TODO: docs
     #[inline]
     pub fn backlogged_insertions(&mut self) -> BackloggedInsertions<'_> {
         BackloggedInsertions::from_replica(self)
@@ -288,12 +285,12 @@ impl Replica {
     /// # Example
     ///
     /// ```
-    /// # use cola::{Replica, CrdtEdit};
+    /// # use cola::{Replica, Deletion};
     /// // The buffer at peer 1 is "Hello World".
     /// let mut replica1 = Replica::new(1, 11);
     ///
     /// // Peer 1 deletes "Hello ".
-    /// let edit: CrdtEdit = replica1.deleted(..6);
+    /// let deletion: Deletion = replica1.deleted(..6);
     /// ```
     #[track_caller]
     #[inline]
@@ -439,12 +436,12 @@ impl Replica {
     /// # Example
     ///
     /// ```
-    /// # use cola::{Replica, CrdtEdit};
+    /// # use cola::{Replica, Insertion};
     /// // The buffer at peer 1 is "ab".
     /// let mut replica1 = Replica::new(1, 2);
     ///
     /// // Peer 1 inserts two characters between the 'a' and the 'b'.
-    /// let edit: CrdtEdit = replica1.inserted(1, 2);
+    /// let insertion: Insertion = replica1.inserted(1, 2);
     /// ```
     #[track_caller]
     #[inline]
@@ -518,7 +515,7 @@ impl Replica {
     /// # Example
     ///
     /// ```
-    /// # use cola::{Replica, TextEdit};
+    /// # use cola::Replica;
     /// // Peer 1 starts with a buffer containing "abcd" and sends it over to a
     /// // second peer.
     /// let mut replica1 = Replica::new(1, 4);
@@ -535,21 +532,19 @@ impl Replica {
     /// // The deletion arrives at the first peer. There have not been any
     /// // insertions or deletions *before* the 'b', so its offset range should
     /// // still be 1..2.
-    /// let Some(TextEdit::Deletion(range_b)) = replica1.merge(&deletion_at_2)
-    /// else {
-    ///     unreachable!();
-    /// };
+    /// let range_b = replica1
+    ///     .integrate_deletion(&deletion_at_2)
+    ///     .into_iter()
+    ///     .next()
+    ///     .unwrap();
     ///
-    /// assert_eq!(range_b.as_slice(), &[1..2]);
+    /// assert_eq!(range_b, 1..2);
     ///
     /// // Finally, the insertion arrives at the second peer. Here the 'b' has
     /// // been deleted, so the offset at which we should insert the new
     /// // character is not 2, but 1. This is because the *intent* of the first
     /// // peer was to insert the character between the 'b' and the 'c'.
-    /// let Some(TextEdit::Insertion(offset, _)) = replica2.merge(&insertion_at_1)
-    /// else {
-    ///     unreachable!();
-    /// };
+    /// let offset = replica2.integrate_insertion(&insertion_at_1).unwrap();
     ///
     /// assert_eq!(offset, 1);
     /// ```
