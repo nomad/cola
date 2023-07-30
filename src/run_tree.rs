@@ -340,14 +340,18 @@ impl RunTree {
         self.gtree.len()
     }
 
+    /// Deletes a range of a run, returning the `LeafIdx` of the `EditRun` that
+    /// immediately follows the run containing the deleted range.
     #[inline]
     fn delete_leaf_range(
         &mut self,
         leaf_idx: LeafIdx<EditRun>,
         leaf_offset: Length,
         range: Range<Length>,
-    ) -> bool {
+    ) -> LeafIdx<EditRun> {
         let run = self.gtree.leaf(leaf_idx);
+
+        debug_assert!(!run.is_deleted);
 
         let id_range = run.replica_id();
         let run_ts_range = run.run_ts();
@@ -367,17 +371,23 @@ impl RunTree {
                 let indices = self.run_indices.get_mut(id_range);
                 indices.split(run_ts_range, range.start, first);
                 indices.split(run_ts_range, range.end, second);
+                second
             },
 
             (Some(first), _) => {
-                let offset = deleted_range_offset
-                    + if range.start == 0 { range.end } else { range.start };
+                let (next_idx, offset) = if range.start == 0 {
+                    (first, range.end)
+                } else {
+                    (self.gtree.next_leaf(first).unwrap_or(first), range.start)
+                };
 
                 self.run_indices.get_mut(id_range).split(
                     run_ts_range,
-                    offset,
+                    deleted_range_offset + offset,
                     first,
                 );
+
+                next_idx
             },
 
             (None, None) if range.len() < deleted_range_run_len => {
@@ -388,26 +398,29 @@ impl RunTree {
                         range.len(),
                     );
 
-                    return true;
+                    leaf_idx
                 } else if range.end == deleted_range_run_len {
                     self.run_indices.get_mut(id_range).move_len_to_next_split(
                         run_ts_range,
                         deleted_range_offset + range.start,
                         range.len(),
                     );
+
+                    self.gtree.next_leaf(leaf_idx).unwrap()
                 } else {
                     unreachable!();
                 }
             },
 
-            _ => {},
-        };
-
-        false
+            _ => self.gtree.next_leaf(leaf_idx).unwrap_or(leaf_idx),
+        }
     }
 
     #[inline]
-    pub fn merge_deletion(&mut self, deletion: &Deletion) -> Ranges {
+    pub fn merge_deletion(
+        &mut self,
+        deletion: &Deletion,
+    ) -> Vec<ops::Range<usize>> {
         let start_idx = if deletion.start().is_zero() {
             // If the deletion starts at the beginning of the document we start
             // from the first run that was visible when the deletion was made.
@@ -431,11 +444,13 @@ impl RunTree {
 
         let start = self.gtree.leaf(start_idx);
 
+        let mut ranges = Vec::new();
+
         if start.contains_anchor(deletion.end()) {
             let run = start;
 
             if run.is_deleted {
-                return Ranges::New;
+                return ranges;
             } else {
                 let delete_from = if deletion.start().is_zero() {
                     0
@@ -446,7 +461,8 @@ impl RunTree {
                 let delete_up_to = deletion.end().offset - run.start();
                 let delete_range = (delete_from..delete_up_to).into();
                 self.delete_leaf_range(start_idx, leaf_offset, delete_range);
-                return Ranges::Single((delete_range + leaf_offset).into());
+                ranges.push((delete_range + leaf_offset).into());
+                return ranges;
             }
         }
 
@@ -463,12 +479,11 @@ impl RunTree {
             Starting,
         }
 
-        let mut ranges = Ranges::new();
-
         let mut visible_offset = leaf_offset;
 
-        let (start_merged, mut state) = if start.is_deleted {
-            (false, DeletionState::Starting)
+        let (start_idx, mut state) = if start.is_deleted {
+            let next_idx = self.gtree.next_leaf(start_idx).unwrap();
+            (next_idx, DeletionState::Starting)
         } else {
             let delete_from = if deletion.start().is_zero() {
                 0
@@ -481,7 +496,7 @@ impl RunTree {
             if start.end() > deleted_up_to {
                 let delete_up_to = deleted_up_to - start.start();
 
-                let start_merged = self.delete_leaf_range(
+                let next_idx = self.delete_leaf_range(
                     start_idx,
                     leaf_offset,
                     (delete_from..delete_up_to).into(),
@@ -495,11 +510,11 @@ impl RunTree {
 
                 visible_offset += delete_up_to;
 
-                (start_merged, DeletionState::Skipping)
+                (next_idx, DeletionState::Skipping)
             } else {
                 let len = start.len();
 
-                let start_merged = self.delete_leaf_range(
+                let next_idx = self.delete_leaf_range(
                     start_idx,
                     leaf_offset,
                     (delete_from..len).into(),
@@ -509,15 +524,11 @@ impl RunTree {
 
                 visible_offset += len;
 
-                (start_merged, DeletionState::Deleting(leaf_offset))
+                (next_idx, DeletionState::Deleting(leaf_offset))
             }
         };
 
-        let mut runs = if start_merged {
-            self.gtree.leaves::<true>(start_idx)
-        } else {
-            self.gtree.leaves::<false>(start_idx)
-        };
+        let mut runs = self.gtree.leaves::<true>(start_idx);
 
         loop {
             let (run_idx, run) = runs.next().unwrap();
@@ -574,7 +585,7 @@ impl RunTree {
                 } else {
                     let delete_up_to = deleted_up_to - run.start();
 
-                    let got_merged = self.delete_leaf_range(
+                    let next_idx = self.delete_leaf_range(
                         run_idx,
                         leaf_offset,
                         (0..delete_up_to).into(),
@@ -595,11 +606,7 @@ impl RunTree {
 
                     visible_offset += delete_up_to;
 
-                    runs = if got_merged {
-                        self.gtree.leaves::<true>(run_idx)
-                    } else {
-                        self.gtree.leaves::<false>(run_idx)
-                    };
+                    runs = self.gtree.leaves::<true>(next_idx);
                 }
 
                 continue;
@@ -745,28 +752,6 @@ impl RunTree {
         );
 
         offset
-    }
-}
-
-pub(crate) enum Ranges {
-    New,
-    Single(ops::Range<Length>),
-    Multiple(Vec<ops::Range<Length>>),
-}
-
-impl Ranges {
-    #[inline]
-    fn new() -> Self {
-        Self::New
-    }
-
-    #[inline]
-    fn push(&mut self, range: ops::Range<Length>) {
-        match self {
-            Self::New => *self = Self::Single(range),
-            Self::Single(r) => *self = Self::Multiple(vec![r.clone(), range]),
-            Self::Multiple(ranges) => ranges.push(range),
-        }
     }
 }
 

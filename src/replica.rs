@@ -527,13 +527,12 @@ impl Replica {
     /// // The deletion arrives at the first peer. There have not been any
     /// // insertions or deletions *before* the 'b', so its offset range should
     /// // still be 1..2.
-    /// let Some(TextEdit::ContiguousDeletion(range_b)) =
-    ///     replica1.merge(&deletion_at_2)
+    /// let Some(TextEdit::Deletion(range_b)) = replica1.merge(&deletion_at_2)
     /// else {
     ///     unreachable!();
     /// };
     ///
-    /// assert_eq!(range_b, 1..2);
+    /// assert_eq!(range_b.as_slice(), &[1..2]);
     ///
     /// // Finally, the insertion arrives at the second peer. Here the 'b' has
     /// // been deleted, so the offset at which we should insert the new
@@ -549,17 +548,11 @@ impl Replica {
     #[inline]
     pub fn merge(&mut self, crdt_edit: &CrdtEdit) -> Option<TextEdit> {
         match crdt_edit.kind() {
-            CrdtEditKind::Insertion(insertion)
-                if !self.has_merged_insertion(insertion) =>
-            {
+            CrdtEditKind::Insertion(insertion) => {
                 self.merge_insertion(insertion)
             },
 
-            CrdtEditKind::Deletion(deletion)
-                if !self.has_merged_deletion(deletion) =>
-            {
-                self.merge_deletion(deletion)
-            },
+            CrdtEditKind::Deletion(deletion) => self.merge_deletion(deletion),
 
             _ => None,
         }
@@ -567,9 +560,9 @@ impl Replica {
 
     #[inline]
     fn merge_deletion(&mut self, deletion: &Deletion) -> Option<TextEdit> {
-        debug_assert!(!self.has_merged_deletion(deletion));
-
-        if self.can_merge_deletion(deletion) {
+        if self.has_merged_deletion(deletion) {
+            None
+        } else if self.can_merge_deletion(deletion) {
             self.merge_unchecked_deletion(deletion)
         } else {
             self.backlog.insert_deletion(deletion.clone());
@@ -579,9 +572,9 @@ impl Replica {
 
     #[inline]
     fn merge_insertion(&mut self, insertion: &Insertion) -> Option<TextEdit> {
-        debug_assert!(!self.has_merged_insertion(insertion));
-
-        if self.can_merge_insertion(insertion) {
+        if self.has_merged_insertion(insertion) {
+            None
+        } else if self.can_merge_insertion(insertion) {
             Some(self.merge_unchecked_insertion(insertion))
         } else {
             self.backlog.insert_insertion(insertion.clone());
@@ -603,11 +596,7 @@ impl Replica {
         *self.deletion_map.get_mut(deletion.deleted_by()) =
             deletion.deletion_ts();
 
-        match ranges {
-            Ranges::New => None,
-            Ranges::Single(range) => Some(TextEdit::ContiguousDeletion(range)),
-            Ranges::Multiple(ranges) => Some(TextEdit::SplitDeletion(ranges)),
-        }
+        (!ranges.is_empty()).then_some(TextEdit::Deletion(ranges))
     }
 
     /// Merges the given [`Insertion`] without checking whether it can be

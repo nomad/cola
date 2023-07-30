@@ -318,7 +318,7 @@ mod fragments {
                     if fragment_offset + fragment.len == at_offset
                         && bias == AnchorBias::Right
                     {
-                        gtree.leaf(gtree.next_leaf(leaf_idx))
+                        gtree.leaf(gtree.next_leaf(leaf_idx).unwrap())
                     } else {
                         fragment
                     }
@@ -355,7 +355,7 @@ mod fragments {
                     let (leaf_idx, _) =
                         gtree.leaf_at_offset(fragment_at_offset);
 
-                    let next_idx = gtree.next_leaf(leaf_idx);
+                    let next_idx = gtree.next_leaf(leaf_idx).unwrap();
 
                     gtree.with_two_mut(leaf_idx, next_idx, |this, next| {
                         this.len -= len_move;
@@ -382,7 +382,7 @@ mod fragments {
                 Self::Gtree(gtree) => {
                     let (leaf_idx, _) = gtree.leaf_at_offset(at_offset);
 
-                    let prev_idx = gtree.prev_leaf(leaf_idx);
+                    let prev_idx = gtree.prev_leaf(leaf_idx).unwrap();
 
                     gtree.with_two_mut(prev_idx, leaf_idx, |prev, this| {
                         this.len -= len_move;

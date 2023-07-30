@@ -671,9 +671,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// Returns the index of the leaf that's directly after the leaf at the
-    /// given index. It panics if the given index is that of the last leaf.
+    /// given index.
     #[inline]
-    pub fn next_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
+    pub fn next_leaf(&self, leaf_idx: LeafIdx<L>) -> Option<LeafIdx<L>> {
         let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
 
         let parent_idx = self.lnode(leaf_idx).parent();
@@ -681,13 +681,15 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let parent = self.inode(parent_idx);
 
         if idx_in_parent + 1 < parent.num_children() {
-            return parent.child(idx_in_parent + 1).unwrap_leaf();
+            return Some(parent.child(idx_in_parent + 1).unwrap_leaf());
         }
 
         let mut inode_idx = parent_idx;
 
         loop {
-            debug_assert!(!self.is_root(inode_idx));
+            if self.is_root(inode_idx) {
+                return None;
+            }
 
             let idx_in_parent = self.idx_of_inode_in_parent(inode_idx);
             let parent_idx = self.inode(inode_idx).parent();
@@ -708,7 +710,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 },
 
                 Either::Leaf(leaf_idxs) => {
-                    return leaf_idxs[0];
+                    return Some(leaf_idxs[0]);
                 },
             }
         }
@@ -750,7 +752,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// Returns the index of the leaf that's directly before the leaf at the
     /// given index. It panics if the given index is that of the first leaf.
     #[inline]
-    pub fn prev_leaf(&self, leaf_idx: LeafIdx<L>) -> LeafIdx<L> {
+    pub fn prev_leaf(&self, leaf_idx: LeafIdx<L>) -> Option<LeafIdx<L>> {
         let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
 
         let parent_idx = self.lnode(leaf_idx).parent();
@@ -758,13 +760,15 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let parent = self.inode(parent_idx);
 
         if idx_in_parent > 0 {
-            return parent.child(idx_in_parent - 1).unwrap_leaf();
+            return Some(parent.child(idx_in_parent - 1).unwrap_leaf());
         }
 
         let mut inode_idx = parent_idx;
 
         loop {
-            debug_assert!(!self.is_root(inode_idx));
+            if self.is_root(inode_idx) {
+                return None;
+            }
 
             let idx_in_parent = self.idx_of_inode_in_parent(inode_idx);
             let parent_idx = self.inode(inode_idx).parent();
@@ -785,7 +789,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 },
 
                 Either::Leaf(leaf_idxs) => {
-                    return leaf_idxs[leaf_idxs.len() - 1];
+                    return Some(leaf_idxs[leaf_idxs.len() - 1]);
                 },
             }
         }

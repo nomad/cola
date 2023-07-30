@@ -105,7 +105,7 @@ impl Replica {
                     self.buffer.replace_range(range, "");
                 },
 
-                TextEdit::SplitDeletion(ranges) => {
+                TextEdit::Deletion(ranges) => {
                     for range in ranges.into_iter().rev() {
                         self.buffer.replace_range(range, "");
                     }
@@ -128,7 +128,7 @@ impl Replica {
                     self.buffer.replace_range(range, "");
                 },
 
-                TextEdit::SplitDeletion(ranges) => {
+                TextEdit::Deletion(ranges) => {
                     for range in ranges.into_iter().rev() {
                         self.buffer.replace_range(range, "");
                     }
