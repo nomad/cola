@@ -21,7 +21,7 @@ for a deeper dive into its design and implementation.
 # A note on the crate's naming scheme
 
 cola's `package.name` is `cola-crdt`, while its `lib.name` is simply `cola`.
-This is because the package name has to be unique in order to be published to
+This is because the package name has to be unique to be published to
 [crates.io], but unfortunately `cola` is already taken by a crate squatter.
 
 What this means practically for you, the user of the library, is that you
@@ -41,7 +41,7 @@ cola-crdt = "0.1"
 use cola::Replica;
 
 fn main() {
-    println!("{:?}", Replica::new(0, 0));
+    println!("{:?}", Replica::new(1, 42));
 }
 ```
 
