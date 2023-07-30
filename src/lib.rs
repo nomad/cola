@@ -19,7 +19,8 @@
 //!
 //! In cola, the core data structure which represents the state of the document
 //! at each peer is the [`Replica`], and the operations which the peers
-//! exchange to communicate their local edits are represented by [`CrdtEdit`]s.
+//! exchange to communicate their local edits are [`Insertion`]s and
+//! [`Deletion`]s.
 //!
 //! If you're new to this crate, reading the docs for those two structs would
 //! be a good place to start.
@@ -64,9 +65,9 @@ mod utils;
 mod version_map;
 
 use backlog::Backlog;
-pub use backlog::Backlogged;
-pub use crdt_edit::CrdtEdit;
-use crdt_edit::{CrdtEditKind, Deletion, Insertion};
+pub use backlog::{BackloggedDeletions, BackloggedInsertions};
+use crdt_edit::CrdtEdit;
+pub use crdt_edit::{Deletion, Insertion};
 use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
 use replica::*;
@@ -74,7 +75,8 @@ pub use replica_id::ReplicaId;
 use replica_id::{ReplicaIdMap, ReplicaIdMapValuesMut};
 use run_indices::{AnchorBias, RunIndices};
 use run_tree::*;
-pub use text_edit::{Text, TextEdit};
+pub use text_edit::Text;
+use text_edit::TextEdit;
 use utils::*;
 use version_map::{DeletionMap, VersionMap};
 

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Range;
 
-use cola::{CrdtEdit, ReplicaId, TextEdit};
+use cola::{ReplicaId, Text};
 use rand::Rng;
 
 pub struct Replica {
     pub buffer: String,
     pub crdt: cola::Replica,
-    history: HashMap<ReplicaId, String>,
+    backlog: HashMap<Text, String>,
 }
 
 impl Debug for Replica {
@@ -38,7 +38,11 @@ impl PartialEq<Replica> for &str {
     }
 }
 
-type Edit = (String, CrdtEdit);
+#[derive(Clone, Debug)]
+pub enum Edit {
+    Insertion(cola::Insertion, String),
+    Deletion(cola::Deletion),
+}
 
 impl Replica {
     pub fn assert_invariants(&self) {
@@ -62,15 +66,15 @@ impl Replica {
 
     pub fn delete(&mut self, byte_range: Range<usize>) -> Edit {
         self.buffer.replace_range(byte_range.clone(), "");
-        let edit = self.crdt.deleted(byte_range);
-        (String::new(), edit)
+        let deletion = self.crdt.deleted(byte_range);
+        Edit::Deletion(deletion)
     }
 
     pub fn fork(&self, id: impl Into<ReplicaId>) -> Self {
         Self {
             buffer: self.buffer.clone(),
             crdt: self.crdt.fork(id),
-            history: self.history.clone(),
+            backlog: self.backlog.clone(),
         }
     }
 
@@ -81,58 +85,45 @@ impl Replica {
     ) -> Edit {
         let text = text.into();
         self.buffer.insert_str(byte_offset, text.as_str());
-        let edit = self.crdt.inserted(byte_offset, text.len());
-        (text, edit)
+        let insertion = self.crdt.inserted(byte_offset, text.len());
+        Edit::Insertion(insertion, text)
     }
 
     pub fn len(&self) -> usize {
         self.buffer.len()
     }
 
-    pub fn merge(&mut self, (string, edit): &Edit) {
-        if let Some(edit) = self.crdt.merge(edit) {
-            match edit {
-                TextEdit::Insertion(offset, text) => {
+    pub fn merge(&mut self, edit: &Edit) {
+        match edit {
+            Edit::Insertion(insertion, string) => {
+                if let Some(offset) = self.crdt.integrate_insertion(insertion)
+                {
                     self.buffer.insert_str(offset, string);
+                } else {
+                    self.backlog
+                        .insert(insertion.text().clone(), string.clone());
+                }
+            },
 
-                    self.history
-                        .entry(text.inserted_by())
-                        .or_insert_with(String::new)
-                        .push_str(string);
-                },
-
-                TextEdit::ContiguousDeletion(range) => {
+            Edit::Deletion(deletion) => {
+                for range in
+                    self.crdt.integrate_deletion(deletion).into_iter().rev()
+                {
                     self.buffer.replace_range(range, "");
-                },
-
-                TextEdit::Deletion(ranges) => {
-                    for range in ranges.into_iter().rev() {
-                        self.buffer.replace_range(range, "");
-                    }
-                },
-            }
+                }
+            },
         }
     }
 
     pub fn merge_backlogged(&mut self) {
-        for edit in self.crdt.backlogged() {
-            match edit {
-                TextEdit::Insertion(offset, text) => {
-                    let s = &self.history.get(&text.inserted_by()).unwrap()
-                        [text.temporal_range()];
+        for (offset, text) in self.crdt.backlogged_insertions() {
+            let s = self.backlog.get(&text).unwrap();
+            self.buffer.insert_str(offset, s);
+        }
 
-                    self.buffer.insert_str(offset, s);
-                },
-
-                TextEdit::ContiguousDeletion(range) => {
-                    self.buffer.replace_range(range, "");
-                },
-
-                TextEdit::Deletion(ranges) => {
-                    for range in ranges.into_iter().rev() {
-                        self.buffer.replace_range(range, "");
-                    }
-                },
+        for ranges in self.crdt.backlogged_deletions() {
+            for range in ranges.into_iter().rev() {
+                self.buffer.replace_range(range, "");
             }
         }
     }
@@ -141,7 +132,7 @@ impl Replica {
         let buffer = text.into();
         let crdt = cola::Replica::new(id, buffer.len());
         let history = HashMap::new();
-        Self { buffer, crdt, history }
+        Self { buffer, crdt, backlog: history }
     }
 
     pub fn new_with_len(

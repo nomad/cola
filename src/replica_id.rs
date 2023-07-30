@@ -14,7 +14,7 @@ pub type ReplicaIdMapValuesMut<'a, T> =
 ///
 /// It's very important that all `Replica`s in the same collaborative session
 /// have unique `ReplicaId`s as this type is used to distinguish between them
-/// when [`merge`](crate::Replica::merge)ing edits.
+/// when integrating remote edits.
 ///
 /// Guaranteeing uniqueness is up to you.
 ///

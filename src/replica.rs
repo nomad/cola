@@ -1,4 +1,4 @@
-use core::ops::RangeBounds;
+use core::ops::{Range, RangeBounds};
 
 use crate::panic_messages as panic;
 use crate::*;
@@ -25,14 +25,16 @@ use crate::*;
 ///
 /// Then, every time a peer performs an edit on their local buffer they inform
 /// their `Replica` by calling either [`inserted`](Self::inserted) or
-/// [`deleted`](Self::deleted). This produces a [`CrdtEdit`] which can be sent
-/// over to the other peers using the network layer of your choice.
+/// [`deleted`](Self::deleted). This produces [`Insertion`]s and [`Deletion`]s
+/// which can be sent over to the other peers using the network layer of your
+/// choice.
 ///
 /// When a peer receives a `CrdtEdit` they can integrate it into their own
-/// `Replica` by calling the [`merge`](Self::merge) method. This produces a
-/// [`TextEdit`] which tells them *where* in their local buffer they should
-/// apply the edit, taking into account all the other edits that have happened
-/// concurrently.
+/// `Replica` by calling either
+/// [`integrate_insertion`](Self::integrate_insertion) or
+/// [`integrate_deletion`](Self::integrate_deletion). This produces a edits
+/// which tells them *where* in their local buffer they should apply the edit,
+/// taking into account all the other edits that have happened concurrently.
 ///
 /// Basically, you tell your `Replica` how your buffer changes, and it tells
 /// you how your buffer *should* change when receiving remote edits.
@@ -76,18 +78,18 @@ impl Replica {
         self.run_tree.average_inode_occupancy()
     }
 
-    /// Sometimes the [`merge`](Replica::merge) method is not able to produce a
-    /// `TextEdit` for the given `CrdtEdit` at the time it is called. This is
-    /// usually because the `CrdtEdit` is itself dependent on some context that
-    /// the `Replica` may not have yet.
+    /// Sometimes the [`integrate_deletion`](Replica::integrate_deletion)
+    /// method is not able to produce an edit for the given `Deletion` at the
+    /// time it is called. This is usually because the `Deletion` is itself
+    /// dependent on some context that the `Replica` may not have yet.
     ///
-    /// When this happens, the `Replica` stores the `CrdtEdit` in an internal
+    /// When this happens, the `Replica` stores the `Deletion` in an internal
     /// backlog of edits that can't be processed yet, but may be in the future.
     ///
     /// This method returns an iterator over all the backlogged edits which are
     /// now ready to be applied to your buffer.
     ///
-    /// The [`Backlogged`] iterator yields [`TextEdit`]s. It's very important
+    /// The [`BackloggedDeletions`] iterator yields ranges. It's very important
     /// that you apply every `TextEdit` to your buffer in the *exact same*
     /// order in which they were yielded by the iterator. If you don't your
     /// buffer could permanently diverge from the other peers.
@@ -132,8 +134,14 @@ impl Replica {
     /// assert!(matches!(backlogged.next(), Some(TextEdit::Insertion(4, _))));
     /// ```
     #[inline]
-    pub fn backlogged(&mut self) -> Backlogged<'_> {
-        Backlogged::from_replica(self)
+    pub fn backlogged_deletions(&mut self) -> BackloggedDeletions<'_> {
+        BackloggedDeletions::from_replica(self)
+    }
+
+    /// TODO: docs
+    #[inline]
+    pub fn backlogged_insertions(&mut self) -> BackloggedInsertions<'_> {
+        BackloggedInsertions::from_replica(self)
     }
 
     #[inline]
@@ -269,7 +277,7 @@ impl Replica {
     /// Informs the `Replica` that you have deleted the characters in the given
     /// offset range.
     ///
-    /// This produces a [`CrdtEdit`] which can be sent to all the other peers
+    /// This produces a [`Deletion`] which can be sent to all the other peers
     /// to integrate the deletion into their own `Replica`s.
     ///
     /// # Panics
@@ -289,7 +297,7 @@ impl Replica {
     /// ```
     #[track_caller]
     #[inline]
-    pub fn deleted<R>(&mut self, range: R) -> CrdtEdit
+    pub fn deleted<R>(&mut self, range: R) -> Deletion
     where
         R: RangeBounds<Length>,
     {
@@ -304,7 +312,7 @@ impl Replica {
         }
 
         if start == end {
-            return CrdtEdit::no_op();
+            return Deletion::no_op();
         }
 
         let deleted_range = (start..end).into();
@@ -314,7 +322,7 @@ impl Replica {
 
         *self.deletion_map.this_mut() += 1;
 
-        CrdtEdit::deletion(
+        Deletion::new(
             start,
             start_ts,
             end,
@@ -420,7 +428,7 @@ impl Replica {
     /// Informs the `Replica` that you have inserted `len` characters at the
     /// given offset.
     ///
-    /// This produces a [`CrdtEdit`] which can be sent to all the other peers
+    /// This produces an [`Insertion`] which can be sent to all the other peers
     /// to integrate the insertion into their own `Replica`s.
     ///
     /// # Panics
@@ -440,13 +448,13 @@ impl Replica {
     /// ```
     #[track_caller]
     #[inline]
-    pub fn inserted(&mut self, at_offset: Length, len: Length) -> CrdtEdit {
+    pub fn inserted(&mut self, at_offset: Length, len: Length) -> Insertion {
         if at_offset > self.len() {
             panic::offset_out_of_bounds(at_offset, self.len());
         }
 
         if len == 0 {
-            return CrdtEdit::no_op();
+            return Insertion::no_op();
         }
 
         let start = self.version_map.this();
@@ -464,7 +472,7 @@ impl Replica {
             &mut self.lamport_clock,
         );
 
-        CrdtEdit::insertion(
+        Insertion::new(
             anchor,
             anchor_ts,
             text,
@@ -546,33 +554,33 @@ impl Replica {
     /// assert_eq!(offset, 1);
     /// ```
     #[inline]
-    pub fn merge(&mut self, crdt_edit: &CrdtEdit) -> Option<TextEdit> {
-        match crdt_edit.kind() {
-            CrdtEditKind::Insertion(insertion) => {
-                self.merge_insertion(insertion)
-            },
-
-            CrdtEditKind::Deletion(deletion) => self.merge_deletion(deletion),
-
-            _ => None,
-        }
+    fn _merge(&mut self, _crdt_edit: &CrdtEdit) -> Option<TextEdit> {
+        todo!();
     }
 
+    /// TODO: docs
     #[inline]
-    fn merge_deletion(&mut self, deletion: &Deletion) -> Option<TextEdit> {
-        if self.has_merged_deletion(deletion) {
-            None
+    pub fn integrate_deletion(
+        &mut self,
+        deletion: &Deletion,
+    ) -> Vec<Range<Length>> {
+        if deletion.is_no_op() || self.has_merged_deletion(deletion) {
+            Vec::new()
         } else if self.can_merge_deletion(deletion) {
             self.merge_unchecked_deletion(deletion)
         } else {
             self.backlog.insert_deletion(deletion.clone());
-            None
+            Vec::new()
         }
     }
 
+    /// TODO: docs
     #[inline]
-    fn merge_insertion(&mut self, insertion: &Insertion) -> Option<TextEdit> {
-        if self.has_merged_insertion(insertion) {
+    pub fn integrate_insertion(
+        &mut self,
+        insertion: &Insertion,
+    ) -> Option<Length> {
+        if insertion.is_no_op() || self.has_merged_insertion(insertion) {
             None
         } else if self.can_merge_insertion(insertion) {
             Some(self.merge_unchecked_insertion(insertion))
@@ -588,7 +596,7 @@ impl Replica {
     pub(crate) fn merge_unchecked_deletion(
         &mut self,
         deletion: &Deletion,
-    ) -> Option<TextEdit> {
+    ) -> Vec<Range<Length>> {
         debug_assert!(self.can_merge_deletion(deletion));
 
         let ranges = self.run_tree.merge_deletion(deletion);
@@ -596,7 +604,7 @@ impl Replica {
         *self.deletion_map.get_mut(deletion.deleted_by()) =
             deletion.deletion_ts();
 
-        (!ranges.is_empty()).then_some(TextEdit::Deletion(ranges))
+        ranges
     }
 
     /// Merges the given [`Insertion`] without checking whether it can be
@@ -605,7 +613,7 @@ impl Replica {
     pub(crate) fn merge_unchecked_insertion(
         &mut self,
         insertion: &Insertion,
-    ) -> TextEdit {
+    ) -> Length {
         debug_assert!(self.can_merge_insertion(insertion));
 
         let offset = self.run_tree.merge_insertion(insertion);
@@ -614,7 +622,7 @@ impl Replica {
 
         self.lamport_clock.merge(insertion.lamport_ts());
 
-        TextEdit::Insertion(offset, insertion.text().clone())
+        offset
     }
 
     /// Creates a new `Replica` with the given id from the initial [`Length`]

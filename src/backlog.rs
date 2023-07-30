@@ -1,4 +1,5 @@
 use alloc::collections::VecDeque;
+use core::ops::Range;
 
 use crate::*;
 
@@ -160,33 +161,81 @@ impl DeletionsBacklog {
     }
 }
 
-/// An iterator over the backlogged [`TextEdit`]s that are now ready to be
+/// An iterator over the backlogged deletions that are now ready to be
 /// applied to your buffer.
 ///
-/// This struct is created by the [`backlogged`](Replica::backlogged) method on
+/// This struct is created by the
+/// [`backlogged_deletions`](Replica::backlogged_deletions) method on
 /// [`Replica`]. See its documentation for more information.
-pub struct Backlogged<'a> {
+pub struct BackloggedDeletions<'a> {
     replica: &'a mut Replica,
-    iter: BacklogIter<'a>,
-    deletions: Option<ReplicaIdMapValuesMut<'a, DeletionsBacklog>>,
+    current: Option<&'a mut DeletionsBacklog>,
+    iter: ReplicaIdMapValuesMut<'a, DeletionsBacklog>,
 }
 
-/// In the `Iterator` impl of `Backlogged` we first iterate over the insertions
-/// of each replica, and then over the deletions of each replica. This enum
-/// represents the state of the iterator.
-enum BacklogIter<'a> {
-    Insertions {
-        current: Option<&'a mut InsertionsBacklog>,
-        iter: ReplicaIdMapValuesMut<'a, InsertionsBacklog>,
-    },
+impl<'a> BackloggedDeletions<'a> {
+    #[inline]
+    pub(crate) fn from_replica(replica: &'a mut Replica) -> Self {
+        let backlog = replica.backlog_mut();
 
-    Deletions {
-        current: Option<&'a mut DeletionsBacklog>,
-        iter: ReplicaIdMapValuesMut<'a, DeletionsBacklog>,
-    },
+        // We transmute the exclusive reference to the backlog into the same
+        // type to get around the borrow checker.
+        //
+        // SAFETY: this is safe because in the `Iterator` implementation we
+        // never access the backlog through the `Replica`, neither directly nor
+        // by calling any methods on `Replica` that would access the backlog.
+        let backlog =
+            unsafe { core::mem::transmute::<_, &mut Backlog>(backlog) };
+
+        let mut iter = backlog.deletions.values_mut();
+
+        let current = iter.next();
+
+        Self { replica, iter, current }
+    }
 }
 
-impl<'a> Backlogged<'a> {
+impl Iterator for BackloggedDeletions<'_> {
+    type Item = Vec<Range<Length>>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let deletions = self.current.as_mut()?;
+
+        let Some(first) = deletions.deletions.front() else {
+            self.current = self.iter.next();
+            return self.next();
+        };
+
+        if self.replica.can_merge_deletion(first) {
+            let first = deletions.deletions.pop_front().unwrap();
+            let ranges = self.replica.merge_unchecked_deletion(&first);
+            if ranges.is_empty() {
+                self.next()
+            } else {
+                Some(ranges)
+            }
+        } else {
+            self.current = self.iter.next();
+            self.next()
+        }
+    }
+}
+
+impl core::iter::FusedIterator for BackloggedDeletions<'_> {}
+
+/// TODO: docs
+///
+/// This struct is created by the
+/// [`backlogged_insertion`](Replica::backlogged_insertions) method on
+/// [`Replica`]. See its documentation for more information.
+pub struct BackloggedInsertions<'a> {
+    replica: &'a mut Replica,
+    current: Option<&'a mut InsertionsBacklog>,
+    iter: ReplicaIdMapValuesMut<'a, InsertionsBacklog>,
+}
+
+impl<'a> BackloggedInsertions<'a> {
     #[inline]
     pub(crate) fn from_replica(replica: &'a mut Replica) -> Self {
         let backlog = replica.backlog_mut();
@@ -202,71 +251,35 @@ impl<'a> Backlogged<'a> {
 
         let mut iter = backlog.insertions.values_mut();
 
-        let deletions = backlog.deletions.values_mut();
-
         let current = iter.next();
 
-        let iter = BacklogIter::Insertions { current, iter };
-
-        Self { replica, iter, deletions: Some(deletions) }
+        Self { replica, current, iter }
     }
 }
 
-impl Iterator for Backlogged<'_> {
-    type Item = TextEdit;
+impl Iterator for BackloggedInsertions<'_> {
+    type Item = (Length, Text);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.iter {
-            BacklogIter::Insertions { current, iter } => {
-                let Some(insertions) = current else {
-                    let mut iter = self.deletions.take().unwrap();
-                    let current = iter.next();
-                    self.iter = BacklogIter::Deletions { current, iter };
-                    return self.next();
-                };
+        let Some(insertions) = self.current.as_mut() else {
+            return None;
+        };
 
-                let Some(first) = insertions.insertions.front() else {
-                    *current = iter.next();
-                    return self.next();
-                };
+        let Some(first) = insertions.insertions.front() else {
+            self.current = self.iter.next();
+            return self.next();
+        };
 
-                if self.replica.can_merge_insertion(first) {
-                    let first = insertions.insertions.pop_front().unwrap();
-                    let edit = self.replica.merge_unchecked_insertion(&first);
-                    Some(edit)
-                } else {
-                    *current = iter.next();
-                    self.next()
-                }
-            },
-
-            BacklogIter::Deletions { current, iter } => {
-                let deletions = current.as_mut()?;
-
-                let Some(first) = deletions.deletions.front() else {
-                    *current = iter.next();
-                    return self.next();
-                };
-
-                if self.replica.can_merge_deletion(first) {
-                    let first = deletions.deletions.pop_front().unwrap();
-                    let edit = self.replica.merge_unchecked_deletion(&first);
-                    if edit.is_some() {
-                        edit
-                    } else {
-                        // This iterator is fused, so we can't return `None`
-                        // here. Instead we just skip this edit and try the
-                        // next one.
-                        self.next()
-                    }
-                } else {
-                    *current = iter.next();
-                    self.next()
-                }
-            },
+        if self.replica.can_merge_insertion(first) {
+            let first = insertions.insertions.pop_front().unwrap();
+            let edit = self.replica.merge_unchecked_insertion(&first);
+            Some((edit, first.text().clone()))
+        } else {
+            self.current = self.iter.next();
+            self.next()
         }
     }
 }
 
-impl core::iter::FusedIterator for Backlogged<'_> {}
+impl core::iter::FusedIterator for BackloggedInsertions<'_> {}

@@ -38,6 +38,11 @@ fn bench_downstream(
     trace: &SequentialTrace,
     trace_name: &str,
 ) {
+    enum Edit {
+        Insertion(cola::Insertion),
+        Deletion(cola::Deletion),
+    }
+
     let trace = trace.chars_to_bytes();
 
     let mut upstream = Replica::new(1, trace.start_content().len());
@@ -47,10 +52,12 @@ fn bench_downstream(
         .flat_map(|(start, end, text)| {
             let mut edits = Vec::new();
             if end > start {
-                edits.push(upstream.deleted(start..end));
+                edits.push(Edit::Deletion(upstream.deleted(start..end)));
             }
             if !text.is_empty() {
-                edits.push(upstream.inserted(start, text.len()));
+                edits.push(Edit::Insertion(
+                    upstream.inserted(start, text.len()),
+                ));
             }
             edits
         })
@@ -65,7 +72,14 @@ fn bench_downstream(
             let mut downstream = upstream.fork(2);
 
             for edit in &edits {
-                downstream.merge(edit);
+                match edit {
+                    Edit::Insertion(insertion) => {
+                        downstream.integrate_insertion(insertion);
+                    },
+                    Edit::Deletion(deletion) => {
+                        downstream.integrate_deletion(deletion);
+                    },
+                };
             }
 
             assert_eq!(downstream.len(), trace.end_content().len());

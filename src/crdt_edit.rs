@@ -31,7 +31,7 @@ impl core::fmt::Debug for CrdtEdit {
 
 impl CrdtEdit {
     #[inline]
-    pub(crate) fn deletion(
+    pub(crate) fn _deletion(
         start: Anchor,
         start_ts: RunTs,
         end: Anchor,
@@ -51,7 +51,7 @@ impl CrdtEdit {
     }
 
     #[inline]
-    pub(crate) fn insertion(
+    pub(crate) fn _insertion(
         anchor: Anchor,
         anchor_ts: RunTs,
         text: Text,
@@ -69,13 +69,14 @@ impl CrdtEdit {
     }
 
     #[inline]
-    pub(crate) fn no_op() -> Self {
+    pub(crate) fn _no_op() -> Self {
         Self { kind: CrdtEditKind::NoOp }
     }
 }
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[allow(dead_code)]
 pub(crate) enum CrdtEditKind {
     Deletion(Deletion),
     Insertion(Insertion),
@@ -88,7 +89,7 @@ pub(crate) enum CrdtEditKind {
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
-pub(crate) struct Insertion {
+pub struct Insertion {
     /// The anchor point of the insertion.
     anchor: Anchor,
 
@@ -108,45 +109,73 @@ pub(crate) struct Insertion {
 
 impl Insertion {
     #[inline(always)]
-    pub fn anchor(&self) -> Anchor {
+    pub(crate) fn anchor(&self) -> Anchor {
         self.anchor
     }
 
     #[inline(always)]
-    pub fn anchor_ts(&self) -> RunTs {
+    pub(crate) fn anchor_ts(&self) -> RunTs {
         self.anchor_ts
     }
 
     #[inline(always)]
-    pub fn end(&self) -> Length {
+    pub(crate) fn end(&self) -> Length {
         self.text.range.end
     }
 
     #[inline(always)]
-    pub fn inserted_by(&self) -> ReplicaId {
+    pub(crate) fn inserted_by(&self) -> ReplicaId {
         self.text.inserted_by()
     }
 
+    #[inline]
+    pub(crate) fn is_no_op(&self) -> bool {
+        self.len() == 0
+    }
+
     #[inline(always)]
-    pub fn run_ts(&self) -> RunTs {
+    pub(crate) fn run_ts(&self) -> RunTs {
         self.run_ts
     }
 
     #[inline(always)]
-    pub fn lamport_ts(&self) -> LamportTs {
+    pub(crate) fn lamport_ts(&self) -> LamportTs {
         self.lamport_ts
     }
 
     #[inline]
-    pub fn len(&self) -> Length {
+    pub(crate) fn len(&self) -> Length {
         self.text.len()
     }
 
     #[inline]
-    pub fn start(&self) -> Length {
+    pub(crate) fn new(
+        anchor: Anchor,
+        anchor_ts: RunTs,
+        text: Text,
+        lamport_ts: LamportTs,
+        run_ts: RunTs,
+    ) -> Self {
+        Self { anchor, anchor_ts, text, lamport_ts, run_ts }
+    }
+
+    #[inline]
+    pub(crate) fn no_op() -> Self {
+        Self::new(
+            Anchor::origin(),
+            0,
+            Text::new(ReplicaId::zero(), 0..0),
+            0,
+            0,
+        )
+    }
+
+    #[inline]
+    pub(crate) fn start(&self) -> Length {
         self.text.range.start
     }
 
+    /// Returns the [`Text`] that was inserted.
     #[inline]
     pub fn text(&self) -> &Text {
         &self.text
@@ -159,7 +188,7 @@ impl Insertion {
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
-pub(crate) struct Deletion {
+pub struct Deletion {
     /// The anchor point of the start of the deleted range.
     start: Anchor,
 
@@ -189,37 +218,66 @@ pub(crate) struct Deletion {
 
 impl Deletion {
     #[inline(always)]
-    pub fn deleted_by(&self) -> ReplicaId {
+    pub(crate) fn deleted_by(&self) -> ReplicaId {
         self.version_map.this_id()
     }
 
     #[inline(always)]
-    pub fn deletion_ts(&self) -> DeletionTs {
+    pub(crate) fn deletion_ts(&self) -> DeletionTs {
         self.deletion_ts
     }
 
     #[inline(always)]
-    pub fn end(&self) -> Anchor {
+    pub(crate) fn end(&self) -> Anchor {
         self.end
     }
 
     #[inline(always)]
-    pub fn end_ts(&self) -> RunTs {
+    pub(crate) fn end_ts(&self) -> RunTs {
         self.end_ts
     }
 
+    #[inline]
+    pub(crate) fn is_no_op(&self) -> bool {
+        self.start == self.end
+    }
+
+    #[inline]
+    pub(crate) fn new(
+        start: Anchor,
+        start_ts: RunTs,
+        end: Anchor,
+        end_ts: RunTs,
+        version_map: VersionMap,
+        deletion_ts: DeletionTs,
+    ) -> Self {
+        Deletion { start, start_ts, end, end_ts, version_map, deletion_ts }
+    }
+
+    #[inline]
+    pub(crate) fn no_op() -> Self {
+        Self::new(
+            Anchor::origin(),
+            0,
+            Anchor::origin(),
+            0,
+            VersionMap::new(ReplicaId::zero(), 0),
+            0,
+        )
+    }
+
     #[inline(always)]
-    pub fn start(&self) -> Anchor {
+    pub(crate) fn start(&self) -> Anchor {
         self.start
     }
 
     #[inline(always)]
-    pub fn start_ts(&self) -> RunTs {
+    pub(crate) fn start_ts(&self) -> RunTs {
         self.start_ts
     }
 
     #[inline(always)]
-    pub fn version_map(&self) -> &VersionMap {
+    pub(crate) fn version_map(&self) -> &VersionMap {
         &self.version_map
     }
 }

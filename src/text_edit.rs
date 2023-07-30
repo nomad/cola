@@ -9,6 +9,7 @@ use crate::{Length, ReplicaId};
 /// [`Backlogged`](crate::Backlogged) iterator. See their documentation for
 /// more.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum TextEdit {
     /// This variant represents the offset at which to perform an insertion and
     /// the corresponding `Text`.
