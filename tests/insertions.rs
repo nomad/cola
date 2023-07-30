@@ -115,7 +115,7 @@ fn test_random_insertions(
         replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
     }
 
-    let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
+    let mut merge_order = (0..insertions_per_cycle).collect::<Vec<_>>();
 
     for _ in 0..num_cycles {
         let insertions = replicas
@@ -131,20 +131,20 @@ fn test_random_insertions(
             })
             .collect::<Vec<_>>();
 
-        merge_order.shuffle(rng);
+        for (replica_idx, replica) in replicas.iter_mut().enumerate() {
+            let mut remote_order = (0..num_replicas)
+                .filter(|&idx| idx != replica_idx)
+                .collect::<Vec<_>>();
 
-        for &replica_idx in &merge_order {
-            let len = replicas.len();
+            remote_order.shuffle(rng);
 
-            let replica = &mut replicas[replica_idx];
+            for insertions in remote_order.iter().map(|&idx| &insertions[idx])
+            {
+                merge_order.shuffle(rng);
 
-            let mut merge_order =
-                (0..len).filter(|&idx| idx != replica_idx).collect::<Vec<_>>();
-
-            merge_order.shuffle(rng);
-
-            for idx in merge_order {
-                for insertion in &insertions[idx] {
+                for insertion in
+                    merge_order.iter().map(|&idx| &insertions[idx])
+                {
                     replica.merge(insertion);
                 }
             }
@@ -184,7 +184,7 @@ fn test_random_edits(
         replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
     }
 
-    let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
+    let mut merge_order = (0..edits_per_cycle).collect::<Vec<_>>();
 
     for _ in 0..num_cycles {
         let edits = replicas
@@ -203,20 +203,17 @@ fn test_random_edits(
             })
             .collect::<Vec<_>>();
 
-        merge_order.shuffle(rng);
+        for (replica_idx, replica) in replicas.iter_mut().enumerate() {
+            let mut remote_order = (0..num_replicas)
+                .filter(|&idx| idx != replica_idx)
+                .collect::<Vec<_>>();
 
-        for &replica_idx in &merge_order {
-            let len = replicas.len();
+            remote_order.shuffle(rng);
 
-            let replica = &mut replicas[replica_idx];
+            for edits in remote_order.iter().map(|&idx| &edits[idx]) {
+                merge_order.shuffle(rng);
 
-            let mut merge_order =
-                (0..len).filter(|&idx| idx != replica_idx).collect::<Vec<_>>();
-
-            merge_order.shuffle(rng);
-
-            for idx in merge_order {
-                for edit in &edits[idx] {
+                for edit in merge_order.iter().map(|&idx| &edits[idx]) {
                     replica.merge(edit);
                 }
             }

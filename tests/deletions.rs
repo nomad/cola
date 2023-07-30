@@ -73,7 +73,7 @@ fn test_random_deletions(
         replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
     }
 
-    let mut merge_order = (0..replicas.len()).collect::<Vec<_>>();
+    let mut merge_order = (0..deletions_per_cycle).collect::<Vec<_>>();
 
     for _ in 0..num_cycles {
         let deletions = replicas
@@ -89,20 +89,18 @@ fn test_random_deletions(
             })
             .collect::<Vec<_>>();
 
-        merge_order.shuffle(rng);
+        for (replica_idx, replica) in replicas.iter_mut().enumerate() {
+            let mut remote_order = (0..num_replicas)
+                .filter(|&idx| idx != replica_idx)
+                .collect::<Vec<_>>();
 
-        for &replica_idx in &merge_order {
-            let len = replicas.len();
+            remote_order.shuffle(rng);
 
-            let replica = &mut replicas[replica_idx];
+            for deletions in remote_order.iter().map(|&idx| &deletions[idx]) {
+                merge_order.shuffle(rng);
 
-            let mut merge_order =
-                (0..len).filter(|&idx| idx != replica_idx).collect::<Vec<_>>();
-
-            merge_order.shuffle(rng);
-
-            for idx in merge_order {
-                for deletion in &deletions[idx] {
+                for deletion in merge_order.iter().map(|&idx| &deletions[idx])
+                {
                     replica.merge(deletion);
                 }
             }
