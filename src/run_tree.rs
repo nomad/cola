@@ -76,11 +76,11 @@ impl RunTree {
         &mut self,
         range: Range<Length>,
     ) -> (Anchor, RunTs, Anchor, RunTs) {
-        let mut id_start = ReplicaId::zero();
+        let mut id_start = 0;
         let mut run_ts_start = 0;
         let mut offset_start = 0;
 
-        let mut id_end = ReplicaId::zero();
+        let mut id_end = 0;
         let mut run_ts_end = 0;
         let mut offset_end = 0;
 
@@ -101,7 +101,7 @@ impl RunTree {
             run.delete_up_to(offset)
         };
 
-        let mut id_range = ReplicaId::zero();
+        let mut id_range = 0;
         let mut run_ts_range = 0;
         let mut deleted_range_offset = 0;
         let mut deleted_range_run_len = 0;
@@ -229,7 +229,7 @@ impl RunTree {
             return (Anchor::zero(), anchor_ts);
         }
 
-        let mut split_id = ReplicaId::zero();
+        let mut split_id = 0;
 
         let mut split_insertion = 0;
 
@@ -990,7 +990,7 @@ impl core::fmt::Debug for Anchor {
         if self == &Self::zero() {
             write!(f, "zero")
         } else {
-            write!(f, "{:x}.{}", self.replica_id.as_u32(), self.offset)
+            write!(f, "{:x}.{}", self.replica_id, self.offset)
         }
     }
 }
@@ -1003,7 +1003,7 @@ impl Anchor {
 
     #[inline(always)]
     pub fn is_zero(&self) -> bool {
-        self.replica_id == ReplicaId::zero()
+        self.replica_id == 0
     }
 
     #[inline(always)]
@@ -1019,7 +1019,7 @@ impl Anchor {
     /// A special value used to create an anchor at the start of the document.
     #[inline]
     pub const fn zero() -> Self {
-        Self { replica_id: ReplicaId::zero(), offset: 0 }
+        Self { replica_id: 0, offset: 0 }
     }
 
     #[inline(always)]

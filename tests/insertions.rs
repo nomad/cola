@@ -112,7 +112,7 @@ fn test_random_insertions(
     let mut replicas = vec![first_replica];
 
     for i in 1..num_replicas {
-        replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
+        replicas.push(replicas[0].fork(i as ReplicaId + 1));
     }
 
     let mut merge_order = (0..insertions_per_cycle).collect::<Vec<_>>();
@@ -181,7 +181,7 @@ fn test_random_edits(
     let mut replicas = vec![first_replica];
 
     for i in 1..num_replicas {
-        replicas.push(replicas[0].fork(ReplicaId::from(i as u64 + 1)));
+        replicas.push(replicas[0].fork(i as ReplicaId + 1));
     }
 
     let mut merge_order = (0..edits_per_cycle).collect::<Vec<_>>();

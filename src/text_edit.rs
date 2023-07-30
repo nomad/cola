@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-use crate::{Length, ReplicaId};
+use crate::*;
 
 /// A plain text edit to be applied to a buffer.
 ///
@@ -103,11 +103,11 @@ pub enum TextEdit {
     Deletion(Vec<Range<Length>>),
 }
 
-/// A range of text inserted into a `Replica`.
+/// A range of text inserted into a [`Replica`].
 ///
 /// Despite the name, this type does not contain the text string itself, only
-/// the id of the `Replica` that inserted it and its *temporal* range in the
-/// `Replica`. These two properties can be accessed via the
+/// the [`ReplicaId`] of the [`Replica`] that inserted it and its temporal
+/// range in it. These can be accessed via the
 /// [`inserted_by`](Text::inserted_by) and
 /// [`temporal_range`](Text::temporal_range) methods respectively.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -119,7 +119,7 @@ pub struct Text {
 
 impl core::fmt::Debug for Text {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{:x}.{:?}", self.inserted_by.as_u32(), self.range)
+        write!(f, "{:x}.{:?}", self.inserted_by, self.range)
     }
 }
 
@@ -129,7 +129,7 @@ impl Text {
         self.range.end
     }
 
-    /// Returns the id of the `Replica` that inserted this text.
+    /// Returns the [`ReplicaId`] of the [`Replica`] that inserted this text.
     ///
     /// # Examples
     /// ```
@@ -163,10 +163,9 @@ impl Text {
     /// Returns the temporal range of this text in the `Replica` that inserted
     /// it.
     ///
-    /// Each `Replica` has an internal character clock that starts at zero and
-    /// is incremented each time the [`inserted`](crate::Replica::inserted)
-    /// method is called. The amount by which the clock is incremented is equal
-    /// to the length of the inserted text.
+    /// Each `Replica` keeps an internal character clock that starts at zero
+    /// and is incremented each time the [`inserted`](crate::Replica::inserted)
+    /// method is called by an amount equal to the length of the inserted text.
     ///
     /// Since the insertion history of *a single* `Replica` is linear and
     /// immutable, this clock can be used to uniquely identify each character
@@ -184,9 +183,7 @@ impl Text {
     /// # Examples
     /// ```
     /// # use cola::Replica;
-    /// // Two peers start collaborating on an empty document.
     /// let mut replica1 = Replica::new(1, 0);
-    /// let mut replica2 = replica1.fork(2);
     ///
     /// // Peer 1 inserts 1, 2, 3 and 4 characters at the start of the
     /// // document.
@@ -197,17 +194,13 @@ impl Text {
     ///
     /// // Notice how:
     /// // - the temporal range of the first insertion starts at zero;
-    /// // - the start of each subsequent range is equal to the end of the
-    /// //   previous one;
-    /// // - the length of each range is equal to the length given to
-    /// //   `replica1.insert`.
+    /// // - the start of each range is equal to the end of the previous one;
+    /// // - the length of each range matches the one passed to
+    /// //   `replica1.inserted`.
     ///
     /// assert_eq!(insertion1.text().temporal_range(), 0..1);
-    ///
     /// assert_eq!(insertion2.text().temporal_range(), 1..3);
-    ///
     /// assert_eq!(insertion3.text().temporal_range(), 3..6);
-    ///
     /// assert_eq!(insertion4.text().temporal_range(), 6..10);
     /// ```
     #[inline]

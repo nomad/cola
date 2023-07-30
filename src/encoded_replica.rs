@@ -4,12 +4,13 @@ use crate::*;
 
 pub type Checksum = Vec<u8>;
 
-/// A `Replica` encoded into a very compact binary format suitable for
+/// A [`Replica`] encoded into a compact binary format suitable for
 /// transmission over the network.
 ///
-/// This struct is created by the [`encode`](Replica::encode) method and can be
-/// decoded back into a `Replica` by calling [`decode`](Replica::decode). See
-/// the documentation of those methods for more information.
+/// This struct is created by [`encode`](Replica::encode)ing a [`Replica`] and
+/// can be decoded back into a [`Replica`] by calling
+/// [`decode`](Replica::decode). See the documentation of those methods for
+/// more information.
 #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
 #[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

@@ -161,8 +161,8 @@ impl DeletionsBacklog {
     }
 }
 
-/// An iterator over the backlogged deletions that are now ready to be
-/// applied to your buffer.
+/// An iterator over the backlogged deletions that are ready to be
+/// applied to a [`Replica`].
 ///
 /// This struct is created by the
 /// [`backlogged_deletions`](Replica::backlogged_deletions) method on
@@ -224,7 +224,8 @@ impl Iterator for BackloggedDeletions<'_> {
 
 impl core::iter::FusedIterator for BackloggedDeletions<'_> {}
 
-/// TODO: docs
+/// An iterator over the backlogged insertions that are ready to be
+/// applied to a [`Replica`].
 ///
 /// This struct is created by the
 /// [`backlogged_insertion`](Replica::backlogged_insertions) method on

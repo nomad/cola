@@ -1,89 +1,13 @@
 use crate::*;
 
-/// A text edit in CRDT coordinates.
-///
-/// This is an opaque type with no public fields or methods. It's created by
-/// calling either [`deleted`](crate::Replica::deleted) or
-/// [`inserted`](crate::Replica::inserted) on the [`Replica`](crate::Replica)
-/// at the peer that originally created the edit, and its only purpose is to be
-/// [`merge`](crate::Replica::merge)d by all the other
-/// [`Replica`](crate::Replica)s in the same editing session to create
-/// [`TextEdit`]s, which can then be applied to their local text buffers.
-///
-/// See the the documentation of any of the methods mentioned above for more
-/// information.
-#[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct CrdtEdit {
-    #[cfg_attr(feature = "serde", serde(flatten))]
-    kind: CrdtEditKind,
-}
-
-impl core::fmt::Debug for CrdtEdit {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        match self.kind() {
-            CrdtEditKind::Deletion(deletion) => deletion.fmt(f),
-            CrdtEditKind::Insertion(insertion) => insertion.fmt(f),
-            CrdtEditKind::NoOp => f.write_str("NoOp"),
-        }
-    }
-}
-
-impl CrdtEdit {
-    #[inline]
-    pub(crate) fn _deletion(
-        start: Anchor,
-        start_ts: RunTs,
-        end: Anchor,
-        end_ts: RunTs,
-        version_map: VersionMap,
-        deletion_ts: DeletionTs,
-    ) -> Self {
-        let deletion = Deletion {
-            start,
-            start_ts,
-            end,
-            end_ts,
-            version_map,
-            deletion_ts,
-        };
-        Self { kind: CrdtEditKind::Deletion(deletion) }
-    }
-
-    #[inline]
-    pub(crate) fn _insertion(
-        anchor: Anchor,
-        anchor_ts: RunTs,
-        text: Text,
-        lamport_ts: LamportTs,
-        run_ts: RunTs,
-    ) -> Self {
-        let insertion =
-            Insertion { anchor, anchor_ts, text, lamport_ts, run_ts };
-        Self { kind: CrdtEditKind::Insertion(insertion) }
-    }
-
-    #[inline(always)]
-    pub(crate) fn kind(&self) -> &CrdtEditKind {
-        &self.kind
-    }
-
-    #[inline]
-    pub(crate) fn _no_op() -> Self {
-        Self { kind: CrdtEditKind::NoOp }
-    }
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[allow(dead_code)]
-pub(crate) enum CrdtEditKind {
-    Deletion(Deletion),
-    Insertion(Insertion),
-    NoOp,
-}
-
 /// An insertion in CRDT coordinates.
+///
+/// This struct is created by the [`inserted`](Replica::inserted) method on the
+/// [`Replica`] owned by the peer that performed the insertion, and can be
+/// integrated by another [`Replica`] via the
+/// [`integrate_insertion`](Replica::integrate_insertion) method.
+///
+/// See the documentation of those methods for more information.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
@@ -161,7 +85,7 @@ impl Insertion {
 
     #[inline]
     pub(crate) fn no_op() -> Self {
-        Self::new(Anchor::zero(), 0, Text::new(ReplicaId::zero(), 0..0), 0, 0)
+        Self::new(Anchor::zero(), 0, Text::new(0, 0..0), 0, 0)
     }
 
     #[inline]
@@ -169,7 +93,7 @@ impl Insertion {
         self.text.range.start
     }
 
-    /// Returns the [`Text`] that was inserted.
+    /// The [`Text`] of this insertion.
     #[inline]
     pub fn text(&self) -> &Text {
         &self.text
@@ -177,6 +101,13 @@ impl Insertion {
 }
 
 /// A deletion in CRDT coordinates.
+///
+/// This struct is created by the [`deleted`](Replica::deleted) method on the
+/// [`Replica`] owned by the peer that performed the deletion, and can be
+/// integrated by another [`Replica`] via the
+/// [`integrate_deletion`](Replica::integrate_deletion) method.
+///
+/// See the documentation of those methods for more information.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
@@ -255,7 +186,7 @@ impl Deletion {
             0,
             Anchor::zero(),
             0,
-            VersionMap::new(ReplicaId::zero(), 0),
+            VersionMap::new(0, 0),
             0,
         )
     }

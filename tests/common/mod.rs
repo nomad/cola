@@ -70,7 +70,7 @@ impl Replica {
         Edit::Deletion(deletion)
     }
 
-    pub fn fork(&self, id: impl Into<ReplicaId>) -> Self {
+    pub fn fork(&self, id: ReplicaId) -> Self {
         Self {
             buffer: self.buffer.clone(),
             crdt: self.crdt.fork(id),
@@ -128,7 +128,7 @@ impl Replica {
         }
     }
 
-    pub fn new<T: Into<String>>(id: impl Into<ReplicaId>, text: T) -> Self {
+    pub fn new<T: Into<String>>(id: ReplicaId, text: T) -> Self {
         let buffer = text.into();
         let crdt = cola::Replica::new(id, buffer.len());
         let history = HashMap::new();
@@ -136,7 +136,7 @@ impl Replica {
     }
 
     pub fn new_with_len(
-        id: impl Into<ReplicaId>,
+        id: ReplicaId,
         max_len: usize,
         rng: &mut impl Rng,
     ) -> Self {

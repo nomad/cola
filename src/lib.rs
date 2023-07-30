@@ -1,19 +1,18 @@
-//! cola is a Conflict-free Replicated Data Type ([CRDT]) specialized for
-//! real-time collaborative editing of plain text documents.
+//! cola is a Conflict-free Replicated Data Type ([CRDT]) for real-time
+//! collaborative editing of plain text documents.
 //!
 //! CRDTs can be roughly divided into two categories: state-based and
 //! operation-based. cola falls in the latter category.
 //!
-//! The basic idea behind an Operation-based CRDT (also known as a
-//! *Commutative* Replicated Data Type or CmRDT) is to design the core data
+//! The basic idea behind an Operation-based CRDT -- also known as a
+//! *Commutative* Replicated Data Type or C*m*RDT -- is to design the core data
 //! structure and the operations applied to it in such a way that they
-//! *commute*, i.e. the order in which they're applied doesn't matter.
+//! *commute*, so that the order in which they're applied at each peer doesn't
+//! matter.
 //!
 //! Commutativity makes the final state of the data structure only a function
 //! of its initial state and the *set* of operations applied to it, but *not*
-//! of the order in which they were applied.
-//!
-//! In turn, this ensures *eventual consistency*, meaning that once all peers
+//! of the order in which they were applied. This ensures that once all peers
 //! have received all operations from all other peers they're guaranteed to
 //! converge to the same final state.
 //!
@@ -22,22 +21,19 @@
 //! exchange to communicate their local edits are [`Insertion`]s and
 //! [`Deletion`]s.
 //!
-//! If you're new to this crate, reading the docs for those two structs would
-//! be a good place to start.
+//! If you're new to this crate, reading the documentations of the
+//! [`Replica`] struct and its methods would be a good place to start.
 //!
 //! For a deeper dive into cola's design and implementation you can check out
 //! [this blog post][cola].
 //!
-//! # Code tour of cola's API
-//!
-//! ```
-//! # use cola::Replica;
-//! ```
-//!
 //! # Feature flags
 //!
+//! - `encode`: enables the [`encode`](Replica::encode) and
+//! [`decode`](Replica::decode) methods on [`Replica`] (disabled by default);
+//!
 //! - `serde`: enables the [`Serialize`] and [`Deserialize`] impls for
-//! `EncodedReplica` and `CrdtEdit` (disabled by default).
+//! [`Insertion`], [`Deletion`] and [`EncodedReplica`] (disabled by default).
 //!
 //! [CRDT]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
 //! [cola]: https://www.nomad.foo/blog/cola
@@ -66,7 +62,6 @@ mod version_map;
 
 use backlog::Backlog;
 pub use backlog::{BackloggedDeletions, BackloggedInsertions};
-use crdt_edit::CrdtEdit;
 pub use crdt_edit::{Deletion, Insertion};
 use gtree::{Gtree, LeafIdx};
 pub use replica::Replica;
@@ -76,7 +71,6 @@ use replica_id::{ReplicaIdMap, ReplicaIdMapValuesMut};
 use run_indices::{AnchorBias, RunIndices};
 use run_tree::*;
 pub use text_edit::Text;
-use text_edit::TextEdit;
 use utils::*;
 use version_map::{DeletionMap, VersionMap};
 

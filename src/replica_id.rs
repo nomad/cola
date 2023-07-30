@@ -7,22 +7,16 @@ pub type ReplicaIdMap<T> =
 pub type ReplicaIdMapValuesMut<'a, T> =
     std::collections::hash_map::ValuesMut<'a, ReplicaId, T>;
 
-/// A unique identifier for a `Replica`.
+/// A unique identifier for a [`Replica`](crate::Replica).
 ///
-/// Internally this is a newtype around 64-bit integer and can be created via
-/// its [`From<u64>`](ReplicaId#impl-From<u64>-for-ReplicaId) implementation.
-///
-/// It's very important that all `Replica`s in the same collaborative session
-/// have unique `ReplicaId`s as this type is used to distinguish between them
-/// when integrating remote edits.
+/// It's very important that all [`Replica`](crate::Replica)s in the same
+/// collaborative session have unique [`ReplicaId`]s as this type is used to
+/// distinguish between them when integrating remote edits.
 ///
 /// Guaranteeing uniqueness is up to you.
 ///
-/// If the session is proxied through a server you control you can use that to
-/// centrally assign ids and increment a counter every time a new peer joins
-/// the session.
-///
-/// If not, you can generate a random `u64` every time a new `Replica` is
+/// If your editing session is not proxied through a server you control you can
+/// generate a random `u64` every time a new [`Replica`](crate::Replica) is
 /// created and be reasonably[^collisions] sure that there won't be any
 /// collisions.
 ///
@@ -32,55 +26,7 @@ pub type ReplicaIdMapValuesMut<'a, T> =
 /// designed for.
 ///
 /// [table]: https://en.wikipedia.org/wiki/Birthday_problem#Probability_table
-#[derive(Copy, Clone, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-pub struct ReplicaId(u64);
-
-impl core::fmt::Debug for ReplicaId {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "ReplicaId({:x})", self.as_u32())
-    }
-}
-
-impl From<u64> for ReplicaId {
-    #[inline]
-    fn from(id: u64) -> Self {
-        Self(id)
-    }
-}
-
-impl core::cmp::Eq for ReplicaId {}
-
-impl core::hash::Hash for ReplicaId {
-    #[inline]
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(self.0);
-    }
-}
-
-impl ReplicaId {
-    #[inline]
-    pub(crate) fn as_u32(self) -> u32 {
-        self.0 as u32
-    }
-
-    #[inline]
-    pub(crate) fn as_u64(self) -> u64 {
-        self.0
-    }
-
-    /// Returns the "nil" id, i.e. the id whose bytes are all zeros.
-    ///
-    /// This is used to form the [`EditId`] of the first edit run and should
-    /// never be used in any of the following user-generated insertion.
-    #[inline]
-    pub(crate) const fn zero() -> Self {
-        Self(0)
-    }
-}
+pub type ReplicaId = u64;
 
 #[derive(Default)]
 pub struct ReplicaIdHasher(u64);

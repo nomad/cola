@@ -12,29 +12,37 @@ use crate::*;
 ///
 /// However, unlike many other CRDTs, a `Replica` doesn't actually store the
 /// text contents itself. This allows to decouple the text buffer from the CRDT
-/// machinery needed to guarantee convergence in the face of concurrency.
+/// machinery needed to handle concurrent edits and guarantee convergence.
 ///
 /// Put another way, a `Replica` is a pure CRDT that doesn't know anything
 /// about where the text is actually stored. This is great because it makes it
-/// very easy to use it in conjuction with any text data structure of your
-/// choice: simple `String`s, gap buffers, piece tables, ropes, etc.
+/// very easy to use it together with any text data structure of your choice:
+/// simple `String`s, gap buffers, piece tables, ropes, etc.
+///
+/// # How to distribute `Replica`s between peers.
 ///
 /// When starting a new collaborative editing session, the first peer
-/// initializes its `Replica` via the [`new`](Self::new) method and sends it
-/// to the other peers in the session.
+/// initializes its `Replica` via the [`new`](Self::new) method,
+/// [`encode`](Self::encode)s it and sends the result to the other peers in the
+/// session. If a new peer joins the session later on, one of the peers already
+/// in the session can [`encode`](Self::encode) their `Replica` and send it to
+/// them.
 ///
-/// Then, every time a peer performs an edit on their local buffer they inform
+/// # How to integrate remote edits.
+///
+/// Every time a peer performs an edit on their local buffer they must inform
 /// their `Replica` by calling either [`inserted`](Self::inserted) or
 /// [`deleted`](Self::deleted). This produces [`Insertion`]s and [`Deletion`]s
 /// which can be sent over to the other peers using the network layer of your
 /// choice.
 ///
-/// When a peer receives a `CrdtEdit` they can integrate it into their own
-/// `Replica` by calling either
+/// When a peer receives a remote `Insertion` or `Deletion` they can integrate
+/// it into their own `Replica` by calling either
 /// [`integrate_insertion`](Self::integrate_insertion) or
-/// [`integrate_deletion`](Self::integrate_deletion). This produces a edits
-/// which tells them *where* in their local buffer they should apply the edit,
-/// taking into account all the other edits that have happened concurrently.
+/// [`integrate_deletion`](Self::integrate_deletion), respectively. The output
+/// of those methods tells the peer *where* in their local buffer they should
+/// apply the edit, taking into account all the other edits that have happened
+/// concurrently.
 ///
 /// Basically, you tell your `Replica` how your buffer changes, and it tells
 /// you how your buffer *should* change when receiving remote edits.
@@ -211,26 +219,19 @@ impl Replica {
     ///
     /// let replica2 = Replica::decode(2, &encoded).unwrap();
     ///
-    /// assert_eq!(replica2.id(), ReplicaId::from(2));
+    /// assert_eq!(replica2.id(), 2);
     /// ```
     #[cfg(feature = "encode")]
     #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[track_caller]
     #[inline]
-    pub fn decode<Id>(
-        id: Id,
+    pub fn decode(
+        id: ReplicaId,
         encoded: &EncodedReplica,
-    ) -> Result<Self, DecodeError>
-    where
-        Id: Into<ReplicaId>,
-    {
-        let id = id.into();
-
-        if id.as_u64() == 0 {
+    ) -> Result<Self, DecodeError> {
+        if id == 0 {
             panic::replica_id_is_zero();
         }
-
-        assert!(id.as_u64() != 0);
 
         if encoded.protocol_version() != PROTOCOL_VERSION {
             return Err(DecodeError::DifferentProtocol {
@@ -377,17 +378,12 @@ impl Replica {
     /// # use cola::{Replica, ReplicaId};
     /// let replica1 = Replica::new(1, 0);
     /// let replica2 = replica1.fork(2);
-    /// assert_eq!(replica2.id(), ReplicaId::from(2))
+    /// assert_eq!(replica2.id(), 2)
     /// ```
     #[track_caller]
     #[inline]
-    pub fn fork<Id>(&self, new_id: Id) -> Self
-    where
-        Id: Into<ReplicaId>,
-    {
-        let new_id = new_id.into();
-
-        if new_id.as_u64() == 0 {
+    pub fn fork(&self, new_id: ReplicaId) -> Self {
+        if new_id == 0 {
             panic::replica_id_is_zero();
         }
 
@@ -549,12 +545,6 @@ impl Replica {
     /// assert_eq!(offset, 1);
     /// ```
     #[inline]
-    fn _merge(&mut self, _crdt_edit: &CrdtEdit) -> Option<TextEdit> {
-        todo!();
-    }
-
-    /// TODO: docs
-    #[inline]
     pub fn integrate_deletion(
         &mut self,
         deletion: &Deletion,
@@ -660,13 +650,8 @@ impl Replica {
     /// ```
     #[track_caller]
     #[inline]
-    pub fn new<Id>(id: Id, len: Length) -> Self
-    where
-        Id: Into<ReplicaId>,
-    {
-        let id = id.into();
-
-        if id.as_u64() == 0 {
+    pub fn new(id: ReplicaId, len: Length) -> Self {
+        if id == 0 {
             panic::replica_id_is_zero();
         }
 
@@ -714,7 +699,7 @@ impl core::fmt::Debug for Replica {
         // During development the `Replica::debug()` method (which is public
         // but hidden from the API) can be used to obtain a more useful
         // representation.
-        f.debug_tuple("Replica").field(&DebugHexU64(self.id.as_u64())).finish()
+        f.debug_tuple("Replica").field(&DebugHexU64(self.id)).finish()
     }
 }
 
