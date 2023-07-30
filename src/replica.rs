@@ -681,10 +681,10 @@ impl Replica {
 
         let initial_text = Text::new(id, 0..len);
 
-        let origin_run =
+        let first_run =
             EditRun::new(initial_text, run_clock.next(), lamport_clock.next());
 
-        let run_tree = RunTree::new(origin_run);
+        let run_tree = RunTree::new(first_run);
 
         Self {
             id,

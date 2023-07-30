@@ -226,7 +226,7 @@ impl RunTree {
                 .get_mut(replica_id)
                 .append(text_len, inserted_idx);
 
-            return (Anchor::origin(), anchor_ts);
+            return (Anchor::zero(), anchor_ts);
         }
 
         let mut split_id = ReplicaId::zero();
@@ -235,7 +235,7 @@ impl RunTree {
 
         let mut split_at_offset = 0;
 
-        let mut anchor = Anchor::origin();
+        let mut anchor = Anchor::zero();
 
         let insert_with = |run: &mut EditRun, offset: Length| {
             split_id = run.replica_id();
@@ -309,7 +309,7 @@ impl RunTree {
     }
 
     #[inline]
-    fn insert_run_at_origin(&mut self, run: EditRun) -> Length {
+    fn insert_run_at_zero(&mut self, run: EditRun) -> Length {
         let replica_id = run.replica_id();
 
         let mut leaves = self.gtree.leaves_from_first();
@@ -641,7 +641,7 @@ impl RunTree {
         let run = EditRun::from_insertion(insertion);
 
         if insertion.anchor().is_zero() {
-            return self.insert_run_at_origin(run);
+            return self.insert_run_at_zero(run);
         }
 
         let anchor_idx = self.run_indices.idx_at_anchor(
@@ -987,8 +987,8 @@ pub struct Anchor {
 
 impl core::fmt::Debug for Anchor {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if self == &Self::origin() {
-            write!(f, "origin")
+        if self == &Self::zero() {
+            write!(f, "zero")
         } else {
             write!(f, "{:x}.{}", self.replica_id.as_u32(), self.offset)
         }
@@ -1003,7 +1003,7 @@ impl Anchor {
 
     #[inline(always)]
     pub fn is_zero(&self) -> bool {
-        self == &Self::origin()
+        self.replica_id == ReplicaId::zero()
     }
 
     #[inline(always)]
@@ -1018,7 +1018,7 @@ impl Anchor {
 
     /// A special value used to create an anchor at the start of the document.
     #[inline]
-    pub const fn origin() -> Self {
+    pub const fn zero() -> Self {
         Self { replica_id: ReplicaId::zero(), offset: 0 }
     }
 

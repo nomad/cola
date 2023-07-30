@@ -161,13 +161,7 @@ impl Insertion {
 
     #[inline]
     pub(crate) fn no_op() -> Self {
-        Self::new(
-            Anchor::origin(),
-            0,
-            Text::new(ReplicaId::zero(), 0..0),
-            0,
-            0,
-        )
+        Self::new(Anchor::zero(), 0, Text::new(ReplicaId::zero(), 0..0), 0, 0)
     }
 
     #[inline]
@@ -257,9 +251,9 @@ impl Deletion {
     #[inline]
     pub(crate) fn no_op() -> Self {
         Self::new(
-            Anchor::origin(),
+            Anchor::zero(),
             0,
-            Anchor::origin(),
+            Anchor::zero(),
             0,
             VersionMap::new(ReplicaId::zero(), 0),
             0,
