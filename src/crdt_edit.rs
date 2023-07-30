@@ -239,7 +239,7 @@ impl Deletion {
 
     #[inline]
     pub(crate) fn is_no_op(&self) -> bool {
-        self.start == self.end
+        self.end.is_zero()
     }
 
     #[inline]
