@@ -1747,7 +1747,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         let parent = self.inode(parent_idx);
         let old_len = parent.len();
-        let idx_in_parent = idx_in_parent;
 
         let maybe_split = self.insert_in_inode(
             parent_idx,
@@ -1787,7 +1786,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         let parent = self.inode(parent_idx);
         let old_len = parent.len();
-        let idx_in_parent = idx_in_parent;
 
         let maybe_split = self.insert_in_inode(
             parent_idx,
@@ -1952,7 +1950,6 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         let parent = self.inode(parent_idx);
         let old_len = parent.len();
-        let idx_in_parent = idx_in_parent;
 
         let maybe_split = self.insert_two_in_inode(
             parent_idx,
