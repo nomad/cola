@@ -17,7 +17,7 @@ pub type ReplicaIdMapValuesMut<'a, T> =
 ///
 /// If your editing session is not proxied through a server you control you can
 /// generate a random `u64` every time a new [`Replica`](crate::Replica) is
-/// created and be reasonably[^collisions] sure that there won't be any
+/// created and be reasonably sure[^collisions] that there won't be any
 /// collisions.
 ///
 /// [^collisions]: you'd have to have almost [200k peers][table] in the same

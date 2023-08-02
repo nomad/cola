@@ -206,8 +206,12 @@ impl Replica {
         self.into()
     }
 
-    /// Creates a new `Replica` with the given id by decoding the contents of
-    /// the [`EncodedReplica`].
+    /// Creates a new `Replica` with the given [`ReplicaId`] by decoding the
+    /// contents of the [`EncodedReplica`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`ReplicaId`] is zero.
     ///
     /// # Example
     ///
@@ -363,14 +367,18 @@ impl Replica {
         EncodedReplica::new(PROTOCOL_VERSION, checksum, bytes)
     }
 
-    /// Creates a new `Replica` with the given id but with the same internal
-    /// state as this one.
+    /// Creates a new `Replica` with the given [`ReplicaId`] but with the same
+    /// internal state as this one.
     ///
     /// Note that this method should be used when the collaborative session is
     /// limited to a single process (e.g. multiple threads working on the same
     /// document). If you want to collaborate across different processes or
     /// machines you should [`encode`](Replica::encode) the `Replica` and send
     /// the result to the other peers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`ReplicaId`] is zero.
     ///
     /// # Example
     ///
@@ -412,7 +420,7 @@ impl Replica {
         self.version_map.get(insertion.inserted_by()) > insertion.start()
     }
 
-    /// Returns the id of the `Replica`.
+    /// Returns the id of this `Replica`.
     #[inline]
     pub fn id(&self) -> ReplicaId {
         self.id
@@ -597,8 +605,8 @@ impl Replica {
     /// assert!(replica1.integrate_insertion(&insertion_2).is_none());
     ///
     /// // Finally, peer 2 receives the first insertion from peer 1. Its text
-    /// // should be inserted between the 'a' and the 'b', which now at
-    /// // offset 2 at this peer.
+    /// // should be inserted between the 'a' and the 'b', which is at offset
+    /// // 2 at this peer.
     /// let offset_1 = replica2.integrate_insertion(&insertion_1).unwrap();
     ///
     /// assert_eq!(offset_1, 2);
@@ -653,8 +661,8 @@ impl Replica {
         offset
     }
 
-    /// Creates a new `Replica` with the given id from the initial [`Length`]
-    /// of your buffer.
+    /// Creates a new `Replica` with the given [`ReplicaId`] from the initial
+    /// [`Length`] of your buffer.
     ///
     /// Note that if you have multiple peers working on the same document you
     /// should only use this constructor on the first peer, usually the one
@@ -671,6 +679,10 @@ impl Replica {
     /// network if the collaboration is between different processes or
     /// machines.
     ///
+    /// # Panics
+    ///
+    /// Panics if the [`ReplicaId`] is zero.
+    ///
     /// # Example
     /// ```
     /// # use std::thread;
@@ -681,7 +693,7 @@ impl Replica {
     ///
     /// // It then starts a plugin on a separate thread and wants to give it a
     /// // Replica to keep its buffer synchronized with the one on the main
-    /// // thread. It does *not* call `new()` again, but instead clones the
+    /// // thread. It does *not* call `new()` again, but instead forks the
     /// // existing Replica and sends it to the new thread.
     /// let replica_plugin = replica_main.fork(2);
     ///
