@@ -31,6 +31,7 @@ impl Text {
     /// Returns the [`ReplicaId`] of the [`Replica`] that inserted this text.
     ///
     /// # Examples
+    ///
     /// ```
     /// # use cola::Replica;
     /// let mut replica1 = Replica::new(1, 0);
@@ -80,6 +81,7 @@ impl Text {
     /// text contents inserted by the various peers.
     ///
     /// # Examples
+    ///
     /// ```
     /// # use cola::Replica;
     /// let mut replica1 = Replica::new(1, 0);

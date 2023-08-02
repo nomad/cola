@@ -86,7 +86,55 @@ impl Replica {
         self.run_tree.average_inode_occupancy()
     }
 
-    /// TODO: docs
+    /// The [`integrate_deletion`](Replica::integrate_deletion) method is not
+    /// able to immediately produce the offset range(s) to be deleted if the
+    /// `Deletion` is itself dependent on some context that the `Replica`
+    /// doesn't yet have. When this happens the `Deletion` is stored in an
+    /// internal backlog of edits that can't be processed yet, but may be in
+    /// the future.
+    ///
+    /// This method returns an iterator over all the backlogged deletions
+    /// which are now ready to be applied to your buffer.
+    ///
+    /// The [`BackloggedDeletions`] iterator yields the same kind of offset
+    /// ranges that [`integrate_deletion`](Replica::integrate_deletion) would
+    /// have produced had the `Deletion` been integrated right away.
+    ///
+    /// It's very important for the ranges to be deleted in the exact same
+    /// order in which they were yielded by the iterator. If you don't your
+    /// buffer could permanently diverge from the other peers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use cola::Replica;
+    /// // A buffer with the text "Hello" is replicated between three peers.
+    /// let mut replica1 = Replica::new(1, 5);
+    /// let mut replica2 = replica1.fork(2);
+    /// let mut replica3 = replica2.fork(3);
+    ///
+    /// // Peer 1 inserts " world!" at the end of the buffer, and after
+    /// // integrating the insertion peer 2 deletes "world", leaving only
+    /// // "Hello!".
+    /// let insert_spc_world_excl = replica1.inserted(5, 7);
+    /// let _ = replica2.integrate_insertion(&insert_spc_world_excl);
+    /// let delete_world = replica2.deleted(5..11);
+    ///
+    /// // Peer 3 receives the deletion, but it can't integrate it right away
+    /// // because it doesn't have the context it needs. The deletion is stored
+    /// // in the backlog.
+    /// let ranges = replica3.integrate_deletion(&delete_world);
+    ///
+    /// assert!(ranges.is_empty());
+    ///
+    /// // After peer 3 receives the " world!" insertion from peer 1 it can
+    /// // finally integrate the deletion.
+    /// let _ = replica3.integrate_insertion(&insert_spc_world_excl);
+    ///
+    /// let mut deletions = replica3.backlogged_deletions();
+    /// assert_eq!(deletions.next(), Some(vec![5..11]));
+    /// assert_eq!(deletions.next(), None);
+    /// ```
     #[inline]
     pub fn backlogged_deletions(&mut self) -> BackloggedDeletions<'_> {
         BackloggedDeletions::from_replica(self)
@@ -94,10 +142,9 @@ impl Replica {
 
     /// The [`integrate_insertion`](Replica::integrate_insertion) method is not
     /// able to immediately produce an offset if the `Insertion` is itself
-    /// dependent on some context that the `Replica` doesn't yet have.
-    ///
-    /// When this happens the `Insertion` is stored in an internal backlog of
-    /// edits that can't be processed yet, but may be in the future.
+    /// dependent on some context that the `Replica` doesn't yet have. When
+    /// this happens the `Insertion` is stored in an internal backlog of edits
+    /// that can't be processed yet, but may be in the future.
     ///
     /// This method returns an iterator over all the backlogged insertions
     /// which are now ready to be applied to your buffer.
@@ -110,7 +157,8 @@ impl Replica {
     /// order in which they were yielded by the iterator. If you don't your
     /// buffer could permanently diverge from the other peers.
     ///
-    /// # Example
+    /// # Examples
+    ///
     /// ```
     /// # use cola::Replica;
     /// // The buffer at peer 1 is "ab".
@@ -215,7 +263,7 @@ impl Replica {
     ///
     /// Panics if the [`ReplicaId`] is zero.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use cola::{Replica, EncodedReplica};
@@ -289,7 +337,7 @@ impl Replica {
     /// Panics if the start of the range is greater than the end or if the end
     /// is out of bounds (i.e. greater than the current length of your buffer).
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use cola::{Replica, Deletion};
@@ -382,7 +430,7 @@ impl Replica {
     ///
     /// Panics if the [`ReplicaId`] is zero.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use cola::{Replica, ReplicaId};
@@ -439,7 +487,7 @@ impl Replica {
     /// Panics if the offset is out of bounds (i.e. greater than the current
     /// length of your buffer).
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use cola::{Replica, Insertion};
@@ -580,7 +628,7 @@ impl Replica {
     /// [`backlogged_insertions`](Replica::backlogged_insertions) method which
     /// handles this case).
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use cola::{Replica, Insertion};
@@ -685,7 +733,8 @@ impl Replica {
     ///
     /// Panics if the [`ReplicaId`] is zero.
     ///
-    /// # Example
+    /// # Examples
+    ///
     /// ```
     /// # use std::thread;
     /// # use cola::Replica;
