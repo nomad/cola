@@ -348,6 +348,7 @@ impl Replica {
     /// let deletion: Deletion = replica1.deleted(..6);
     /// ```
     #[track_caller]
+    #[must_use]
     #[inline]
     pub fn deleted<R>(&mut self, range: R) -> Deletion
     where
@@ -498,6 +499,7 @@ impl Replica {
     /// let insertion: Insertion = replica1.inserted(1, 2);
     /// ```
     #[track_caller]
+    #[must_use]
     #[inline]
     pub fn inserted(&mut self, at_offset: Length, len: Length) -> Insertion {
         if at_offset > self.len() {
@@ -603,6 +605,7 @@ impl Replica {
     ///
     /// assert_eq!(ranges.as_slice(), &[1..2, 3..4]);
     /// ```
+    #[must_use]
     #[inline]
     pub fn integrate_deletion(
         &mut self,
@@ -661,6 +664,7 @@ impl Replica {
     ///
     /// assert_eq!(offset_1, 2);
     /// ```
+    #[must_use]
     #[inline]
     pub fn integrate_insertion(
         &mut self,
