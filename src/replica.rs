@@ -485,9 +485,9 @@ impl Replica {
     ///
     /// The number of ranges can be:
     ///
-    /// - zero, if the deletion has already been merged by this `Replica` or if
-    /// it depends on some context that this `Replica` doesn't yet have (see
-    /// the [`backlogged_deletions`](Replica::backlogged_deletions) method
+    /// - zero, if the `Deletion` has already been integrated by this `Replica`
+    /// or if it depends on some context that this `Replica` doesn't yet have
+    /// (see the [`backlogged_deletions`](Replica::backlogged_deletions) method
     /// which handles this case);
     ///
     /// - one, if there haven't been any concurrent insertions (local or
@@ -506,7 +506,7 @@ impl Replica {
     ///
     /// ```
     /// # use cola::Replica;
-    /// // Peer 1 starts with the text "abcd", and sends it to a second peer.
+    /// // Peer 1 starts with the text "abcd" and sends it to a second peer.
     /// let mut replica1 = Replica::new(1, 4);
     ///
     /// let mut replica2 = replica1.fork(2);
@@ -560,7 +560,49 @@ impl Replica {
         }
     }
 
-    /// TODO: docs
+    /// Integrates a remote [`Insertion`] into this `Replica`, optionally
+    /// returning the offset at which to insert the `Insertion`'s
+    /// [`Text`](Insertion::text) into your buffer.
+    ///
+    /// A `None` value can be returned if the `Insertion` has already been
+    /// integrated by this `Replica` or if it depends on some context that this
+    /// `Replica` doesn't yet have (see the
+    /// [`backlogged_insertions`](Replica::backlogged_insertions) method which
+    /// handles this case).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use cola::{Replica, Insertion};
+    /// // Peer 1 starts with the text "ab" and sends it to a second peer.
+    /// let mut replica1 = Replica::new(1, 2);
+    ///
+    /// let mut replica2 = replica1.fork(2);
+    ///
+    /// // Peer 1 inserts two characters between the 'a' and the 'b'.
+    /// let insertion_1 = replica1.inserted(1, 2);
+    ///
+    /// // Concurrently, peer 2 inserts a character at the start of the
+    /// // document.
+    /// let insertion_2 = replica2.inserted(0, 1);
+    ///
+    /// // Peer 1 receives this insertion, and since there haven't been any
+    /// // concurrent insertions at the start of the document, its offset
+    /// // hasn't changed.
+    /// let offset_2 = replica1.integrate_insertion(&insertion_2).unwrap();
+    ///
+    /// assert_eq!(offset_2, 0);
+    ///
+    /// // If we try to integrate the same insertion again, we'll get a `None`.
+    /// assert!(replica1.integrate_insertion(&insertion_2).is_none());
+    ///
+    /// // Finally, peer 2 receives the first insertion from peer 1. Its text
+    /// // should be inserted between the 'a' and the 'b', which now at
+    /// // offset 2 at this peer.
+    /// let offset_1 = replica2.integrate_insertion(&insertion_1).unwrap();
+    ///
+    /// assert_eq!(offset_1, 2);
+    /// ```
     #[inline]
     pub fn integrate_insertion(
         &mut self,

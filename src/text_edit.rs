@@ -76,30 +76,6 @@ pub enum TextEdit {
     // (and of course that `ranges[i].start < ranges[i].end`).
     //
     // # Example
-    //
-    // ```
-    // # use cola::{Replica, TextEdit};
-    // // Peer 1 starts with the text "abcd", and sends it to a second peer.
-    // let mut replica1 = Replica::new(1, 4);
-    //
-    // let mut replica2 = replica1.fork(2);
-    //
-    // // Peer 1 deletes the "bc" in "abcd".
-    // let deletion = replica1.deleted(1..3);
-    //
-    // // Concurrently, peer 2 inserts a single character between the 'b' and
-    // // the 'c'.
-    // let _ = replica2.inserted(2, 1);
-    //
-    // // Now peer 2 receives the deletion from peer 1. Since the previous
-    // // insertion was inside the deleted range, the latter has now been
-    // // split into two separate ranges.
-    // let Some(TextEdit::Deletion(ranges)) = replica2.merge(&deletion) else {
-    //     unreachable!();
-    // };
-    //
-    // assert_eq!(ranges.as_slice(), &[1..2, 3..4]);
-    // ```
     Deletion(Vec<Range<Length>>),
 }
 
