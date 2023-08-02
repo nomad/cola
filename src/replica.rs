@@ -480,69 +480,70 @@ impl Replica {
         self.run_tree.len()
     }
 
-    /// Merges a [`CrdtEdit`] created by another peer into this `Replica`,
-    /// optionally producing a [`TextEdit`] which can be applied to your
-    /// buffer.
+    /// Integrates a remote [`Deletion`] into this `Replica`, returning a
+    /// sequence of offset [`Range`]s to be deleted from your buffer.
     ///
-    /// There can be multiple reasons why this method returns `None`, for
-    /// example:
+    /// The number of ranges can be:
     ///
-    /// - the `CrdtEdit` is a no-op, like inserting zero characters or deleting
-    /// an empty range;
+    /// - zero, if the deletion has already been merged by this `Replica` or if
+    /// it depends on some context that this `Replica` doesn't yet have (see
+    /// the [`backlogged_deletions`](Replica::backlogged_deletions) method
+    /// which handles this case);
     ///
-    /// - the `CrdtEdit` was created by the same `Replica` that's now trying to
-    /// merge it (i.e. you're trying to merge your own edits);
+    /// - one, if there haven't been any concurrent insertions (local or
+    /// remote) within the original range of the deletion;
     ///
-    /// - the same `CrdtEdit` has already been merged by this `Replica`
-    /// (merging the same edit multiple times is idempotent);
+    /// - more than one, if there have been. In this case the deleted range has
+    /// been split into multiple smaller ranges that "skip over" the newly
+    /// inserted text.
     ///
-    /// - the `CrdtEdit` depends on some context that the `Replica` doesn't yet
-    /// have (see the [`backlogged`](Replica::backlogged) method which handles
-    /// this case);
+    /// The ranges are guaranteed to be sorted in ascending order and to not
+    /// overlap, i.e. for any two indices `i` and `j` where `i < j` and `j <
+    /// ranges.len()` it holds that `ranges[i].end < ranges[j].start` (and of
+    /// course that `ranges[i].start < ranges[i].end`).
     ///
-    /// - etc.
-    ///
-    /// If you do get a `Some` value, it's very important to apply the returned
-    /// `TextEdit` to your buffer *before* processing any other edits (both
-    /// remote and local). This is because `TextEdit`s refer to the state of
-    /// the buffer at the time they were created. If the state changes before
-    /// you apply a `TextEdit`, its coordinates might no longer be valid.
-    ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # use cola::Replica;
-    /// // Peer 1 starts with a buffer containing "abcd" and sends it over to a
-    /// // second peer.
+    /// // Peer 1 starts with the text "abcd", and sends it to a second peer.
+    /// let mut replica1 = Replica::new(1, 4);
+    ///
+    /// let mut replica2 = replica1.fork(2);
+    ///
+    /// // Peer 1 deletes the "bc" in "abcd".
+    /// let deletion = replica1.deleted(1..3);
+    ///
+    /// // Concurrently, peer 2 inserts a single character at start of the
+    /// // document.
+    /// let _ = replica2.inserted(0, 1);
+    ///
+    /// // Now peer 2 receives the deletion from peer 1. Since the previous
+    /// // insertion was outside of the deleted region the latter is still
+    /// // contiguous at this peer.
+    /// let ranges = replica2.integrate_deletion(&deletion);
+    ///
+    /// assert_eq!(ranges.as_slice(), &[2..4]);
+    /// ```
+    ///
+    /// ```
+    /// # use cola::Replica;
+    /// // Same as before..
     /// let mut replica1 = Replica::new(1, 4);
     /// let mut replica2 = replica1.fork(2);
     ///
-    /// // Peer 1 inserts a character between the 'b' and the 'c'.
-    /// let insertion_at_1 = replica1.inserted(2, 1);
+    /// let deletion = replica1.deleted(1..3);
     ///
-    /// // Concurrently with the insertion, peer 2 deletes the 'b'.
-    /// let deletion_at_2 = replica2.deleted(1..2);
+    /// // ..except now peer 2 inserts a single character between the 'b' and
+    /// // the 'c'.
+    /// let _ = replica2.inserted(2, 1);
     ///
-    /// // The two peers exchange their edits.
+    /// // Now peer 2 receives the deletion from peer 1. Since the previous
+    /// // insertion was inside the deleted range, the latter has now been
+    /// // split into two separate ranges.
+    /// let ranges = replica2.integrate_deletion(&deletion);
     ///
-    /// // The deletion arrives at the first peer. There have not been any
-    /// // insertions or deletions *before* the 'b', so its offset range should
-    /// // still be 1..2.
-    /// let range_b = replica1
-    ///     .integrate_deletion(&deletion_at_2)
-    ///     .into_iter()
-    ///     .next()
-    ///     .unwrap();
-    ///
-    /// assert_eq!(range_b, 1..2);
-    ///
-    /// // Finally, the insertion arrives at the second peer. Here the 'b' has
-    /// // been deleted, so the offset at which we should insert the new
-    /// // character is not 2, but 1. This is because the *intent* of the first
-    /// // peer was to insert the character between the 'b' and the 'c'.
-    /// let offset = replica2.integrate_insertion(&insertion_at_1).unwrap();
-    ///
-    /// assert_eq!(offset, 1);
+    /// assert_eq!(ranges.as_slice(), &[1..2, 3..4]);
     /// ```
     #[inline]
     pub fn integrate_deletion(
