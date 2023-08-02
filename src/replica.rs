@@ -92,19 +92,21 @@ impl Replica {
         BackloggedDeletions::from_replica(self)
     }
 
-    /// Sometimes the [`integrate_deletion`](Replica::integrate_deletion)
-    /// method is not able to produce an edit for the given `Deletion` at the
-    /// time it is called. This is usually because the `Deletion` is itself
-    /// dependent on some context that the `Replica` may not have yet.
+    /// The [`integrate_insertion`](Replica::integrate_insertion) method is not
+    /// able to immediately produce an offset if the `Insertion` is itself
+    /// dependent on some context that the `Replica` doesn't yet have.
     ///
-    /// When this happens, the `Replica` stores the `Deletion` in an internal
-    /// backlog of edits that can't be processed yet, but may be in the future.
+    /// When this happens the `Insertion` is stored in an internal backlog of
+    /// edits that can't be processed yet, but may be in the future.
     ///
-    /// This method returns an iterator over all the backlogged edits which are
-    /// now ready to be applied to your buffer.
+    /// This method returns an iterator over all the backlogged insertions
+    /// which are now ready to be applied to your buffer.
     ///
-    /// The [`BackloggedDeletions`] iterator yields ranges. It's very important
-    /// that you apply every `TextEdit` to your buffer in the *exact same*
+    /// The [`BackloggedInsertions`] iterator yields `(Text, Length)` pairs
+    /// containing the [`Text`] to be inserted and the offset at which it
+    /// should be inserted.
+    ///
+    /// It's very important for the insertions to be applied in the exact same
     /// order in which they were yielded by the iterator. If you don't your
     /// buffer could permanently diverge from the other peers.
     ///
@@ -141,8 +143,8 @@ impl Replica {
     /// // edits that were previously backlogged.
     /// let mut backlogged = replica2.backlogged_insertions();
     ///
-    /// assert!(matches!(backlogged.next(), Some((3, _))));
-    /// assert!(matches!(backlogged.next(), Some((4, _))));
+    /// assert!(matches!(backlogged.next(), Some((_, 3))));
+    /// assert!(matches!(backlogged.next(), Some((_, 4))));
     /// ```
     #[inline]
     pub fn backlogged_insertions(&mut self) -> BackloggedInsertions<'_> {

@@ -116,7 +116,7 @@ impl Replica {
     }
 
     pub fn merge_backlogged(&mut self) {
-        for (offset, text) in self.crdt.backlogged_insertions() {
+        for (text, offset) in self.crdt.backlogged_insertions() {
             let s = self.backlog.get(&text).unwrap();
             self.buffer.insert_str(offset, s);
         }

@@ -259,7 +259,7 @@ impl<'a> BackloggedInsertions<'a> {
 }
 
 impl Iterator for BackloggedInsertions<'_> {
-    type Item = (Length, Text);
+    type Item = (Text, Length);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -275,7 +275,7 @@ impl Iterator for BackloggedInsertions<'_> {
         if self.replica.can_merge_insertion(first) {
             let first = insertions.insertions.pop_front().unwrap();
             let edit = self.replica.merge_unchecked_insertion(&first);
-            Some((edit, first.text().clone()))
+            Some((first.text().clone(), edit))
         } else {
             self.current = self.iter.next();
             self.next()
