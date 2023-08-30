@@ -24,8 +24,8 @@ fn bench_upstream(
             let mut replica = Replica::new(1, trace.start_content().len());
 
             for (start, end, text) in trace.edits() {
-                replica.deleted(start..end);
-                replica.inserted(start, text.len());
+                let _ = replica.deleted(start..end);
+                let _ = replica.inserted(start, text.len());
             }
 
             assert_eq!(replica.len(), trace.end_content().len());
@@ -74,10 +74,10 @@ fn bench_downstream(
             for edit in &edits {
                 match edit {
                     Edit::Insertion(insertion) => {
-                        downstream.integrate_insertion(insertion);
+                        let _ = downstream.integrate_insertion(insertion);
                     },
                     Edit::Deletion(deletion) => {
-                        downstream.integrate_deletion(deletion);
+                        let _ = downstream.integrate_deletion(deletion);
                     },
                 };
             }
