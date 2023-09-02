@@ -3,7 +3,18 @@ name = "cola-crdt"
 version = "0.1.0"
 edition = "2021"
 authors = ["Riccardo Mazzarini <me@noib3.dev>"]
+description = "A text CRDT for real-time collaborative editing"
+documentation = "https://docs.rs/cola-crdt"
+repository = "https://github.com/nomad/cola"
+readme = "README.md"
 license = "MIT"
+keywords = ["crdt", "collaboration", "text", "editor", "tree"]
+categories = ["data-structures", "text-editors", "text-processing"]
+exclude = ["/.github/*", "/examples/**", "/fuzz/**", "/tests/**"]
+
+[package.metadata.docs.rs]
+features = ["serde"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lib]
 name = "cola"
