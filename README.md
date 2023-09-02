@@ -18,7 +18,7 @@ without relying on a central server to coordinate the edits.
 Check out [the docs][docs] to learn about cola's API, or [this blog post][cola]
 for a deeper dive into its design and implementation.
 
-# Example usage
+## Example usage
 
 ```rust
 use std::ops::Range;
@@ -120,5 +120,5 @@ fn main() {
 ```
 
 [docs]: https://docs.rs/cola-crdt
-[cola]: https://www.nomad.foo/blog/cola
-[crates.io]: https://www.crates.io
+[cola]: https://nomad.foo/blog/cola
+[crates.io]: https://crates.io

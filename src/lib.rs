@@ -112,7 +112,7 @@
 //! [`Insertion`], [`Deletion`] and [`EncodedReplica`] (disabled by default).
 //!
 //! [CRDT]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
-//! [cola]: https://www.nomad.foo/blog/cola
+//! [cola]: https://nomad.foo/blog/cola
 //! [`Serialize`]: https://docs.rs/serde/latest/serde/trait.Serialize.html
 //! [`Deserialize`]: https://docs.rs/serde/latest/serde/trait.Deserialize.html
 
