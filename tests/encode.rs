@@ -1,6 +1,6 @@
 #[cfg(feature = "encode")]
 mod encode {
-    use cola::{Length, Replica, ReplicaId};
+    use cola::Replica;
 
     #[test]
     fn encode_empty() {
@@ -12,6 +12,7 @@ mod encode {
     }
 
     #[test]
+    #[allow(unused_must_use)]
     fn encode_automerge() {
         let automerge = traces::automerge().chars_to_bytes();
 
