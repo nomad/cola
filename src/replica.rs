@@ -934,7 +934,10 @@ mod encode {
         T: ser::Serialize,
     {
         let field_bytes = serialize(field);
-        let len_bytes = field_bytes.len().to_le_bytes();
+        // We convert the usize into a u64 before turning it into a byte array
+        // to guarantee that the latter is always 8 bytes long. If we don't the
+        // length will vary depending on the architecture.
+        let len_bytes = (field_bytes.len() as u64).to_le_bytes();
         buf.extend_from_slice(&len_bytes);
         buf.extend_from_slice(&field_bytes);
     }
@@ -953,7 +956,7 @@ mod encode {
 
         let len_bytes: [u8; 8] = len_bytes.try_into().ok()?;
 
-        let len = usize::from_le_bytes(len_bytes);
+        let len = u64::from_le_bytes(len_bytes) as usize;
 
         let (encoded_field, rest) = if rest.len() >= len {
             rest.split_at(len)
