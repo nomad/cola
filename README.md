@@ -1,12 +1,12 @@
 # 🥤 cola
 
-[![CI]](https://github.com/nomad/cola/actions)
 [![Latest version]](https://crates.io/crates/cola-crdt)
 [![Docs badge]][docs]
+[![CI]](https://github.com/nomad/cola/actions)
 
-[CI]: https://github.com/nomad/cola/actions/workflows/ci.yml/badge.svg
 [Latest version]: https://img.shields.io/crates/v/cola-crdt.svg
 [Docs badge]: https://docs.rs/cola-crdt/badge.svg
+[CI]: https://github.com/nomad/cola/actions/workflows/ci.yml/badge.svg
 
 cola is a Conflict-free Replicated Data Type specialized for real-time
 collaborative editing of plain text documents.
@@ -92,15 +92,13 @@ fn main() {
 }
 ```
 
-# A note on the crate's naming scheme
+## A note on the crate's naming scheme
 
 cola's `package.name` is `cola-crdt`, while its `lib.name` is simply `cola`.
 This is because the package name has to be unique to be published to
 [crates.io], but unfortunately `cola` is already taken by a crate squatter.
-
-What this means practically for you, the user of the library, is that you
-should import cola as `cola-crdt` in your `Cargo.toml`, and `use` it as
-`cola` in your source code.
+What this means is that you should import cola as `cola-crdt` in your
+`Cargo.toml`, and `use` it as `norm` in your source code.
 
 For example:
 
