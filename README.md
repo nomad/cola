@@ -98,7 +98,7 @@ cola's `package.name` is `cola-crdt`, while its `lib.name` is simply `cola`.
 This is because the package name has to be unique to be published to
 [crates.io], but unfortunately `cola` is already taken by a crate squatter.
 What this means is that you should import cola as `cola-crdt` in your
-`Cargo.toml`, and `use` it as `norm` in your source code.
+`Cargo.toml`, and `use` it as `cola` in your source code.
 
 For example:
 
