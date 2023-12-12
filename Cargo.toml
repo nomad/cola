@@ -1,10 +1,10 @@
 [package]
-name = "cola-crdt"
+name = "cola"
 version = "0.1.1"
 edition = "2021"
 authors = ["Riccardo Mazzarini <me@noib3.dev>"]
 description = "A text CRDT for real-time collaborative editing"
-documentation = "https://docs.rs/cola-crdt"
+documentation = "https://docs.rs/cola"
 repository = "https://github.com/nomad/cola"
 readme = "README.md"
 license = "MIT"

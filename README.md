@@ -1,11 +1,11 @@
 # 🥤 cola
 
-[![Latest version]](https://crates.io/crates/cola-crdt)
+[![Latest version]](https://crates.io/crates/cola)
 [![Docs badge]][docs]
 [![CI]](https://github.com/nomad/cola/actions)
 
-[Latest version]: https://img.shields.io/crates/v/cola-crdt.svg
-[Docs badge]: https://docs.rs/cola-crdt/badge.svg
+[Latest version]: https://img.shields.io/crates/v/cola.svg
+[Docs badge]: https://docs.rs/cola/badge.svg
 [CI]: https://github.com/nomad/cola/actions/workflows/ci.yml/badge.svg
 
 cola is a Conflict-free Replicated Data Type specialized for real-time
@@ -15,7 +15,7 @@ It allows multiple peers on a distributed network to concurrently edit the same
 text document, making sure that they all converge to the same final state
 without relying on a central server to coordinate the edits.
 
-Check out [the docs][docs] to learn about cola's API, or [this blog post][cola]
+Check out [the docs][docs] to learn about cola's API, or [this blog post][blog]
 for a deeper dive into its design and implementation.
 
 ## Example usage
@@ -92,31 +92,5 @@ fn main() {
 }
 ```
 
-## A note on the crate's naming scheme
-
-cola's `package.name` is `cola-crdt`, while its `lib.name` is simply `cola`.
-This is because the package name has to be unique to be published to
-[crates.io], but unfortunately `cola` is already taken by a crate squatter.
-What this means is that you should import cola as `cola-crdt` in your
-`Cargo.toml`, and `use` it as `cola` in your source code.
-
-For example:
-
-```toml
-# Cargo.toml
-[dependencies]
-cola-crdt = "0.1"
-```
-
-```rust
-// main.rs
-use cola::Replica;
-
-fn main() {
-    println!("{:?}", Replica::new(1, 42));
-}
-```
-
-[docs]: https://docs.rs/cola-crdt
-[cola]: https://nomad.foo/blog/cola
-[crates.io]: https://crates.io
+[docs]: https://docs.rs/cola
+[blog]: https://nomad.foo/blog/cola
