@@ -449,9 +449,7 @@ impl RunTree {
         if start.contains_anchor(deletion.end()) {
             let run = start;
 
-            if run.is_deleted {
-                return ranges;
-            } else {
+            if !run.is_deleted {
                 let delete_from = if deletion.start().is_zero() {
                     0
                 } else {
@@ -462,8 +460,9 @@ impl RunTree {
                 let delete_range = (delete_from..delete_up_to).into();
                 self.delete_leaf_range(start_idx, leaf_offset, delete_range);
                 ranges.push((delete_range + leaf_offset).into());
-                return ranges;
             }
+
+            return ranges;
         }
 
         let end_idx = self.run_indices.idx_at_anchor(
@@ -624,7 +623,10 @@ impl RunTree {
                 #[allow(mutable_transmutes)]
                 core::mem::transmute::<_, &mut Gtree>(&self.gtree)
             };
-            gtree.with_leaf_mut(run_idx, |run| run.delete());
+
+            gtree.with_leaf_mut(run_idx, EditRun::delete);
+
+            gtree.remove_cursor();
 
             if !matches!(state, DeletionState::Deleting(_)) {
                 state = DeletionState::Deleting(visible_offset);
