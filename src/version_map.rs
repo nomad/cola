@@ -9,7 +9,7 @@ pub type VersionMap = BaseMap<Length>;
 /// A struct equivalent to a `HashMap<ReplicaId, T>`, but with the `ReplicaId`
 /// of the local `Replica` (and the corresponding `T`) stored separately from
 /// the `HashMap` itself.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)

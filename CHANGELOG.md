@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `Eq` impls for `Insertion` and `Deletion`
+
 ### Bug fixes
 
 - fixed a bug that would cause `Replica::decode()` to fail if it was encoded

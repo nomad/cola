@@ -8,7 +8,7 @@ use crate::*;
 /// [`integrate_insertion`](Replica::integrate_insertion) method.
 ///
 /// See the documentation of those methods for more information.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
@@ -108,7 +108,7 @@ impl Insertion {
 /// [`integrate_deletion`](Replica::integrate_deletion) method.
 ///
 /// See the documentation of those methods for more information.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
