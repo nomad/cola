@@ -112,6 +112,26 @@ pub enum DecodeError {
     InvalidData,
 }
 
+impl core::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            DecodeError::ChecksumFailed => f.write_str("checksum failed"),
+
+            DecodeError::DifferentProtocol { encoded_on, decoding_on } => {
+                write!(
+                    f,
+                    "different protocol: encoded on {:?}, decoding on {:?}",
+                    encoded_on, decoding_on
+                )
+            },
+
+            DecodeError::InvalidData => f.write_str("invalid data"),
+        }
+    }
+}
+
+impl std::error::Error for DecodeError {}
+
 #[inline(always)]
 pub(crate) fn checksum(bytes: &[u8]) -> Checksum {
     Box::new(checksum_array(bytes))
