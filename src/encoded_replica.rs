@@ -2,7 +2,8 @@ use sha2::{Digest, Sha256};
 
 use crate::*;
 
-pub type Checksum = Vec<u8>;
+/// We use this instead of a `Vec<u8>` because it's 1/3 the size on the stack.
+pub type Checksum = Box<[u8; 32]>;
 
 /// A [`Replica`] encoded into a compact binary format suitable for
 /// transmission over the network.
@@ -88,5 +89,6 @@ pub enum DecodeError {
 
 #[inline]
 pub fn checksum(bytes: &[u8]) -> Checksum {
-    Sha256::digest(bytes)[..].to_vec()
+    let checksum = Sha256::digest(bytes);
+    Box::new(*checksum.as_ref())
 }
