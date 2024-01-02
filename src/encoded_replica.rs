@@ -23,6 +23,29 @@ pub struct EncodedReplica {
     bytes: Vec<u8>,
 }
 
+impl core::fmt::Debug for EncodedReplica {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        struct HexSlice<'a>(&'a [u8]);
+
+        impl<'a> core::fmt::Debug for HexSlice<'a> {
+            fn fmt(
+                &self,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                for byte in self.0 {
+                    write!(f, "{:02x}", byte)?;
+                }
+                Ok(())
+            }
+        }
+
+        f.debug_struct("EncodedReplica")
+            .field("protocol_version", &self.protocol_version)
+            .field("checksum", &HexSlice(self.checksum()))
+            .finish_non_exhaustive()
+    }
+}
+
 impl EncodedReplica {
     #[inline]
     pub(crate) fn bytes(&self) -> &[u8] {
