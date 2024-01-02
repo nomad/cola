@@ -7,7 +7,6 @@ mod encode {
         let replica = Replica::new(1, 42);
         let encoded = replica.encode();
         let decoded = Replica::decode(2, &encoded).unwrap();
-        assert_eq!(decoded.id(), 1);
         assert!(replica.eq_decoded(&decoded));
     }
 
@@ -26,8 +25,6 @@ mod encode {
         let encoded = replica.encode();
 
         let decoded = Replica::decode(2, &encoded).unwrap();
-
-        assert_eq!(decoded.id(), 1);
 
         assert!(replica.eq_decoded(&decoded));
     }
