@@ -901,7 +901,7 @@ mod encode {
         (RunTree, LamportClock, VersionMap, DeletionMap, Backlog);
 
     #[inline]
-    pub(super) fn encode(replica: &Replica) -> Vec<u8> {
+    pub(super) fn encode(replica: &Replica) -> Box<[u8]> {
         let mut encoded = Vec::new();
 
         encode_field(&mut encoded, &replica.run_tree);
@@ -910,7 +910,7 @@ mod encode {
         encode_field(&mut encoded, &replica.deletion_map);
         encode_field(&mut encoded, &replica.backlog);
 
-        encoded
+        encoded.into_boxed_slice()
     }
 
     #[inline]

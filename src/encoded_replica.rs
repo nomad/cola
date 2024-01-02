@@ -20,7 +20,7 @@ pub(crate) type ChecksumArray = [u8; 32];
 pub struct EncodedReplica {
     protocol_version: ProtocolVersion,
     checksum: Checksum,
-    bytes: Vec<u8>,
+    bytes: Box<[u8]>,
 }
 
 impl core::fmt::Debug for EncodedReplica {
@@ -49,7 +49,7 @@ impl core::fmt::Debug for EncodedReplica {
 impl EncodedReplica {
     #[inline]
     pub(crate) fn bytes(&self) -> &[u8] {
-        self.bytes.as_slice()
+        &*self.bytes
     }
 
     #[inline]
@@ -61,7 +61,7 @@ impl EncodedReplica {
     pub(crate) fn new(
         protocol_version: ProtocolVersion,
         checksum: Checksum,
-        bytes: Vec<u8>,
+        bytes: Box<[u8]>,
     ) -> Self {
         Self { protocol_version, checksum, bytes }
     }
