@@ -263,9 +263,7 @@ impl Iterator for BackloggedInsertions<'_> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(insertions) = self.current.as_mut() else {
-            return None;
-        };
+        let insertions = self.current.as_mut()?;
 
         let Some(first) = insertions.insertions.front() else {
             self.current = self.iter.next();
