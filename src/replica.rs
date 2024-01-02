@@ -294,7 +294,7 @@ impl Replica {
             });
         }
 
-        if encoded.checksum() != &checksum(encoded.bytes()) {
+        if encoded.checksum() != checksum_array(encoded.bytes()) {
             return Err(DecodeError::ChecksumFailed);
         }
 

@@ -154,7 +154,7 @@ use version_map::{DeletionMap, VersionMap};
 #[cfg(feature = "encode")]
 mod encoded_replica;
 #[cfg(feature = "encode")]
-use encoded_replica::checksum;
+use encoded_replica::{checksum, checksum_array};
 #[cfg(feature = "encode")]
 pub use encoded_replica::{DecodeError, EncodedReplica};
 
