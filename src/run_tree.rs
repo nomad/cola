@@ -62,6 +62,11 @@ impl RunTree {
     }
 
     #[inline]
+    pub fn create_anchor(&self, _at_offset: Length) -> Anchor {
+        todo!();
+    }
+
+    #[inline]
     pub fn debug_as_self(&self) -> DebugAsSelf<'_> {
         self.gtree.debug_as_self()
     }
@@ -715,6 +720,11 @@ impl RunTree {
     }
 
     #[inline]
+    pub fn resolve_anchor(&self, _anchor: Anchor) -> Option<Length> {
+        todo!();
+    }
+
+    #[inline]
     pub fn run_indices(&self) -> &RunIndices {
         &self.run_indices
     }
@@ -999,22 +1009,22 @@ impl core::fmt::Debug for Anchor {
 
 impl Anchor {
     #[inline(always)]
-    pub fn character_ts(&self) -> Length {
+    pub(crate) fn character_ts(&self) -> Length {
         self.offset
     }
 
     #[inline(always)]
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         self.replica_id == 0
     }
 
     #[inline(always)]
-    pub fn new(replica_id: ReplicaId, offset: Length) -> Self {
+    pub(crate) fn new(replica_id: ReplicaId, offset: Length) -> Self {
         Self { replica_id, offset }
     }
 
     #[inline(always)]
-    pub fn offset(&self) -> Length {
+    pub(crate) fn offset(&self) -> Length {
         self.offset
     }
 
@@ -1025,7 +1035,7 @@ impl Anchor {
     }
 
     #[inline(always)]
-    pub fn replica_id(&self) -> ReplicaId {
+    pub(crate) fn replica_id(&self) -> ReplicaId {
         self.replica_id
     }
 }

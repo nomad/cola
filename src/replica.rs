@@ -246,6 +246,17 @@ impl Replica {
         )
     }
 
+    /// TODO: doc
+    #[track_caller]
+    #[inline]
+    pub fn create_anchor(&self, at_offset: Length) -> Anchor {
+        if at_offset > self.len() {
+            panic::offset_out_of_bounds(at_offset, self.len());
+        }
+
+        self.run_tree.create_anchor(at_offset)
+    }
+
     #[doc(hidden)]
     pub fn debug(&self) -> debug::DebugAsSelf<'_> {
         self.into()
@@ -790,6 +801,12 @@ impl Replica {
     #[doc(hidden)]
     pub fn num_runs(&self) -> usize {
         self.run_tree.count_empty_leaves().1
+    }
+
+    /// TODO: doc
+    #[inline]
+    pub fn resolve_anchor(&self, anchor: Anchor) -> Option<Length> {
+        self.run_tree.resolve_anchor(anchor)
     }
 }
 
