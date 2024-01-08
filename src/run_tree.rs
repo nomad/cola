@@ -1,6 +1,7 @@
 use core::cmp::Ordering;
 use core::ops;
 
+use crate::anchor::{Anchor as BiasedAnchor, InnerAnchor as Anchor};
 use crate::gtree::LeafIdx;
 use crate::*;
 
@@ -62,10 +63,18 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn create_anchor(&self, at_offset: Length) -> Anchor {
+    pub fn create_anchor(
+        &self,
+        at_offset: Length,
+        with_bias: AnchorBias,
+    ) -> BiasedAnchor {
+        if at_offset == self.len() && with_bias == AnchorBias::Right {
+            return BiasedAnchor::end_of_document();
+        }
+
         if at_offset == 0 {
-            if self.len() == 0 {
-                return Anchor::zero();
+            if with_bias == AnchorBias::Left {
+                return BiasedAnchor::start_of_document();
             }
 
             let first_run = self
@@ -74,16 +83,31 @@ impl RunTree {
                 .find_map(|(_, run)| (!run.is_deleted).then_some(run))
                 .expect("there's at least one EditRun that's not deleted");
 
-            return Anchor::new(
+            let anchor = Anchor::new(
                 first_run.replica_id(),
                 first_run.start(),
                 first_run.run_ts(),
             );
+
+            return BiasedAnchor::new(anchor, AnchorBias::Right);
         }
 
-        let (leaf_idx, leaf_offset) = self.gtree.leaf_at_offset(at_offset);
+        let (leaf_idx, mut leaf_offset) = self.gtree.leaf_at_offset(at_offset);
 
-        let edit_run = self.gtree.leaf(leaf_idx);
+        let mut edit_run = self.gtree.leaf(leaf_idx);
+
+        if leaf_offset + edit_run.len() == at_offset
+            && with_bias == AnchorBias::Right
+        {
+            let next_run = self
+                .gtree
+                .leaves::<false>(leaf_idx)
+                .find_map(|(_, run)| (!run.is_deleted).then_some(run));
+
+            leaf_offset += edit_run.len();
+
+            edit_run = next_run.unwrap();
+        }
 
         let inserted_by = edit_run.replica_id();
 
@@ -91,7 +115,9 @@ impl RunTree {
 
         let contained_in = edit_run.run_ts();
 
-        Anchor::new(inserted_by, offset, contained_in)
+        let anchor = Anchor::new(inserted_by, offset, contained_in);
+
+        BiasedAnchor::new(anchor, with_bias)
     }
 
     #[inline]
@@ -738,19 +764,20 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn resolve_anchor(&self, anchor: Anchor) -> Length {
-        if anchor.is_zero() {
+    pub fn resolve_anchor(&self, anchor: BiasedAnchor) -> Length {
+        if anchor.inner().is_zero() {
             return 0;
         }
 
         let run_containing_anchor =
-            self.run_indices.idx_at_anchor(anchor, AnchorBias::Left);
+            self.run_indices.idx_at_anchor(anchor.inner(), AnchorBias::Left);
 
         let anchor_offset = self.gtree.offset_of_leaf(run_containing_anchor);
 
         let run_containing_anchor = self.gtree.leaf(run_containing_anchor);
 
-        let offset_in_anchor = anchor.offset() - run_containing_anchor.start();
+        let offset_in_anchor =
+            anchor.inner().offset() - run_containing_anchor.start();
 
         anchor_offset + offset_in_anchor
     }

@@ -248,12 +248,16 @@ impl Replica {
     /// TODO: doc
     #[track_caller]
     #[inline]
-    pub fn create_anchor(&self, at_offset: Length) -> Anchor {
+    pub fn create_anchor(
+        &self,
+        at_offset: Length,
+        with_bias: AnchorBias,
+    ) -> Anchor {
         if at_offset > self.len() {
             panic::offset_out_of_bounds(at_offset, self.len());
         }
 
-        self.run_tree.create_anchor(at_offset)
+        self.run_tree.create_anchor(at_offset, with_bias)
     }
 
     #[doc(hidden)]
@@ -467,7 +471,7 @@ impl Replica {
     /// Returns `true` if this `Replica` contains the given [`Anchor`]
     /// somewhere in its Gtree.
     #[inline]
-    fn has_anchor(&self, anchor: Anchor) -> bool {
+    fn has_anchor(&self, anchor: InnerAnchor) -> bool {
         self.version_map.get(anchor.replica_id()) >= anchor.offset()
     }
 
@@ -808,7 +812,7 @@ impl Replica {
     /// TODO: doc
     #[inline]
     pub fn resolve_anchor(&self, anchor: Anchor) -> Option<Length> {
-        if self.has_anchor(anchor) {
+        if self.has_anchor(anchor.inner()) {
             Some(self.run_tree.resolve_anchor(anchor))
         } else {
             None

@@ -138,6 +138,7 @@ mod text_edit;
 mod utils;
 mod version_map;
 
+pub use anchor::Anchor;
 use anchor::*;
 use backlog::Backlog;
 pub use backlog::{BackloggedDeletions, BackloggedInsertions};

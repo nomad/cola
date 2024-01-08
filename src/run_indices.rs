@@ -1,5 +1,6 @@
 use core::ops::{Index, IndexMut};
 
+use crate::anchor::InnerAnchor as Anchor;
 use crate::*;
 
 /// A data structure used when merging remote edits to efficiently map

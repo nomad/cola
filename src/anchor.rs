@@ -8,6 +8,46 @@ use crate::*;
 )]
 pub struct Anchor {
     /// TODO: docs
+    inner: InnerAnchor,
+
+    bias: AnchorBias,
+}
+
+impl Anchor {
+    #[inline(always)]
+    pub(crate) fn _bias(&self) -> AnchorBias {
+        self.bias
+    }
+
+    #[inline(always)]
+    pub(crate) fn end_of_document() -> Self {
+        Self::new(InnerAnchor::zero(), AnchorBias::Right)
+    }
+
+    #[inline(always)]
+    pub(crate) fn inner(&self) -> InnerAnchor {
+        self.inner
+    }
+
+    #[inline(always)]
+    pub(crate) fn new(inner: InnerAnchor, bias: AnchorBias) -> Self {
+        Self { inner, bias }
+    }
+
+    #[inline(always)]
+    pub(crate) fn start_of_document() -> Self {
+        Self::new(InnerAnchor::zero(), AnchorBias::Left)
+    }
+}
+
+/// TODO: docs
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    any(feature = "encode", feature = "serde"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+pub(crate) struct InnerAnchor {
+    /// TODO: docs
     replica_id: ReplicaId,
 
     /// The [`RunTs`] of the [`EditRun`] containing this [`Anchor`].
@@ -17,7 +57,7 @@ pub struct Anchor {
     offset: Length,
 }
 
-impl core::fmt::Debug for Anchor {
+impl core::fmt::Debug for InnerAnchor {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if self == &Self::zero() {
             write!(f, "zero")
@@ -27,7 +67,7 @@ impl core::fmt::Debug for Anchor {
     }
 }
 
-impl Anchor {
+impl InnerAnchor {
     #[inline(always)]
     pub(crate) fn is_zero(&self) -> bool {
         self.replica_id == 0
@@ -65,8 +105,15 @@ impl Anchor {
 }
 
 /// TODO: docs
-#[derive(PartialEq, Eq)]
-pub(crate) enum AnchorBias {
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    any(feature = "encode", feature = "serde"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+pub enum AnchorBias {
+    /// TODO: docs
     Left,
+
+    /// TODO: docs
     Right,
 }

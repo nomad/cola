@@ -1,3 +1,4 @@
+use crate::anchor::InnerAnchor as Anchor;
 use crate::*;
 
 /// An insertion in CRDT coordinates.
