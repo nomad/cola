@@ -16,13 +16,6 @@ impl core::fmt::Debug for RunIndices {
     }
 }
 
-/// TODO: docs
-#[derive(PartialEq, Eq)]
-pub(crate) enum AnchorBias {
-    Left,
-    Right,
-}
-
 impl RunIndices {
     pub fn assert_invariants(&self, run_tree: &RunTree) {
         for (&replica_id, indices) in self.map.iter() {

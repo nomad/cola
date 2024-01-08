@@ -481,10 +481,10 @@ impl RunTree {
                 let delete_from = if deletion.start().is_zero() {
                     0
                 } else {
-                    deletion.start().offset - run.start()
+                    deletion.start().offset() - run.start()
                 };
 
-                let delete_up_to = deletion.end().offset - run.start();
+                let delete_up_to = deletion.end().offset() - run.start();
                 let delete_range = (delete_from..delete_up_to).into();
                 self.delete_leaf_range(start_idx, leaf_offset, delete_range);
                 ranges.push((delete_range + leaf_offset).into());
@@ -512,7 +512,7 @@ impl RunTree {
             let delete_from = if deletion.start().is_zero() {
                 0
             } else {
-                deletion.start().offset - start.start()
+                deletion.start().offset() - start.start()
             };
 
             let deleted_up_to = deletion.version_map().get(start.replica_id());
@@ -565,7 +565,7 @@ impl RunTree {
                         ranges.push(start_offset..visible_offset);
                     }
                 } else {
-                    let delete_up_to = deletion.end().offset - run.start();
+                    let delete_up_to = deletion.end().offset() - run.start();
 
                     self.delete_leaf_range(
                         end_idx,
@@ -680,8 +680,8 @@ impl RunTree {
         // If the insertion is anchored in the middle of the anchor run then
         // there can't be any other runs that are tied with it. In this case we
         // can just split the anchor run and insert the new run after it.
-        if insertion.anchor().offset < anchor.end() {
-            let insert_at = insertion.anchor().offset - anchor.start();
+        if insertion.anchor().offset() < anchor.end() {
+            let insert_at = insertion.anchor().offset() - anchor.start();
             return self.split_run_with_another(run, anchor_idx, insert_at);
         }
 
@@ -873,8 +873,8 @@ impl EditRun {
         debug_assert!(!anchor.is_zero());
 
         self.replica_id() == anchor.replica_id()
-            && self.text.start() < anchor.offset
-            && self.text.end() >= anchor.offset
+            && self.text.start() < anchor.offset()
+            && self.text.end() >= anchor.offset()
     }
 
     #[inline(always)]
@@ -1012,75 +1012,6 @@ impl EditRun {
     #[inline]
     fn visible_len(&self) -> Length {
         self.len() * (!self.is_deleted as Length)
-    }
-}
-
-/// TODO: docs
-#[derive(Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-pub struct Anchor {
-    /// TODO: docs
-    replica_id: ReplicaId,
-
-    /// The [`RunTs`] of the [`EditRun`] containing this [`Anchor`].
-    contained_in: RunTs,
-
-    /// TODO: docs
-    offset: Length,
-}
-
-impl core::fmt::Debug for Anchor {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if self == &Self::zero() {
-            write!(f, "zero")
-        } else {
-            write!(f, "{:x}.{}", self.replica_id, self.offset)
-        }
-    }
-}
-
-impl Anchor {
-    #[inline(always)]
-    pub(crate) fn character_ts(&self) -> Length {
-        self.offset
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_zero(&self) -> bool {
-        self.replica_id == 0
-    }
-
-    #[inline(always)]
-    pub(crate) fn new(
-        replica_id: ReplicaId,
-        offset: Length,
-        run_ts: RunTs,
-    ) -> Self {
-        Self { replica_id, offset, contained_in: run_ts }
-    }
-
-    #[inline(always)]
-    pub(crate) fn offset(&self) -> Length {
-        self.offset
-    }
-
-    #[inline(always)]
-    pub(crate) fn replica_id(&self) -> ReplicaId {
-        self.replica_id
-    }
-
-    #[inline(always)]
-    pub(crate) fn run_ts(&self) -> RunTs {
-        self.contained_in
-    }
-
-    /// A special value used to create an anchor at the start of the document.
-    #[inline]
-    pub const fn zero() -> Self {
-        Self { replica_id: 0, offset: 0, contained_in: 0 }
     }
 }
 

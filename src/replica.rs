@@ -468,7 +468,7 @@ impl Replica {
     /// somewhere in its Gtree.
     #[inline]
     fn has_anchor(&self, anchor: Anchor) -> bool {
-        self.version_map.get(anchor.replica_id()) >= anchor.character_ts()
+        self.version_map.get(anchor.replica_id()) >= anchor.offset()
     }
 
     /// Returns `true` if this `Replica` has already merged the given
