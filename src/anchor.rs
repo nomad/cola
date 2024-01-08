@@ -15,7 +15,7 @@ pub struct Anchor {
 
 impl Anchor {
     #[inline(always)]
-    pub(crate) fn _bias(&self) -> AnchorBias {
+    pub(crate) fn bias(&self) -> AnchorBias {
         self.bias
     }
 
@@ -27,6 +27,16 @@ impl Anchor {
     #[inline(always)]
     pub(crate) fn inner(&self) -> InnerAnchor {
         self.inner
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_end_of_document(&self) -> bool {
+        self.inner.is_zero() && self.bias == AnchorBias::Right
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_start_of_document(&self) -> bool {
+        self.inner.is_zero() && self.bias == AnchorBias::Left
     }
 
     #[inline(always)]

@@ -96,15 +96,17 @@ impl RunTree {
 
         let mut edit_run = self.gtree.leaf(leaf_idx);
 
+        // If the offset is at the end of a run and we're biased to the right
+        // then we need to anchor to the start of the next visible run.
         if leaf_offset + edit_run.len() == at_offset
             && with_bias == AnchorBias::Right
         {
+            leaf_offset += edit_run.len();
+
             let next_run = self
                 .gtree
                 .leaves::<false>(leaf_idx)
                 .find_map(|(_, run)| (!run.is_deleted).then_some(run));
-
-            leaf_offset += edit_run.len();
 
             edit_run = next_run.unwrap();
         }
@@ -765,16 +767,18 @@ impl RunTree {
 
     #[inline]
     pub fn resolve_anchor(&self, anchor: BiasedAnchor) -> Length {
-        if anchor.inner().is_zero() {
+        if anchor.is_start_of_document() {
             return 0;
+        } else if anchor.is_end_of_document() {
+            return self.len();
         }
 
-        let run_containing_anchor =
-            self.run_indices.idx_at_anchor(anchor.inner(), AnchorBias::Left);
+        let anchor_idx =
+            self.run_indices.idx_at_anchor(anchor.inner(), anchor.bias());
 
-        let anchor_offset = self.gtree.offset_of_leaf(run_containing_anchor);
+        let anchor_offset = self.gtree.offset_of_leaf(anchor_idx);
 
-        let run_containing_anchor = self.gtree.leaf(run_containing_anchor);
+        let run_containing_anchor = self.gtree.leaf(anchor_idx);
 
         let offset_in_anchor =
             anchor.inner().offset() - run_containing_anchor.start();
