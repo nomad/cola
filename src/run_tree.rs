@@ -64,7 +64,21 @@ impl RunTree {
     #[inline]
     pub fn create_anchor(&self, at_offset: Length) -> Anchor {
         if at_offset == 0 {
-            todo!();
+            if self.len() == 0 {
+                return Anchor::zero();
+            }
+
+            let first_run = self
+                .gtree
+                .leaves_from_first()
+                .find_map(|(_, run)| (!run.is_deleted).then_some(run))
+                .expect("there's at least one EditRun that's not deleted");
+
+            return Anchor::new(
+                first_run.replica_id(),
+                first_run.start(),
+                first_run.run_ts(),
+            );
         }
 
         let (leaf_idx, leaf_offset) = self.gtree.leaf_at_offset(at_offset);
@@ -726,7 +740,7 @@ impl RunTree {
     #[inline]
     pub fn resolve_anchor(&self, anchor: Anchor) -> Length {
         if anchor.is_zero() {
-            todo!();
+            return 0;
         }
 
         let run_containing_anchor =

@@ -122,7 +122,7 @@ pub struct Deletion {
     ///  of the deletion.
     version_map: VersionMap,
 
-    /// The deletion timestamp of this insertion.
+    /// The timestamp of this deletion.
     deletion_ts: DeletionTs,
 }
 
