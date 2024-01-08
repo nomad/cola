@@ -17,9 +17,6 @@ pub struct Insertion {
     /// The anchor point of the insertion.
     anchor: Anchor,
 
-    /// The run timestamp of the [`EditRun`] containing the anchor.
-    anchor_ts: RunTs,
-
     /// Contains the replica that made the insertion and the temporal range
     /// of the text that was inserted.
     text: Text,
@@ -35,11 +32,6 @@ impl Insertion {
     #[inline(always)]
     pub(crate) fn anchor(&self) -> Anchor {
         self.anchor
-    }
-
-    #[inline(always)]
-    pub(crate) fn anchor_ts(&self) -> RunTs {
-        self.anchor_ts
     }
 
     #[inline(always)]
@@ -75,17 +67,16 @@ impl Insertion {
     #[inline]
     pub(crate) fn new(
         anchor: Anchor,
-        anchor_ts: RunTs,
         text: Text,
         lamport_ts: LamportTs,
         run_ts: RunTs,
     ) -> Self {
-        Self { anchor, anchor_ts, text, lamport_ts, run_ts }
+        Self { anchor, text, lamport_ts, run_ts }
     }
 
     #[inline]
     pub(crate) fn no_op() -> Self {
-        Self::new(Anchor::zero(), 0, Text::new(0, 0..0), 0, 0)
+        Self::new(Anchor::zero(), Text::new(0, 0..0), 0, 0)
     }
 
     #[inline]
@@ -117,14 +108,8 @@ pub struct Deletion {
     /// The anchor point of the start of the deleted range.
     start: Anchor,
 
-    /// The run timestamp of the [`EditRun`] containing the start `Anchor`.
-    start_ts: RunTs,
-
     /// The anchor point of the end of the deleted range.
     end: Anchor,
-
-    /// The run timestamp of the [`EditRun`] containing the end `Anchor`.
-    end_ts: RunTs,
 
     /// The version map of the replica at the time of the deletion. This is
     /// used by a `Replica` merging this deletion to determine:
@@ -157,11 +142,6 @@ impl Deletion {
         self.end
     }
 
-    #[inline(always)]
-    pub(crate) fn end_ts(&self) -> RunTs {
-        self.end_ts
-    }
-
     #[inline]
     pub(crate) fn is_no_op(&self) -> bool {
         self.end.is_zero()
@@ -170,35 +150,21 @@ impl Deletion {
     #[inline]
     pub(crate) fn new(
         start: Anchor,
-        start_ts: RunTs,
         end: Anchor,
-        end_ts: RunTs,
         version_map: VersionMap,
         deletion_ts: DeletionTs,
     ) -> Self {
-        Deletion { start, start_ts, end, end_ts, version_map, deletion_ts }
+        Deletion { start, end, version_map, deletion_ts }
     }
 
     #[inline]
     pub(crate) fn no_op() -> Self {
-        Self::new(
-            Anchor::zero(),
-            0,
-            Anchor::zero(),
-            0,
-            VersionMap::new(0, 0),
-            0,
-        )
+        Self::new(Anchor::zero(), Anchor::zero(), VersionMap::new(0, 0), 0)
     }
 
     #[inline(always)]
     pub(crate) fn start(&self) -> Anchor {
         self.start
-    }
-
-    #[inline(always)]
-    pub(crate) fn start_ts(&self) -> RunTs {
-        self.start_ts
     }
 
     #[inline(always)]

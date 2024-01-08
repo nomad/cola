@@ -54,11 +54,10 @@ impl RunIndices {
     pub fn idx_at_anchor(
         &self,
         anchor: Anchor,
-        anchor_ts: RunTs,
         bias: AnchorBias,
     ) -> LeafIdx<EditRun> {
         self.map.get(&anchor.replica_id()).unwrap().idx_at_offset(
-            anchor_ts,
+            anchor.run_ts(),
             anchor.offset(),
             bias,
         )

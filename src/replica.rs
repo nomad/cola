@@ -380,16 +380,13 @@ impl Replica {
 
         let deleted_range = (start..end).into();
 
-        let (start, start_ts, end, end_ts) =
-            self.run_tree.delete(deleted_range);
+        let (start, end) = self.run_tree.delete(deleted_range);
 
         *self.deletion_map.this_mut() += 1;
 
         Deletion::new(
             start,
-            start_ts,
             end,
-            end_ts,
             self.version_map.clone(),
             self.deletion_map.this(),
         )
@@ -535,7 +532,7 @@ impl Replica {
 
         let text = Text::new(self.id, start..end);
 
-        let (anchor, anchor_ts) = self.run_tree.insert(
+        let anchor = self.run_tree.insert(
             at_offset,
             text.clone(),
             &mut self.run_clock,
@@ -544,7 +541,6 @@ impl Replica {
 
         Insertion::new(
             anchor,
-            anchor_ts,
             text,
             self.lamport_clock.highest(),
             self.run_clock.last(),

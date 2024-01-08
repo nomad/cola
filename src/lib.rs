@@ -267,4 +267,4 @@ pub type Length = usize;
 ///
 /// See [`ProtocolVersion`] for more infos.
 #[cfg(feature = "encode")]
-const PROTOCOL_VERSION: ProtocolVersion = 0;
+const PROTOCOL_VERSION: ProtocolVersion = 1;
