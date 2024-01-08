@@ -241,8 +241,7 @@ impl Replica {
         ) && (
             // Makes sure that we have already merged the insertion containing
             // the anchor of this insertion.
-            self.version_map.get(insertion.anchor().replica_id())
-                >= insertion.anchor().character_ts()
+            self.has_anchor(insertion.anchor())
         )
     }
 
@@ -466,6 +465,13 @@ impl Replica {
             deletion_map: self.deletion_map.fork(new_id, 0),
             backlog: self.backlog.clone(),
         }
+    }
+
+    /// Returns `true` if this `Replica` contains the given [`Anchor`]
+    /// somewhere in its Gtree.
+    #[inline]
+    fn has_anchor(&self, anchor: Anchor) -> bool {
+        self.version_map.get(anchor.replica_id()) >= anchor.character_ts()
     }
 
     /// Returns `true` if this `Replica` has already merged the given
@@ -806,7 +812,11 @@ impl Replica {
     /// TODO: doc
     #[inline]
     pub fn resolve_anchor(&self, anchor: Anchor) -> Option<Length> {
-        self.run_tree.resolve_anchor(anchor)
+        if self.has_anchor(anchor) {
+            Some(self.run_tree.resolve_anchor(anchor))
+        } else {
+            None
+        }
     }
 }
 
@@ -877,7 +887,7 @@ impl LamportClock {
 
 pub type RunTs = u64;
 
-/// A local clock used increased every time a new insertion run is started.
+/// A local clock that's increased every time a new insertion run is started.
 #[derive(Copy, Clone)]
 pub struct RunClock(RunTs);
 

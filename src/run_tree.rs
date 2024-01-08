@@ -62,8 +62,20 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn create_anchor(&self, _at_offset: Length) -> Anchor {
-        todo!();
+    pub fn create_anchor(&self, at_offset: Length) -> Anchor {
+        if at_offset == 0 {
+            todo!();
+        }
+
+        let (leaf_idx, leaf_offset) = self.gtree.leaf_at_offset(at_offset);
+
+        let edit_run = self.gtree.leaf(leaf_idx);
+
+        let inserted_by = edit_run.replica_id();
+
+        let offset = edit_run.start() + at_offset - leaf_offset;
+
+        Anchor::new(inserted_by, offset)
     }
 
     #[inline]
@@ -720,8 +732,26 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn resolve_anchor(&self, _anchor: Anchor) -> Option<Length> {
-        todo!();
+    pub fn resolve_anchor(&self, anchor: Anchor) -> Length {
+        if anchor.is_zero() {
+            todo!();
+        }
+
+        let anchor_ts: RunTs = todo!();
+
+        let run_containing_anchor = self.run_indices.idx_at_anchor(
+            anchor,
+            anchor_ts,
+            AnchorBias::Left,
+        );
+
+        let anchor_offset = self.gtree.offset_of_leaf(run_containing_anchor);
+
+        let run_containing_anchor = self.gtree.leaf(run_containing_anchor);
+
+        let offset_in_anchor = anchor.offset() - run_containing_anchor.start();
+
+        anchor_offset + offset_in_anchor
     }
 
     #[inline]
@@ -944,6 +974,7 @@ impl EditRun {
         Self { text, run_ts, lamport_ts, is_deleted: false }
     }
 
+    /// Returns the [`ReplicaId`] of the replica that inserted this run.
     #[inline(always)]
     pub fn replica_id(&self) -> ReplicaId {
         self.text.inserted_by()
