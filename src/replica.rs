@@ -241,9 +241,115 @@ impl Replica {
         ) && (
             // Makes sure that we have already merged the insertion containing
             // the anchor of this insertion.
-            self.version_map.get(insertion.anchor().replica_id())
-                >= insertion.anchor().character_ts()
+            self.has_anchor(insertion.anchor())
         )
+    }
+
+    /// Creates a new [`Anchor`] at the given offset, with the given bias.
+    ///
+    /// You can think of an `Anchor` as a sticky line cursor that you can
+    /// attach to a specific position in a text document, and that
+    /// automatically moves when the text around it changes to make sure that
+    /// it always refers to the same position.
+    ///
+    /// An offset alone is not enough to create an `Anchor` because it doesn't
+    /// uniquely identify a position in the document. For example, the offset
+    /// `1` inside `"ab"` could either refer to the right side of `'a'` or to
+    /// the left side of `'b'`. If we insert a `'c'` between the two
+    /// characters, how should the `Anchor` move?
+    ///
+    /// To resolve this ambiguity, this method requires you to specify an
+    /// [`AnchorBias`]. This tells the `Replica` whether the `Anchor` should
+    /// stick to the left or to the right side of the position at the given
+    /// offset.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the offset is out of bounds (i.e. greater than the current
+    /// length of your buffer).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use cola::{Replica, AnchorBias};
+    /// // The buffer is "ab".
+    /// let mut replica = Replica::new(1, 2);
+    ///
+    /// // We create two anchors at the same offset but with different biases.
+    /// let right_of_a = replica.create_anchor(1, AnchorBias::Left);
+    /// let left_of_b = replica.create_anchor(1, AnchorBias::Right);
+    ///
+    /// // Now we insert a 'c' between the two characters.
+    /// let _ = replica.inserted(1, 1);
+    ///
+    /// // When we resolve the anchors we see that the first one has stayed at
+    /// // the same offset, while the second one has moved to the right.
+    /// assert_eq!(replica.resolve_anchor(right_of_a).unwrap(), 1);
+    /// assert_eq!(replica.resolve_anchor(left_of_b).unwrap(), 2);
+    /// ```
+    ///
+    /// `Anchor`s can still be resolved even if the position they refer to has
+    /// been deleted. In this case they will resolve to the offset of the
+    /// closest position that's still visible.
+    ///
+    /// ```
+    /// # use cola::{Replica, AnchorBias};
+    /// // The buffer is "Hello world".
+    /// let mut replica = Replica::new(1, 11);
+    ///
+    /// let right_of_r = replica.create_anchor(9, AnchorBias::Left);
+    ///
+    /// // " worl" is deleted, the buffer is now "Hellod".
+    /// let _ = replica.deleted(5..10);
+    ///
+    /// // The anchor can still be resolved, and it now points to `5`, i.e.
+    /// // between the 'o' and the 'd'.
+    /// assert_eq!(replica.resolve_anchor(right_of_r).unwrap(), 5);
+    /// ```
+    ///
+    /// There are two special cases to be aware of:
+    ///
+    /// - when the offset is zero and the bias is [`AnchorBias::Left`], the
+    /// returned `Anchor` will always resolve to zero;
+    ///
+    /// - when the offset is equal to the length of the buffer and the bias is
+    /// [`AnchorBias::Right`], the returned `Anchor` will always resolve to the
+    /// end of the buffer.
+    ///
+    /// ```
+    /// # use cola::{Replica, AnchorBias};
+    /// let mut replica = Replica::new(1, 5);
+    ///
+    /// // This anchor is to the start of the document, so it will always
+    /// // resolve to zero.
+    /// let start_of_document = replica.create_anchor(0, AnchorBias::Left);
+    ///
+    /// let _ = replica.inserted(0, 5);
+    /// let _ = replica.inserted(0, 5);
+    ///
+    /// assert_eq!(replica.resolve_anchor(start_of_document).unwrap(), 0);
+    ///
+    /// // This anchor is to the end of the document, so it will always
+    /// // resolve to the current length of the buffer.
+    /// let end_of_document = replica.create_anchor(15, AnchorBias::Right);
+    ///
+    /// let _ = replica.inserted(15, 5);
+    /// let _ = replica.inserted(20, 5);
+    ///
+    /// assert_eq!(replica.resolve_anchor(end_of_document).unwrap(), 25);
+    /// ```
+    #[track_caller]
+    #[inline]
+    pub fn create_anchor(
+        &self,
+        at_offset: Length,
+        with_bias: AnchorBias,
+    ) -> Anchor {
+        if at_offset > self.len() {
+            panic::offset_out_of_bounds(at_offset, self.len());
+        }
+
+        self.run_tree.create_anchor(at_offset, with_bias)
     }
 
     #[doc(hidden)]
@@ -370,16 +476,13 @@ impl Replica {
 
         let deleted_range = (start..end).into();
 
-        let (start, start_ts, end, end_ts) =
-            self.run_tree.delete(deleted_range);
+        let (start, end) = self.run_tree.delete(deleted_range);
 
         *self.deletion_map.this_mut() += 1;
 
         Deletion::new(
             start,
-            start_ts,
             end,
-            end_ts,
             self.version_map.clone(),
             self.deletion_map.this(),
         )
@@ -457,6 +560,13 @@ impl Replica {
         }
     }
 
+    /// Returns `true` if this `Replica` contains the given [`Anchor`]
+    /// somewhere in its Gtree.
+    #[inline]
+    fn has_anchor(&self, anchor: InnerAnchor) -> bool {
+        self.version_map.get(anchor.replica_id()) >= anchor.offset()
+    }
+
     /// Returns `true` if this `Replica` has already merged the given
     /// `Deletion`.
     #[inline]
@@ -518,7 +628,7 @@ impl Replica {
 
         let text = Text::new(self.id, start..end);
 
-        let (anchor, anchor_ts) = self.run_tree.insert(
+        let anchor = self.run_tree.insert(
             at_offset,
             text.clone(),
             &mut self.run_clock,
@@ -527,7 +637,6 @@ impl Replica {
 
         Insertion::new(
             anchor,
-            anchor_ts,
             text,
             self.lamport_clock.highest(),
             self.run_clock.last(),
@@ -791,6 +900,46 @@ impl Replica {
     pub fn num_runs(&self) -> usize {
         self.run_tree.count_empty_leaves().1
     }
+
+    /// Resolves the given [`Anchor`] to an offset in the document.
+    ///
+    /// This method returns `None` if the `Replica` hasn't yet integrated the
+    /// insertion containing the `Anchor`. In all other cases it returns
+    /// `Some(offset)`, even if the position the `Anchor` refers to has been
+    /// deleted.
+    ///
+    /// For more information, see the documentation of
+    /// [`Replica::create_anchor()`] and [`Anchor`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use cola::{Replica, AnchorBias};
+    /// let mut peer_1 = Replica::new(1, 10);
+    /// let mut peer_2 = peer_1.fork(2);
+    ///
+    /// let insertion_at_2 = peer_2.inserted(10, 10);
+    ///
+    /// let anchor = peer_2.create_anchor(15, AnchorBias::Left);
+    ///
+    /// // The anchor refers to the insertion made at peer 2, which peer 1
+    /// // doesn't yet have.
+    /// assert_eq!(peer_1.resolve_anchor(anchor), None);
+    ///
+    /// peer_1.integrate_insertion(&insertion_at_2);
+    ///
+    /// // Now that peer 1 has integrated peer 2's insertion, the anchor can be
+    /// // resolved.
+    /// assert_eq!(peer_1.resolve_anchor(anchor), Some(15));
+    /// ```
+    #[inline]
+    pub fn resolve_anchor(&self, anchor: Anchor) -> Option<Length> {
+        if self.has_anchor(anchor.inner()) {
+            Some(self.run_tree.resolve_anchor(anchor))
+        } else {
+            None
+        }
+    }
 }
 
 impl core::fmt::Debug for Replica {
@@ -860,7 +1009,7 @@ impl LamportClock {
 
 pub type RunTs = u64;
 
-/// A local clock used increased every time a new insertion run is started.
+/// A local clock that's increased every time a new insertion run is started.
 #[derive(Copy, Clone)]
 pub struct RunClock(RunTs);
 

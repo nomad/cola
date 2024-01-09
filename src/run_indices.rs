@@ -1,5 +1,6 @@
 use core::ops::{Index, IndexMut};
 
+use crate::anchor::InnerAnchor as Anchor;
 use crate::*;
 
 /// A data structure used when merging remote edits to efficiently map
@@ -14,13 +15,6 @@ impl core::fmt::Debug for RunIndices {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         self.map.fmt(f)
     }
-}
-
-/// TODO: docs
-#[derive(PartialEq, Eq)]
-pub(crate) enum AnchorBias {
-    Left,
-    Right,
 }
 
 impl RunIndices {
@@ -54,11 +48,10 @@ impl RunIndices {
     pub fn idx_at_anchor(
         &self,
         anchor: Anchor,
-        anchor_ts: RunTs,
         bias: AnchorBias,
     ) -> LeafIdx<EditRun> {
         self.map.get(&anchor.replica_id()).unwrap().idx_at_offset(
-            anchor_ts,
+            anchor.run_ts(),
             anchor.offset(),
             bias,
         )

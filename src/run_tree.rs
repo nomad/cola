@@ -1,6 +1,7 @@
 use core::cmp::Ordering;
 use core::ops;
 
+use crate::anchor::{Anchor as BiasedAnchor, InnerAnchor as Anchor};
 use crate::gtree::LeafIdx;
 use crate::*;
 
@@ -62,6 +63,70 @@ impl RunTree {
     }
 
     #[inline]
+    pub fn create_anchor(
+        &self,
+        at_offset: Length,
+        with_bias: AnchorBias,
+    ) -> BiasedAnchor {
+        if at_offset == self.len() && with_bias == AnchorBias::Right {
+            return BiasedAnchor::end_of_document();
+        }
+
+        if at_offset == 0 {
+            if with_bias == AnchorBias::Left {
+                return BiasedAnchor::start_of_document();
+            }
+
+            let first_run = self
+                .gtree
+                .leaves_from_first()
+                .find_map(|(_, run)| (!run.is_deleted).then_some(run))
+                .expect("there's at least one EditRun that's not deleted");
+
+            let anchor = Anchor::new(
+                first_run.replica_id(),
+                first_run.start(),
+                first_run.run_ts(),
+            );
+
+            return BiasedAnchor::new(anchor, AnchorBias::Right);
+        }
+
+        let (leaf_idx, mut leaf_offset) = self.gtree.leaf_at_offset(at_offset);
+
+        let mut edit_run = self.gtree.leaf(leaf_idx);
+
+        // If the offset is at the end of a run and we're biased to the right
+        // then we need to anchor to the start of the next visible run.
+        if with_bias == AnchorBias::Right
+            && leaf_offset + edit_run.len() == at_offset
+        {
+            leaf_offset += edit_run.len();
+
+            let next_run = self
+                .gtree
+                .leaves::<false>(leaf_idx)
+                .find_map(|(_, run)| (!run.is_deleted).then_some(run))
+                .expect(
+                    "we've already handled the case where the offset is at \
+                     the end of the document and we're biased to the right",
+                );
+
+            edit_run = next_run;
+        }
+
+        let inserted_by = edit_run.replica_id();
+
+        let offset = edit_run.start() + at_offset - leaf_offset;
+
+        let contained_in = edit_run.run_ts();
+
+        let anchor = Anchor::new(inserted_by, offset, contained_in);
+
+        BiasedAnchor::new(anchor, with_bias)
+    }
+
+    #[inline]
     pub fn debug_as_self(&self) -> DebugAsSelf<'_> {
         self.gtree.debug_as_self()
     }
@@ -72,10 +137,7 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn delete(
-        &mut self,
-        range: Range<Length>,
-    ) -> (Anchor, RunTs, Anchor, RunTs) {
+    pub fn delete(&mut self, range: Range<Length>) -> (Anchor, Anchor) {
         let mut id_start = 0;
         let mut run_ts_start = 0;
         let mut offset_start = 0;
@@ -135,10 +197,8 @@ impl RunTree {
             }
 
             return (
-                Anchor::new(id_start, offset_start),
-                run_ts_start,
-                Anchor::new(id_end, offset_end),
-                run_ts_end,
+                Anchor::new(id_start, offset_start, run_ts_start),
+                Anchor::new(id_end, offset_end, run_ts_end),
             );
         }
 
@@ -186,13 +246,19 @@ impl RunTree {
             _ => {},
         };
 
-        let anchor_start =
-            Anchor::new(id_range, deleted_range_offset + deleted_range.start);
+        let anchor_start = Anchor::new(
+            id_range,
+            deleted_range_offset + deleted_range.start,
+            run_ts_range,
+        );
 
-        let anchor_end =
-            Anchor::new(id_range, deleted_range_offset + deleted_range.end);
+        let anchor_end = Anchor::new(
+            id_range,
+            deleted_range_offset + deleted_range.end,
+            run_ts_range,
+        );
 
-        (anchor_start, run_ts_range, anchor_end, run_ts_range)
+        (anchor_start, anchor_end)
     }
 
     #[inline]
@@ -207,12 +273,10 @@ impl RunTree {
         text: Text,
         run_clock: &mut RunClock,
         lamport_clock: &mut LamportClock,
-    ) -> (Anchor, RunTs) {
+    ) -> Anchor {
         debug_assert!(!text.range.is_empty());
 
         let replica_id = text.inserted_by();
-
-        let mut anchor_ts = 0;
 
         let text_len = text.len();
 
@@ -226,7 +290,7 @@ impl RunTree {
                 .get_mut(replica_id)
                 .append(text_len, inserted_idx);
 
-            return (Anchor::zero(), anchor_ts);
+            return Anchor::zero();
         }
 
         let mut split_id = 0;
@@ -241,8 +305,8 @@ impl RunTree {
             split_id = run.replica_id();
             split_insertion = run.run_ts();
             split_at_offset = run.start() + offset;
-            anchor_ts = run.run_ts();
-            anchor = Anchor::new(run.replica_id(), split_at_offset);
+            anchor =
+                Anchor::new(run.replica_id(), split_at_offset, run.run_ts());
 
             if run.len() == offset
                 && run.end() == text.start()
@@ -279,7 +343,7 @@ impl RunTree {
             self.run_indices.get_mut(replica_id).extend_last(text_len)
         }
 
-        (anchor, anchor_ts)
+        anchor
     }
 
     #[inline]
@@ -433,11 +497,7 @@ impl RunTree {
                 })
                 .unwrap()
         } else {
-            self.run_indices.idx_at_anchor(
-                deletion.start(),
-                deletion.start_ts(),
-                AnchorBias::Right,
-            )
+            self.run_indices.idx_at_anchor(deletion.start(), AnchorBias::Right)
         };
 
         let mut leaf_offset = self.gtree.offset_of_leaf(start_idx);
@@ -453,10 +513,10 @@ impl RunTree {
                 let delete_from = if deletion.start().is_zero() {
                     0
                 } else {
-                    deletion.start().offset - run.start()
+                    deletion.start().offset() - run.start()
                 };
 
-                let delete_up_to = deletion.end().offset - run.start();
+                let delete_up_to = deletion.end().offset() - run.start();
                 let delete_range = (delete_from..delete_up_to).into();
                 self.delete_leaf_range(start_idx, leaf_offset, delete_range);
                 ranges.push((delete_range + leaf_offset).into());
@@ -465,11 +525,8 @@ impl RunTree {
             return ranges;
         }
 
-        let end_idx = self.run_indices.idx_at_anchor(
-            deletion.end(),
-            deletion.end_ts(),
-            AnchorBias::Left,
-        );
+        let end_idx =
+            self.run_indices.idx_at_anchor(deletion.end(), AnchorBias::Left);
 
         /// TODO: docs
         enum DeletionState {
@@ -487,7 +544,7 @@ impl RunTree {
             let delete_from = if deletion.start().is_zero() {
                 0
             } else {
-                deletion.start().offset - start.start()
+                deletion.start().offset() - start.start()
             };
 
             let deleted_up_to = deletion.version_map().get(start.replica_id());
@@ -540,7 +597,7 @@ impl RunTree {
                         ranges.push(start_offset..visible_offset);
                     }
                 } else {
-                    let delete_up_to = deletion.end().offset - run.start();
+                    let delete_up_to = deletion.end().offset() - run.start();
 
                     self.delete_leaf_range(
                         end_idx,
@@ -646,19 +703,17 @@ impl RunTree {
             return self.insert_run_at_zero(run);
         }
 
-        let anchor_idx = self.run_indices.idx_at_anchor(
-            insertion.anchor(),
-            insertion.anchor_ts(),
-            AnchorBias::Left,
-        );
+        let anchor_idx = self
+            .run_indices
+            .idx_at_anchor(insertion.anchor(), AnchorBias::Left);
 
         let anchor = self.gtree.leaf(anchor_idx);
 
         // If the insertion is anchored in the middle of the anchor run then
         // there can't be any other runs that are tied with it. In this case we
         // can just split the anchor run and insert the new run after it.
-        if insertion.anchor().offset < anchor.end() {
-            let insert_at = insertion.anchor().offset - anchor.start();
+        if insertion.anchor().offset() < anchor.end() {
+            let insert_at = insertion.anchor().offset() - anchor.start();
             return self.split_run_with_another(run, anchor_idx, insert_at);
         }
 
@@ -712,6 +767,30 @@ impl RunTree {
         let mut run_indices = RunIndices::new();
         run_indices.get_mut(id).append(len, idx);
         Self { gtree, run_indices }
+    }
+
+    #[inline]
+    pub fn resolve_anchor(&self, anchor: BiasedAnchor) -> Length {
+        if anchor.is_start_of_document() {
+            return 0;
+        } else if anchor.is_end_of_document() {
+            return self.len();
+        }
+
+        let anchor_idx =
+            self.run_indices.idx_at_anchor(anchor.inner(), anchor.bias());
+
+        let anchor_offset = self.gtree.offset_of_leaf(anchor_idx);
+
+        let run_containing_anchor = self.gtree.leaf(anchor_idx);
+
+        let offset_in_anchor = if run_containing_anchor.is_deleted {
+            0
+        } else {
+            anchor.inner().offset() - run_containing_anchor.start()
+        };
+
+        anchor_offset + offset_in_anchor
     }
 
     #[inline]
@@ -832,8 +911,8 @@ impl EditRun {
         debug_assert!(!anchor.is_zero());
 
         self.replica_id() == anchor.replica_id()
-            && self.text.start() < anchor.offset
-            && self.text.end() >= anchor.offset
+            && self.text.start() < anchor.offset()
+            && self.text.end() >= anchor.offset()
     }
 
     #[inline(always)]
@@ -934,6 +1013,7 @@ impl EditRun {
         Self { text, run_ts, lamport_ts, is_deleted: false }
     }
 
+    /// Returns the [`ReplicaId`] of the replica that inserted this run.
     #[inline(always)]
     pub fn replica_id(&self) -> ReplicaId {
         self.text.inserted_by()
@@ -970,63 +1050,6 @@ impl EditRun {
     #[inline]
     fn visible_len(&self) -> Length {
         self.len() * (!self.is_deleted as Length)
-    }
-}
-
-/// TODO: docs
-#[derive(Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-pub struct Anchor {
-    /// TODO: docs
-    replica_id: ReplicaId,
-
-    /// TODO: docs
-    offset: Length,
-}
-
-impl core::fmt::Debug for Anchor {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if self == &Self::zero() {
-            write!(f, "zero")
-        } else {
-            write!(f, "{:x}.{}", self.replica_id, self.offset)
-        }
-    }
-}
-
-impl Anchor {
-    #[inline(always)]
-    pub fn character_ts(&self) -> Length {
-        self.offset
-    }
-
-    #[inline(always)]
-    pub fn is_zero(&self) -> bool {
-        self.replica_id == 0
-    }
-
-    #[inline(always)]
-    pub fn new(replica_id: ReplicaId, offset: Length) -> Self {
-        Self { replica_id, offset }
-    }
-
-    #[inline(always)]
-    pub fn offset(&self) -> Length {
-        self.offset
-    }
-
-    /// A special value used to create an anchor at the start of the document.
-    #[inline]
-    pub const fn zero() -> Self {
-        Self { replica_id: 0, offset: 0 }
-    }
-
-    #[inline(always)]
-    pub fn replica_id(&self) -> ReplicaId {
-        self.replica_id
     }
 }
 

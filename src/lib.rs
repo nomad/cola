@@ -126,6 +126,7 @@
 
 extern crate alloc;
 
+mod anchor;
 mod backlog;
 mod crdt_edit;
 mod gtree;
@@ -137,6 +138,8 @@ mod text_edit;
 mod utils;
 mod version_map;
 
+use anchor::*;
+pub use anchor::{Anchor, AnchorBias};
 use backlog::Backlog;
 pub use backlog::{BackloggedDeletions, BackloggedInsertions};
 pub use crdt_edit::{Deletion, Insertion};
@@ -145,7 +148,7 @@ pub use replica::Replica;
 use replica::*;
 pub use replica_id::ReplicaId;
 use replica_id::{ReplicaIdMap, ReplicaIdMapValuesMut};
-use run_indices::{AnchorBias, RunIndices};
+use run_indices::RunIndices;
 use run_tree::*;
 pub use text_edit::Text;
 use utils::*;
@@ -267,4 +270,4 @@ pub type Length = usize;
 ///
 /// See [`ProtocolVersion`] for more infos.
 #[cfg(feature = "encode")]
-const PROTOCOL_VERSION: ProtocolVersion = 0;
+const PROTOCOL_VERSION: ProtocolVersion = 1;
