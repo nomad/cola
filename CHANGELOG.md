@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - Jan 9 2024
+
 ### Added
 
 - a new `Replica::create_anchor()` method to create an `Anchor` from an offset
@@ -35,6 +37,7 @@
 - fixed a bug that would cause `Replica::decode()` to fail if it was encoded
   on a machine with a different pointer size (#1);
 
-[Unreleased]: https://github.com/nomad/cola/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nomad/cola/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/nomad/cola/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/nomad/cola/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nomad/cola/compare/v0.1.0...v0.2.0

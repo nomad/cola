@@ -1,6 +1,6 @@
 [package]
 name = "cola"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 authors = ["Riccardo Mazzarini <me@noib3.dev>"]
 description = "A text CRDT for real-time collaborative editing"
