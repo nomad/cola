@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- a new `Replica::create_anchor()` method to create an `Anchor` from an offset
+  and an `AnchorBias`;
+
+- a new `Replica::resolve_anchor()` method to resolve an `Anchor` into an
+  offset;
+
 ## [0.2.1] - Jan 2 2024
 
 ### Added
