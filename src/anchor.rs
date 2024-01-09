@@ -1,7 +1,7 @@
 use crate::*;
 
 /// TODO: docs
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
@@ -115,7 +115,7 @@ impl InnerAnchor {
 }
 
 /// TODO: docs
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
