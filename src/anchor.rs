@@ -1,6 +1,18 @@
 use crate::*;
 
-/// TODO: docs
+/// A stable reference to a position in a [`Replica`].
+///
+/// After its creation, an `Anchor` can be given to a `Replica` to
+/// retrieve the current offset of the position it refers to, taking into
+/// account all the edits that have been applied to the `Replica` in the
+/// meantime.
+///
+/// This property makes `Anchor`s useful to implement things like cursors and
+/// selections in collaborative editing environments.
+//
+/// For more information, see the documentation of
+/// [`Replica::create_anchor()`][crate::Replica::create_anchor] and
+/// [`Replica::resolve_anchor()`][crate::Replica::resolve_anchor].
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
@@ -114,16 +126,21 @@ impl InnerAnchor {
     }
 }
 
-/// TODO: docs
+/// A bias to use when creating an [`Anchor`].
+///
+/// This is used in the
+/// [`Replica::create_anchor()`][crate::Replica::create_anchor] method to
+/// create a new [`Anchor`]. See the documentation of that method for more
+/// information.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(
     any(feature = "encode", feature = "serde"),
     derive(serde::Serialize, serde::Deserialize)
 )]
 pub enum AnchorBias {
-    /// TODO: docs
+    /// The anchor should attach to the left.
     Left,
 
-    /// TODO: docs
+    /// The anchor should attach to the right.
     Right,
 }
