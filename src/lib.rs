@@ -138,8 +138,8 @@ mod text_edit;
 mod utils;
 mod version_map;
 
-pub use anchor::Anchor;
 use anchor::*;
+pub use anchor::{Anchor, AnchorBias};
 use backlog::Backlog;
 pub use backlog::{BackloggedDeletions, BackloggedInsertions};
 pub use crdt_edit::{Deletion, Insertion};

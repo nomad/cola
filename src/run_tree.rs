@@ -98,17 +98,21 @@ impl RunTree {
 
         // If the offset is at the end of a run and we're biased to the right
         // then we need to anchor to the start of the next visible run.
-        if leaf_offset + edit_run.len() == at_offset
-            && with_bias == AnchorBias::Right
+        if with_bias == AnchorBias::Right
+            && leaf_offset + edit_run.len() == at_offset
         {
             leaf_offset += edit_run.len();
 
             let next_run = self
                 .gtree
                 .leaves::<false>(leaf_idx)
-                .find_map(|(_, run)| (!run.is_deleted).then_some(run));
+                .find_map(|(_, run)| (!run.is_deleted).then_some(run))
+                .expect(
+                    "we've already handled the case where the offset is at \
+                     the end of the document and we're biased to the right",
+                );
 
-            edit_run = next_run.unwrap();
+            edit_run = next_run;
         }
 
         let inserted_by = edit_run.replica_id();
@@ -780,8 +784,11 @@ impl RunTree {
 
         let run_containing_anchor = self.gtree.leaf(anchor_idx);
 
-        let offset_in_anchor =
-            anchor.inner().offset() - run_containing_anchor.start();
+        let offset_in_anchor = if run_containing_anchor.is_deleted {
+            0
+        } else {
+            anchor.inner().offset() - run_containing_anchor.start()
+        };
 
         anchor_offset + offset_in_anchor
     }
