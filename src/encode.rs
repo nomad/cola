@@ -88,7 +88,16 @@ macro_rules! impl_int_encode {
         impl Encode for Int<$ty> {
             #[inline]
             fn encode(&self, buf: &mut Vec<u8>) {
-                let array = self.0.to_le_bytes();
+                let int = self.0;
+
+                // We can encode the entire integer with a single byte if it
+                // falls within this range.
+                if int == 0 || (int > 8 && int <= u8::MAX as $ty) {
+                    buf.push(int as u8);
+                    return;
+                }
+
+                let array = int.to_le_bytes();
 
                 let num_trailing_zeros = array
                     .iter()
@@ -120,6 +129,11 @@ macro_rules! impl_int_decode {
             fn decode(buf: &[u8]) -> Result<($ty, &[u8]), Self::Error> {
                 let (&len, buf) =
                     buf.split_first().ok_or(IntDecodeError::EmptyBuffer)?;
+
+                if len == 0 || len > 8 {
+                    let int = len as $ty;
+                    return Ok((int, buf));
+                }
 
                 if len as usize > buf.len() {
                     return Err(IntDecodeError::LengthLessThanPrefix {
