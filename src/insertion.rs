@@ -133,17 +133,48 @@ mod encode {
         }
     }
 
+    pub(crate) enum InsertionDecodeError {
+        Int(IntDecodeError),
+        Run(InsertionRunDecodeError),
+    }
+
+    impl From<IntDecodeError> for InsertionDecodeError {
+        #[inline]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Int(err)
+        }
+    }
+
+    impl From<InsertionRunDecodeError> for InsertionDecodeError {
+        #[inline]
+        fn from(err: InsertionRunDecodeError) -> Self {
+            Self::Run(err)
+        }
+    }
+
+    impl core::fmt::Display for InsertionDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            let err: &dyn core::fmt::Display = match self {
+                Self::Int(err) => err,
+                Self::Run(err) => err,
+            };
+
+            write!(f, "InsertionRun couldn't be decoded: {err}")
+        }
+    }
+
     impl Decode for Insertion {
         type Value = Self;
 
-        type Error = IntDecodeError;
+        type Error = InsertionDecodeError;
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
             let (text, buf) = Text::decode(buf)?;
             let (run_ts, buf) = Int::<RunTs>::decode(buf)?;
             let (lamport_ts, buf) = Int::<LamportTs>::decode(buf)?;
-            let (run, buf) = InsertionRun::decode(buf).unwrap();
+            let (run, buf) = InsertionRun::decode(buf)?;
             let (anchor, buf) = Self::decode_anchor(run, &text, run_ts, buf)?;
             let insertion = Self::new(anchor, text, run_ts, lamport_ts);
             Ok((insertion, buf))
@@ -182,19 +213,48 @@ mod encode {
         }
     }
 
+    pub(crate) enum InsertionRunDecodeError {
+        EmptyBuffer,
+        InvalidByte(u8),
+    }
+
+    impl core::fmt::Display for InsertionRunDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            match self {
+                Self::EmptyBuffer => f.write_str(
+                    "InsertionRun couldn't be decoded because the buffer is \
+                     empty",
+                ),
+                Self::InvalidByte(byte) => {
+                    write!(
+                        f,
+                        "InsertionRun cannot be decoded from byte {}, it \
+                         must be 0 or 1",
+                        byte,
+                    )
+                },
+            }
+        }
+    }
+
     impl Decode for InsertionRun {
         type Value = Self;
 
-        type Error = core::convert::Infallible;
+        type Error = InsertionRunDecodeError;
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let Some((&first_byte, rest)) = buf.split_first() else { todo!() };
+            let (&first_byte, rest) = buf
+                .split_first()
+                .ok_or(InsertionRunDecodeError::EmptyBuffer)?;
 
             let this = match first_byte {
                 0 => Self::BeginsNew,
                 1 => Self::ContinuesExisting,
-                _other => todo!(),
+                other => {
+                    return Err(InsertionRunDecodeError::InvalidByte(other))
+                },
             };
 
             Ok((this, rest))
