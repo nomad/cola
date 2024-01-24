@@ -148,7 +148,7 @@ impl InnerAnchor {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::{Decode, Encode, Int};
+    use crate::encode::{Decode, Encode, Int, IntDecodeError};
 
     impl Encode for InnerAnchor {
         #[inline]
@@ -162,7 +162,7 @@ mod encode {
     impl Decode for InnerAnchor {
         type Value = Self;
 
-        type Error = core::convert::Infallible;
+        type Error = IntDecodeError;
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {

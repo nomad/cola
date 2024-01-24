@@ -91,7 +91,7 @@ impl Insertion {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::{Decode, Encode, Int};
+    use crate::encode::{Decode, Encode, Int, IntDecodeError};
 
     impl Insertion {
         #[inline]
@@ -136,14 +136,14 @@ mod encode {
     impl Decode for Insertion {
         type Value = Self;
 
-        type Error = core::convert::Infallible;
+        type Error = IntDecodeError;
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
             let (text, buf) = Text::decode(buf)?;
             let (run_ts, buf) = Int::<RunTs>::decode(buf)?;
             let (lamport_ts, buf) = Int::<LamportTs>::decode(buf)?;
-            let (run, buf) = InsertionRun::decode(buf)?;
+            let (run, buf) = InsertionRun::decode(buf).unwrap();
             let (anchor, buf) = Self::decode_anchor(run, &text, run_ts, buf)?;
             let insertion = Self::new(anchor, text, run_ts, lamport_ts);
             Ok((insertion, buf))

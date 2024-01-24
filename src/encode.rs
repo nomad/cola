@@ -1,4 +1,4 @@
-use std::error::Error as StdError;
+use core::fmt::Display;
 
 /// TODO: docs
 pub(crate) trait Encode {
@@ -10,7 +10,7 @@ pub(crate) trait Encode {
 pub(crate) trait Decode {
     type Value: Sized;
 
-    type Error: StdError;
+    type Error: Display;
 
     /// TODO: docs
     fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error>;
@@ -23,6 +23,35 @@ impl<I> Int<I> {
     #[inline]
     pub(crate) fn new(integer: I) -> Self {
         Self(integer)
+    }
+}
+
+/// An error that can occur when decoding an [`Int`].
+pub(crate) enum IntDecodeError {
+    /// The buffer passed to `Int::decode` is empty. This is always an error,
+    /// even if the integer being decoded is zero.
+    EmptyBuffer,
+
+    /// The actual byte length of the buffer is less than what was specified
+    /// in the prefix.
+    LengthLessThanPrefix { prefix: u8, actual: u8 },
+}
+
+impl Display for IntDecodeError {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EmptyBuffer => f.write_str(
+                "Int couldn't be decoded because the buffer is empty",
+            ),
+            Self::LengthLessThanPrefix { prefix, actual } => {
+                write!(
+                    f,
+                    "Int couldn't be decoded because the buffer's length is \
+                     {actual}, but the prefix specified a length of {prefix}",
+                )
+            },
+        }
     }
 }
 
@@ -46,7 +75,7 @@ impl Encode for Int<usize> {
 impl Decode for Int<usize> {
     type Value = usize;
 
-    type Error = core::convert::Infallible;
+    type Error = IntDecodeError;
 
     #[inline]
     fn decode(buf: &[u8]) -> Result<(usize, &[u8]), Self::Error> {
@@ -85,14 +114,18 @@ macro_rules! impl_int_decode {
         impl Decode for Int<$ty> {
             type Value = $ty;
 
-            type Error = core::convert::Infallible;
+            type Error = $crate::encode::IntDecodeError;
 
             #[inline]
             fn decode(buf: &[u8]) -> Result<($ty, &[u8]), Self::Error> {
-                let Some((&len, buf)) = buf.split_first() else { todo!() };
+                let (&len, buf) =
+                    buf.split_first().ok_or(IntDecodeError::EmptyBuffer)?;
 
                 if len as usize > buf.len() {
-                    todo!();
+                    return Err(IntDecodeError::LengthLessThanPrefix {
+                        prefix: len,
+                        actual: buf.len() as u8,
+                    });
                 }
 
                 let mut array = [0u8; ::core::mem::size_of::<$ty>()];
@@ -110,7 +143,6 @@ macro_rules! impl_int_decode {
 }
 
 use impl_int_decode;
-
 #[cfg(feature = "serde")]
 pub(crate) use serde::{impl_deserialize, impl_serialize};
 
@@ -127,7 +159,7 @@ mod serde {
                     struct Visitor;
 
                     impl<'de> ::serde::de::Visitor<'de> for Visitor {
-                        type Value = <$ty as $crate::Decode>::Value;
+                        type Value = <$ty as $crate::encode::Decode>::Value;
 
                         #[inline]
                         fn expecting(
@@ -145,7 +177,7 @@ mod serde {
                         where
                             E: ::serde::de::Error,
                         {
-                            <Self::Value as $crate::Decode>::decode(v)
+                            <Self::Value as $crate::encode::Decode>::decode(v)
                                 .map(|(value, _rest)| value)
                                 .map_err(E::custom)
                         }
@@ -169,7 +201,7 @@ mod serde {
                     S: ::serde::ser::Serializer,
                 {
                     let mut buf = Vec::new();
-                    <Self as $crate::Encode>::encode(&self, &mut buf);
+                    <Self as $crate::encode::Encode>::encode(&self, &mut buf);
                     serializer.serialize_bytes(&buf)
                 }
             }
