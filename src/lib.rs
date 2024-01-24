@@ -151,7 +151,7 @@ pub use deletion::Deletion;
 #[cfg(feature = "serde")]
 use encode::{impl_deserialize, impl_serialize};
 #[cfg(feature = "encode")]
-use encode::{Decode, Encode};
+use encode::{Decode, Encode, Int};
 #[cfg(feature = "encode")]
 use encoded_replica::{checksum, checksum_array};
 #[cfg(feature = "encode")]

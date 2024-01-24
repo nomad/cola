@@ -7,13 +7,111 @@ pub(crate) trait Encode {
 }
 
 /// TODO: docs
-pub(crate) trait Decode: Sized {
+pub(crate) trait Decode {
+    type Value: Sized;
+
     type Error: StdError;
 
     /// TODO: docs
-    fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error>;
+    fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error>;
 }
 
+/// A variable-length encoded integer.
+pub(crate) struct Int<I>(I);
+
+impl<I> Int<I> {
+    #[inline]
+    pub(crate) fn new(integer: I) -> Self {
+        Self(integer)
+    }
+}
+
+impl_int_encode!(u8);
+impl_int_encode!(u16);
+impl_int_encode!(u32);
+impl_int_encode!(u64);
+
+impl_int_decode!(u8);
+impl_int_decode!(u16);
+impl_int_decode!(u32);
+impl_int_decode!(u64);
+
+impl Encode for Int<usize> {
+    #[inline(always)]
+    fn encode(&self, buf: &mut Vec<u8>) {
+        Int(self.0 as u64).encode(buf)
+    }
+}
+
+impl Decode for Int<usize> {
+    type Value = usize;
+
+    type Error = core::convert::Infallible;
+
+    #[inline]
+    fn decode(buf: &[u8]) -> Result<(usize, &[u8]), Self::Error> {
+        Int::<u64>::decode(buf).map(|(value, rest)| (value as usize, rest))
+    }
+}
+
+macro_rules! impl_int_encode {
+    ($ty:ty) => {
+        impl Encode for Int<$ty> {
+            #[inline]
+            fn encode(&self, buf: &mut Vec<u8>) {
+                let array = self.0.to_le_bytes();
+
+                let num_trailing_zeros = array
+                    .iter()
+                    .rev()
+                    .copied()
+                    .take_while(|&byte| byte == 0)
+                    .count();
+
+                let len = array.len() - num_trailing_zeros;
+
+                buf.push(len as u8);
+
+                buf.extend_from_slice(&array[..len]);
+            }
+        }
+    };
+}
+
+use impl_int_encode;
+
+macro_rules! impl_int_decode {
+    ($ty:ty) => {
+        impl Decode for Int<$ty> {
+            type Value = $ty;
+
+            type Error = core::convert::Infallible;
+
+            #[inline]
+            fn decode(buf: &[u8]) -> Result<($ty, &[u8]), Self::Error> {
+                let Some((&len, buf)) = buf.split_first() else { todo!() };
+
+                if len as usize > buf.len() {
+                    todo!();
+                }
+
+                let mut array = [0u8; ::core::mem::size_of::<$ty>()];
+
+                let (bytes, buf) = buf.split_at(len as usize);
+
+                array[..bytes.len()].copy_from_slice(bytes);
+
+                let int = <$ty>::from_le_bytes(array);
+
+                Ok((int, buf))
+            }
+        }
+    };
+}
+
+use impl_int_decode;
+
+#[cfg(feature = "serde")]
 pub(crate) use serde::{impl_deserialize, impl_serialize};
 
 #[cfg(feature = "serde")]
@@ -29,7 +127,7 @@ mod serde {
                     struct Visitor;
 
                     impl<'de> ::serde::de::Visitor<'de> for Visitor {
-                        type Value = $ty;
+                        type Value = <$ty as $crate::Decode>::Value;
 
                         #[inline]
                         fn expecting(
