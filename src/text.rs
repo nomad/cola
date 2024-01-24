@@ -109,3 +109,34 @@ impl Text {
         self.range.clone()
     }
 }
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::{Decode, Encode, Int};
+
+    impl Encode for Text {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.inserted_by).encode(buf);
+            Int::new(self.start()).encode(buf);
+            let len = self.end() - self.start();
+            Int::new(len).encode(buf);
+        }
+    }
+
+    impl Decode for Text {
+        type Value = Self;
+
+        type Error = core::convert::Infallible;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (inserted_by, buf) = Int::<ReplicaId>::decode(buf)?;
+            let (start, buf) = Int::<usize>::decode(buf)?;
+            let (len, buf) = Int::<usize>::decode(buf)?;
+            let text = Self { inserted_by, range: start..start + len };
+            Ok((text, buf))
+        }
+    }
+}
