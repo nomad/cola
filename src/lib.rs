@@ -135,7 +135,7 @@ mod replica;
 mod replica_id;
 mod run_indices;
 mod run_tree;
-mod text_edit;
+mod text;
 mod utils;
 mod version_map;
 
@@ -152,7 +152,7 @@ pub use replica_id::ReplicaId;
 use replica_id::{ReplicaIdMap, ReplicaIdMapValuesMut};
 use run_indices::RunIndices;
 use run_tree::*;
-pub use text_edit::Text;
+pub use text::Text;
 use utils::*;
 use version_map::{DeletionMap, VersionMap};
 
