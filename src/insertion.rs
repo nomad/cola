@@ -1,5 +1,5 @@
 use crate::anchor::InnerAnchor as Anchor;
-use crate::*;
+use crate::{LamportTs, Length, ReplicaId, RunTs, Text};
 
 /// An insertion in CRDT coordinates.
 ///
@@ -10,10 +10,6 @@ use crate::*;
 ///
 /// See the documentation of those methods for more information.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 pub struct Insertion {
     /// The anchor point of the insertion.
     anchor: Anchor,
@@ -90,4 +86,124 @@ impl Insertion {
     pub fn text(&self) -> &Text {
         &self.text
     }
+}
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::{Decode, Encode, Int};
+
+    impl Insertion {
+        #[inline]
+        fn encode_anchor(&self, run: InsertionRun, buf: &mut Vec<u8>) {
+            match run {
+                InsertionRun::BeginsNew => self.anchor.encode(buf),
+                InsertionRun::ContinuesExisting => {},
+            }
+        }
+
+        #[inline]
+        fn decode_anchor<'buf>(
+            run: InsertionRun,
+            text: &Text,
+            run_ts: RunTs,
+            buf: &'buf [u8],
+        ) -> Result<(Anchor, &'buf [u8]), <Anchor as Decode>::Error> {
+            match run {
+                InsertionRun::BeginsNew => Anchor::decode(buf),
+
+                InsertionRun::ContinuesExisting => {
+                    let anchor =
+                        Anchor::new(text.inserted_by(), text.start(), run_ts);
+                    Ok((anchor, buf))
+                },
+            }
+        }
+    }
+
+    impl Encode for Insertion {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.text.encode(buf);
+            Int::new(self.run_ts).encode(buf);
+            Int::new(self.lamport_ts).encode(buf);
+            let run = InsertionRun::new(self);
+            run.encode(buf);
+            self.encode_anchor(run, buf);
+        }
+    }
+
+    impl Decode for Insertion {
+        type Value = Self;
+
+        type Error = core::convert::Infallible;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (text, buf) = Text::decode(buf)?;
+            let (run_ts, buf) = Int::<RunTs>::decode(buf)?;
+            let (lamport_ts, buf) = Int::<LamportTs>::decode(buf)?;
+            let (run, buf) = InsertionRun::decode(buf)?;
+            let (anchor, buf) = Self::decode_anchor(run, &text, run_ts, buf)?;
+            let insertion = Self::new(anchor, text, run_ts, lamport_ts);
+            Ok((insertion, buf))
+        }
+    }
+
+    /// TODO: docs
+    enum InsertionRun {
+        /// TODO: docs
+        BeginsNew,
+
+        /// TODO: docs
+        ContinuesExisting,
+    }
+
+    impl InsertionRun {
+        #[inline]
+        fn new(insertion: &Insertion) -> Self {
+            let is_continuation = insertion.anchor.replica_id()
+                == insertion.text.inserted_by()
+                && insertion.anchor.offset() == insertion.text.start();
+
+            if is_continuation {
+                Self::ContinuesExisting
+            } else {
+                Self::BeginsNew
+            }
+        }
+    }
+
+    impl Encode for InsertionRun {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            let is_continuation = matches!(self, Self::ContinuesExisting);
+            buf.push(is_continuation as u8);
+        }
+    }
+
+    impl Decode for InsertionRun {
+        type Value = Self;
+
+        type Error = core::convert::Infallible;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let Some((&first_byte, rest)) = buf.split_first() else { todo!() };
+
+            let this = match first_byte {
+                0 => Self::BeginsNew,
+                1 => Self::ContinuesExisting,
+                _other => todo!(),
+            };
+
+            Ok((this, rest))
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::impl_deserialize!(super::Insertion);
+    crate::impl_serialize!(super::Insertion);
 }
