@@ -148,6 +148,8 @@ pub use anchor::{Anchor, AnchorBias};
 use backlog::Backlog;
 pub use backlog::{BackloggedDeletions, BackloggedInsertions};
 pub use deletion::Deletion;
+#[cfg(feature = "serde")]
+use encode::{impl_deserialize, impl_serialize};
 #[cfg(feature = "encode")]
 use encode::{Decode, Encode};
 #[cfg(feature = "encode")]
