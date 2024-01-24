@@ -3,12 +3,15 @@ use crate::{LamportTs, Length, ReplicaId, RunTs, Text};
 
 /// An insertion in CRDT coordinates.
 ///
-/// This struct is created by the [`inserted`](Replica::inserted) method on the
-/// [`Replica`] owned by the peer that performed the insertion, and can be
-/// integrated by another [`Replica`] via the
-/// [`integrate_insertion`](Replica::integrate_insertion) method.
+/// This struct is created by the [`inserted`] method on the [`Replica`] owned
+/// by the peer that performed the insertion, and can be integrated by another
+/// [`Replica`] via the [`integrate_insertion`] method.
 ///
 /// See the documentation of those methods for more information.
+///
+/// [`Replica`]: crate::Replica
+/// [`inserted`]: crate::Replica::inserted
+/// [`integrate_insertion`]: crate::Replica::integrate_insertion
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Insertion {
     /// The anchor point of the insertion.
