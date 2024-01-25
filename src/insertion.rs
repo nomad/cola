@@ -184,12 +184,44 @@ mod encode {
         }
     }
 
-    /// TODO: docs
+    /// Whether an [`Insertion`] begins a new run or continues an existing one.
+    ///
+    /// This is used when encoding and decoding [`Insertion`]s to determine
+    /// whether their [`Anchor`] needs to be encoded.
+    ///
+    /// Most of the time when people edit a document they insert a bunch of
+    /// characters in a single run before moving the cursor or deleting some
+    /// text, and we can use this pattern to save some bytes.
+    ///
+    /// For example, if someone types "foo" sequentially in a blank document,
+    /// we'll create the following insertions (assuming a `ReplicaId` of 1 and
+    /// omitting fields that aren't relevant to this discussion):
+    ///
+    /// ```text
+    /// f -> Insertion { anchor: zero, text: 1.0..1, .. },
+    /// o -> Insertion { anchor: 1.1, text: 1.1..2, .. },
+    /// o -> Insertion { anchor: 1.2, text: 1.2..3, .. },
+    /// ```
+    ///
+    /// The first insertion begins a new run, but from then on every
+    /// Insertion's anchor is the same as the start of its text.
+    ///
+    /// This means that we can save space when encoding by omitting the anchor
+    /// and adding a flag that indicates that it should be derived from the
+    /// text and the run timestamp.
+    ///
+    /// This enum corresponds to that flag.
     enum InsertionRun {
-        /// TODO: docs
+        /// The [`Insertion`] begins a new run.
+        ///
+        /// In this case we also encode the insertion's [`Anchor`].
         BeginsNew,
 
-        /// TODO: docs
+        /// The [`Insertion`] continues an existing run.
+        ///
+        /// In this case we can avoid encoding the insertion's [`Anchor`]
+        /// because it can be fully decoded from the insertion's [`Text`] and
+        /// [`RunTs`].
         ContinuesExisting,
     }
 
