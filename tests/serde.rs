@@ -2,18 +2,48 @@ mod common;
 
 #[cfg(feature = "serde")]
 mod serde {
-    use traces::{ConcurrentTraceInfos, Crdt, Edit};
+    use serde::de::DeserializeOwned;
+    use serde::ser::Serialize;
+    use traces::{ConcurrentTraceInfos, Crdt, Edit, SequentialTrace};
 
-    use super::common::{self, Replica};
+    use super::common;
 
-    type Encode = fn(&common::Edit) -> Vec<u8>;
+    trait Encoder {
+        const NAME: &'static str;
+        fn encode<T: Serialize>(value: &T) -> Vec<u8>;
+        fn decode<T: DeserializeOwned>(buf: Vec<u8>) -> T;
+    }
 
-    type Decode = fn(Vec<u8>) -> common::Edit;
+    struct SerdeJson;
 
-    fn test_trace<const N: usize>(
-        trace: ConcurrentTraceInfos<N, Replica>,
-        encode: Encode,
-        decode: Decode,
+    impl Encoder for SerdeJson {
+        const NAME: &'static str = "serde_json";
+
+        fn encode<T: Serialize>(value: &T) -> Vec<u8> {
+            serde_json::to_vec(value).unwrap()
+        }
+
+        fn decode<T: DeserializeOwned>(buf: Vec<u8>) -> T {
+            serde_json::from_slice(&buf).unwrap()
+        }
+    }
+
+    struct Bincode;
+
+    impl Encoder for Bincode {
+        const NAME: &'static str = "bincode";
+
+        fn encode<T: Serialize>(value: &T) -> Vec<u8> {
+            bincode::serialize(value).unwrap()
+        }
+
+        fn decode<T: DeserializeOwned>(buf: Vec<u8>) -> T {
+            bincode::deserialize(&buf).unwrap()
+        }
+    }
+
+    fn test_trace<const N: usize, E: Encoder>(
+        trace: ConcurrentTraceInfos<N, common::Replica>,
     ) {
         let ConcurrentTraceInfos { trace, mut peers, final_content, .. } =
             trace;
@@ -29,8 +59,8 @@ mod serde {
                     peers[*idx].assert_invariants();
                 },
                 Edit::Merge(idx, edit) => {
-                    let encoded = encode(edit);
-                    let decoded = decode(encoded);
+                    let encoded = E::encode(edit);
+                    let decoded = E::decode(encoded);
                     peers[*idx].remote_merge(&decoded);
                     peers[*idx].assert_invariants();
                 },
@@ -50,18 +80,78 @@ mod serde {
     /// deserialize every edit before applying it.
     #[test]
     fn serde_friends_forever_round_trip() {
-        test_trace(
-            traces::friends_forever(),
-            serde_json_encode,
-            serde_json_decode,
+        test_trace::<2, SerdeJson>(traces::friends_forever());
+    }
+
+    /// Runs a trace and prints the total size of the serialized `Insertion`s
+    /// and `Deletion`s.
+    fn serde_sizes<E: Encoder>(trace: &SequentialTrace) {
+        let trace = trace.chars_to_bytes();
+
+        let mut replica = cola::Replica::new(1, trace.start_content().len());
+
+        let mut insertions = Vec::new();
+
+        let mut deletions = Vec::new();
+
+        for (start, end, text) in trace.edits() {
+            if end > start {
+                let deletion = replica.deleted(start..end);
+                deletions.push(E::encode(&deletion));
+            }
+
+            if !text.is_empty() {
+                let insertion = replica.inserted(start, text.len());
+                insertions.push(E::encode(&insertion));
+            }
+        }
+
+        let printed_size = |num_bytes: usize| {
+            let num_bytes = num_bytes as f64;
+
+            if num_bytes < 1024.0 {
+                format!("{} B", num_bytes)
+            } else if num_bytes < 1024.0 * 1024.0 {
+                format!("{:.2} KB", num_bytes / 1024.0)
+            } else if num_bytes < 1024.0 * 1024.0 * 1024.0 {
+                format!("{:.2} MB", num_bytes / 1024.0 / 1024.0)
+            } else {
+                format!("{:.2} GB", num_bytes / 1024.0 / 1024.0 / 1024.0)
+            }
+        };
+
+        let replica_size = E::encode(&replica.encode()).len();
+
+        println!("{} | Replica: {}", E::NAME, printed_size(replica_size));
+
+        let total_insertions_size =
+            insertions.iter().map(Vec::len).sum::<usize>();
+
+        println!(
+            "{} | Total insertions: {}",
+            E::NAME,
+            printed_size(total_insertions_size)
+        );
+
+        let total_deletions_size =
+            deletions.iter().map(Vec::len).sum::<usize>();
+
+        println!(
+            "{} | Total deletions: {}",
+            E::NAME,
+            printed_size(total_deletions_size)
         );
     }
 
-    fn serde_json_encode(edit: &common::Edit) -> Vec<u8> {
-        serde_json::to_vec(edit).unwrap()
+    // `cargo t --features=serde serde_automerge_json_sizes -- --nocapture`
+    #[test]
+    fn serde_automerge_json_sizes() {
+        serde_sizes::<SerdeJson>(&traces::automerge());
     }
 
-    fn serde_json_decode(buf: Vec<u8>) -> common::Edit {
-        serde_json::from_slice(&buf).unwrap()
+    // `cargo t --features=serde serde_automerge_bincode_sizes -- --nocapture`
+    #[test]
+    fn serde_automerge_bincode_sizes() {
+        serde_sizes::<Bincode>(&traces::automerge());
     }
 }
