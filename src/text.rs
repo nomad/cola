@@ -10,7 +10,6 @@ use crate::*;
 /// [`inserted_by`](Text::inserted_by) and
 /// [`temporal_range`](Text::temporal_range) methods respectively.
 #[derive(Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct Text {
     pub(crate) inserted_by: ReplicaId,
     pub(crate) range: Range<Length>,
@@ -108,4 +107,47 @@ impl Text {
     pub fn temporal_range(&self) -> Range<Length> {
         self.range.clone()
     }
+}
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::encode::{Decode, Encode, Int, IntDecodeError};
+
+    impl Encode for Text {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.inserted_by).encode(buf);
+            Int::new(self.start()).encode(buf);
+            // We encode the length of the text because it's often smaller than
+            // its end, especially for longer editing sessions.
+            //
+            // For example, if a user inserts a character after already having
+            // inserted 1000 before, it's better to encode `1000, 1` rather
+            // than `1000, 1001`.
+            let len = self.end() - self.start();
+            Int::new(len).encode(buf);
+        }
+    }
+
+    impl Decode for Text {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (inserted_by, buf) = Int::<ReplicaId>::decode(buf)?;
+            let (start, buf) = Int::<usize>::decode(buf)?;
+            let (len, buf) = Int::<usize>::decode(buf)?;
+            let text = Self { inserted_by, range: start..start + len };
+            Ok((text, buf))
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_deserialize!(super::Text);
+    crate::encode::impl_serialize!(super::Text);
 }

@@ -62,6 +62,25 @@ impl Anchor {
     }
 }
 
+/// A bias to use when creating an [`Anchor`].
+///
+/// This is used in the
+/// [`Replica::create_anchor()`][crate::Replica::create_anchor] method to
+/// create a new [`Anchor`]. See the documentation of that method for more
+/// information.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    any(feature = "encode", feature = "serde"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+pub enum AnchorBias {
+    /// The anchor should attach to the left.
+    Left,
+
+    /// The anchor should attach to the right.
+    Right,
+}
+
 /// TODO: docs
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(
@@ -83,6 +102,12 @@ impl core::fmt::Debug for InnerAnchor {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if self == &Self::zero() {
             write!(f, "zero")
+        } else if f.alternate() {
+            write!(
+                f,
+                "{:x}.{} in {}",
+                self.replica_id, self.offset, self.contained_in
+            )
         } else {
             write!(f, "{:x}.{}", self.replica_id, self.offset)
         }
@@ -126,21 +151,32 @@ impl InnerAnchor {
     }
 }
 
-/// A bias to use when creating an [`Anchor`].
-///
-/// This is used in the
-/// [`Replica::create_anchor()`][crate::Replica::create_anchor] method to
-/// create a new [`Anchor`]. See the documentation of that method for more
-/// information.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-pub enum AnchorBias {
-    /// The anchor should attach to the left.
-    Left,
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::encode::{Decode, Encode, Int, IntDecodeError};
 
-    /// The anchor should attach to the right.
-    Right,
+    impl Encode for InnerAnchor {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.replica_id()).encode(buf);
+            Int::new(self.run_ts()).encode(buf);
+            Int::new(self.offset()).encode(buf);
+        }
+    }
+
+    impl Decode for InnerAnchor {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (replica_id, buf) = Int::<ReplicaId>::decode(buf)?;
+            let (run_ts, buf) = Int::<RunTs>::decode(buf)?;
+            let (offset, buf) = Int::<Length>::decode(buf)?;
+            let anchor = Self::new(replica_id, offset, run_ts);
+            Ok((anchor, buf))
+        }
+    }
 }
