@@ -120,6 +120,12 @@ mod encode {
         fn encode(&self, buf: &mut Vec<u8>) {
             Int::new(self.inserted_by).encode(buf);
             Int::new(self.start()).encode(buf);
+            // We encode the length of the text because it's often smaller than
+            // its end, especially for longer editing sessions.
+            //
+            // For example, if a user inserts a character after already having
+            // inserted 1000 before, it's better to encode `1000, 1` rather
+            // than `1000, 1001`.
             let len = self.end() - self.start();
             Int::new(len).encode(buf);
         }
