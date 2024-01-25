@@ -39,6 +39,7 @@ impl PartialEq<Replica> for &str {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Edit {
     Insertion(cola::Insertion, String),
     Deletion(cola::Deletion),
