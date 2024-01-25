@@ -17,6 +17,43 @@ pub(crate) trait Decode {
 }
 
 /// A variable-length encoded integer.
+///
+/// This is a newtype around integers that can be `Encode`d using a variable
+/// number of bytes based on their value. When encoding, we:
+///
+/// - turn the integer into the corresponding little-endian byte array. The
+///   resulting array will have a fixed length equal to `mem::size_of::<I>`;
+///
+/// - ignore any trailing zeroes in the resulting byte array;
+///
+/// - push the length of the resulting byte slice;
+///
+/// - push the byte slice;
+///
+/// For example, `256u64` gets encoded as `[2, 0, 1]`.
+///
+/// With this scheme we could potentially encode integers up to
+/// `2 ^ (255 * 8) - 1`, which is ridiculously overkill for our use case since
+/// we only need to encode integers up to `u64::MAX`.
+///
+/// Because of this, we actually use the first byte to encode the integer
+/// itself if it's either 0 or between 9 and 255. We don't do this for 1..=8
+/// because we need to reserve those to represent the number of bytes that
+/// follow.
+///
+/// A few examples:
+///
+/// - `0` is encoded as `[0]`;
+///
+/// - `1` is encoded as `[1, 1]`;
+///
+/// - `8` is encoded as `[1, 8]`;
+///
+/// - `9` is encoded as `[9]`;
+///
+/// - `255` is encoded as `[255]`;
+///
+/// - numbers greater than 255 are always encoded as `[length, ..bytes..]`.
 pub(crate) struct Int<I>(I);
 
 impl<I> Int<I> {
