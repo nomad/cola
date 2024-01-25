@@ -233,6 +233,27 @@ mod serde {
                                 .map(|(value, _rest)| value)
                                 .map_err(E::custom)
                         }
+
+                        #[inline]
+                        fn visit_seq<A>(
+                            self,
+                            mut seq: A,
+                        ) -> Result<Self::Value, A::Error>
+                        where
+                            A: ::serde::de::SeqAccess<'de>,
+                        {
+                            let size = seq.size_hint().unwrap_or(0);
+                            let mut buf =
+                                ::alloc::vec::Vec::<u8>::with_capacity(size);
+                            while let Some(byte) = seq.next_element()? {
+                                buf.push(byte);
+                            }
+                            <Self::Value as $crate::encode::Decode>::decode(
+                                &buf,
+                            )
+                            .map(|(value, _rest)| value)
+                            .map_err(<A::Error as ::serde::de::Error>::custom)
+                        }
                     }
 
                     deserializer.deserialize_bytes(Visitor)
