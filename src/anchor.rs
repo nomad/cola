@@ -102,6 +102,12 @@ impl core::fmt::Debug for InnerAnchor {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if self == &Self::zero() {
             write!(f, "zero")
+        } else if f.alternate() {
+            write!(
+                f,
+                "{:x}.{} in {}",
+                self.replica_id, self.offset, self.contained_in
+            )
         } else {
             write!(f, "{:x}.{}", self.replica_id, self.offset)
         }
