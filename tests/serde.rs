@@ -10,6 +10,9 @@ mod serde {
 
     trait Encoder {
         const NAME: &'static str;
+        fn name() -> impl std::fmt::Display {
+            Self::NAME
+        }
         fn encode<T: Serialize>(value: &T) -> Vec<u8>;
         fn decode<T: DeserializeOwned>(buf: Vec<u8>) -> T;
     }
@@ -39,6 +42,24 @@ mod serde {
 
         fn decode<T: DeserializeOwned>(buf: Vec<u8>) -> T {
             bincode::deserialize(&buf).unwrap()
+        }
+    }
+
+    struct Zstd<E>(std::marker::PhantomData<E>);
+
+    impl<E: Encoder> Encoder for Zstd<E> {
+        const NAME: &'static str = "zstd'd ";
+
+        fn name() -> impl std::fmt::Display {
+            format!("{}{}", Self::NAME, E::name())
+        }
+
+        fn encode<T: Serialize>(value: &T) -> Vec<u8> {
+            zstd::stream::encode_all(&*E::encode(value), 0).unwrap()
+        }
+
+        fn decode<T: DeserializeOwned>(buf: Vec<u8>) -> T {
+            E::decode(zstd::stream::decode_all(&*buf).unwrap())
         }
     }
 
@@ -122,14 +143,14 @@ mod serde {
 
         let replica_size = E::encode(&replica.encode()).len();
 
-        println!("{} | Replica: {}", E::NAME, printed_size(replica_size));
+        println!("{} | Replica: {}", E::name(), printed_size(replica_size));
 
         let total_insertions_size =
             insertions.iter().map(Vec::len).sum::<usize>();
 
         println!(
             "{} | Total insertions: {}",
-            E::NAME,
+            E::name(),
             printed_size(total_insertions_size)
         );
 
@@ -138,7 +159,7 @@ mod serde {
 
         println!(
             "{} | Total deletions: {}",
-            E::NAME,
+            E::name(),
             printed_size(total_deletions_size)
         );
     }
@@ -153,5 +174,17 @@ mod serde {
     #[test]
     fn serde_automerge_bincode_sizes() {
         serde_sizes::<Bincode>(&traces::automerge());
+    }
+
+    // `cargo t --features=serde serde_automerge_compressed_json_sizes -- --nocapture`
+    #[test]
+    fn serde_automerge_compressed_json_sizes() {
+        serde_sizes::<Zstd<SerdeJson>>(&traces::automerge());
+    }
+
+    // `cargo t --features=serde serde_automerge_compressed_bincode_sizes -- --nocapture`
+    #[test]
+    fn serde_automerge_compressed_bincode_sizes() {
+        serde_sizes::<Zstd<Bincode>>(&traces::automerge());
     }
 }

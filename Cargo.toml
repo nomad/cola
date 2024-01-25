@@ -35,6 +35,7 @@ rand = "0.8"
 rand_chacha = "0.3"
 serde_json = "1"
 traces = { path = "./traces" }
+zstd = "0.13"
 
 [[bench]]
 name = "traces"
