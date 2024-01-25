@@ -179,7 +179,7 @@ mod encode {
             let (lamport_ts, buf) = Int::<LamportTs>::decode(buf)?;
             let (run, buf) = InsertionRun::decode(buf)?;
             let (anchor, buf) = Self::decode_anchor(run, &text, run_ts, buf)?;
-            let insertion = Self::new(anchor, text, run_ts, lamport_ts);
+            let insertion = Self::new(anchor, text, lamport_ts, run_ts);
             Ok((insertion, buf))
         }
     }
@@ -312,4 +312,28 @@ mod encode {
 mod serde {
     crate::impl_deserialize!(super::Insertion);
     crate::impl_serialize!(super::Insertion);
+}
+
+#[cfg(all(test, feature = "encode"))]
+mod encode_tests {
+    use super::*;
+    use crate::encode::{Decode, Encode};
+
+    impl core::fmt::Debug for encode::InsertionDecodeError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            core::fmt::Display::fmt(self, f)
+        }
+    }
+
+    #[test]
+    fn encode_insertion_round_trip_0() {
+        let anchor = Anchor::new(1, 1, 1);
+        let text = Text::new(2, 0..1);
+        let insertion = Insertion::new(anchor, text, 3, 0);
+        let mut buf = Vec::new();
+        insertion.encode(&mut buf);
+        let (decoded, rest) = Insertion::decode(&buf).unwrap();
+        assert_eq!(insertion, decoded);
+        assert!(rest.is_empty());
+    }
 }
