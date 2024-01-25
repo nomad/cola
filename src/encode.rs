@@ -78,7 +78,7 @@ impl Decode for Int<usize> {
 
     type Error = IntDecodeError;
 
-    #[inline]
+    #[inline(always)]
     fn decode(buf: &[u8]) -> Result<(usize, &[u8]), Self::Error> {
         Int::<u64>::decode(buf).map(|(value, rest)| (value as usize, rest))
     }

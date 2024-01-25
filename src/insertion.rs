@@ -196,9 +196,20 @@ mod encode {
     impl InsertionRun {
         #[inline]
         fn new(insertion: &Insertion) -> Self {
+            // To determine whether this insertion is a continuation of an
+            // existing insertion run we simply check:
+            //
+            // 1: the `ReplicaId`s of the anchor and the text. Clearly they
+            //    must match because you can't continue someone else's
+            //    insertion;
+            //
+            // 2: the `RunTs` of the anchor and the insertion. Since that
+            //    counter is only incremented when a new insertion run begins,
+            //    we know that if they match then this insertion must continue
+            //    an existing run.
             let is_continuation = insertion.anchor.replica_id()
                 == insertion.text.inserted_by()
-                && insertion.anchor.offset() == insertion.text.start();
+                && insertion.anchor.run_ts() == insertion.run_ts();
 
             if is_continuation {
                 Self::ContinuesExisting
