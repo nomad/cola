@@ -27,6 +27,7 @@ impl<I> Int<I> {
 }
 
 /// An error that can occur when decoding an [`Int`].
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub(crate) enum IntDecodeError {
     /// The buffer passed to `Int::decode` is empty. This is always an error,
     /// even if the integer being decoded is zero.
@@ -224,4 +225,109 @@ mod serde {
 
     pub(crate) use impl_deserialize;
     pub(crate) use impl_serialize;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl core::fmt::Debug for IntDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            core::fmt::Display::fmt(self, f)
+        }
+    }
+
+    /// Tests that some integers can be encoded with a single byte.
+    #[test]
+    fn encode_int_single_byte() {
+        let ints = core::iter::once(0).chain(9..=u8::MAX as u64);
+
+        let mut buf = Vec::new();
+
+        for int in ints {
+            Int::new(int).encode(&mut buf);
+            assert_eq!(buf.len(), 1);
+            let (decoded, rest) = Int::<u64>::decode(&buf).unwrap();
+            assert_eq!(int, decoded);
+            assert!(rest.is_empty());
+            buf.clear();
+        }
+    }
+
+    /// Tests that integers are encoded using the correct number of bytes.
+    #[test]
+    fn encode_int_num_bytes() {
+        let ints = (1..=8).chain([
+            u8::MAX as u64 + 1,
+            u16::MAX as u64,
+            u16::MAX as u64 + 1,
+            u32::MAX as u64,
+            u32::MAX as u64 + 1,
+            u64::MAX,
+        ]);
+
+        let mut buf = Vec::new();
+
+        // The highest number that can be represented with this many bytes.
+        let max_num_with_n_bytes = |n_bytes: u8| {
+            let bits = n_bytes * 8;
+            // We use a u128 here to avoid overlowing if `n_bytes` is 8.
+            ((1u128 << bits) - 1) as u64
+        };
+
+        for int in ints {
+            Int::new(int).encode(&mut buf);
+
+            let expected_len = (1..=8)
+                .map(|n_bytes| (n_bytes, max_num_with_n_bytes(n_bytes)))
+                .find_map(|(n_bytes, max_for_bytes)| {
+                    (int <= max_for_bytes).then_some(n_bytes)
+                })
+                .unwrap();
+
+            assert_eq!(buf[0], expected_len);
+
+            assert_eq!(buf[1..].len() as u8, expected_len);
+
+            let (decoded, rest) = Int::<u64>::decode(&buf).unwrap();
+
+            assert_eq!(int, decoded);
+
+            assert!(rest.is_empty());
+
+            buf.clear();
+        }
+    }
+
+    /// Tests that decoding an `Int` fails if the buffer is empty.
+    #[test]
+    fn encode_int_fails_if_buffer_empty() {
+        let mut buf = Vec::new();
+
+        Int::new(42u32).encode(&mut buf);
+
+        buf.clear();
+
+        assert_eq!(
+            Int::<u32>::decode(&buf).unwrap_err(),
+            IntDecodeError::EmptyBuffer
+        );
+    }
+
+    /// Tests that decoding an `Int` fails if the length specified in the
+    /// prefix is greater than the actual length of the buffer.
+    #[test]
+    fn encode_int_fails_if_buffer_too_short() {
+        let mut buf = Vec::new();
+
+        Int::new(u8::MAX as u16 + 1).encode(&mut buf);
+
+        buf.pop();
+
+        assert_eq!(
+            Int::<u32>::decode(&buf).unwrap_err(),
+            IntDecodeError::LengthLessThanPrefix { prefix: 2, actual: 1 }
+        );
+    }
 }
