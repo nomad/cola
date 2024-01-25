@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- the `Serialize` impl of `Insertion` now produces 3-4x smaller payloads,
+  depending on the data format used ([#5](https://github.com/nomad/cola/pull/5));
+
 ## [0.3.0] - Jan 9 2024
 
 ### Added
