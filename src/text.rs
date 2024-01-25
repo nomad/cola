@@ -10,7 +10,6 @@ use crate::*;
 /// [`inserted_by`](Text::inserted_by) and
 /// [`temporal_range`](Text::temporal_range) methods respectively.
 #[derive(Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub struct Text {
     pub(crate) inserted_by: ReplicaId,
     pub(crate) range: Range<Length>,
@@ -145,4 +144,10 @@ mod encode {
             Ok((text, buf))
         }
     }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_deserialize!(super::Text);
+    crate::encode::impl_serialize!(super::Text);
 }

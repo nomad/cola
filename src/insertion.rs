@@ -310,8 +310,8 @@ mod encode {
 
 #[cfg(feature = "serde")]
 mod serde {
-    crate::impl_deserialize!(super::Insertion);
-    crate::impl_serialize!(super::Insertion);
+    crate::encode::impl_deserialize!(super::Insertion);
+    crate::encode::impl_serialize!(super::Insertion);
 }
 
 #[cfg(all(test, feature = "encode"))]
