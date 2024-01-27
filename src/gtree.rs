@@ -2411,8 +2411,8 @@ struct Inode<const ARITY: usize, L: Leaf> {
     /// or equal to `ARITY`.
     num_children: usize,
 
-    /// The indexes of this node's children in the Gtree. The first `len` of
-    /// these are valid, and the rest are dangling.
+    /// The indexes of this node's children in the Gtree. The first
+    /// `num_children` are valid, while the rest are dangling.
     children: [NodeIdx<L>; ARITY],
 
     /// Whether `children` contains `LeafIdx<L>`s or `InodeIdx`s.

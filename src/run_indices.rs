@@ -25,7 +25,7 @@ impl RunIndices {
             let mut offset = 0;
 
             for (idx, splits) in indices.splits().enumerate() {
-                for split in splits.leaves() {
+                for split in splits.iter() {
                     let run = run_tree.run(split.idx);
                     assert_eq!(replica_id, run.replica_id());
                     assert_eq!(split.len, run.len());
@@ -55,6 +55,13 @@ impl RunIndices {
             anchor.offset(),
             bias,
         )
+    }
+
+    #[inline]
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&ReplicaId, &ReplicaIndices)> + '_ {
+        self.map.iter()
     }
 
     #[inline]
@@ -156,6 +163,13 @@ impl ReplicaIndices {
         splits.fragment_at_offset(at_offset - offset, bias).idx
     }
 
+    #[inline(always)]
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = &(Fragments, Length)> + '_ {
+        self.vec.iter()
+    }
+
     #[inline]
     pub fn len(&self) -> usize {
         self.vec.len()
@@ -207,7 +221,7 @@ impl ReplicaIndices {
 
 const FRAGMENTS_INLINE: usize = 8;
 
-type Fragments = fragments::Fragments<FRAGMENTS_INLINE>;
+pub(crate) type Fragments = fragments::Fragments<FRAGMENTS_INLINE>;
 
 mod fragments {
     use super::*;
@@ -320,6 +334,19 @@ mod fragments {
         }
 
         #[inline]
+        pub fn iter(&self) -> FragmentsIter<'_, INLINE> {
+            match self {
+                Self::Array(array) => {
+                    FragmentsIter::Array(array.fragments().iter())
+                },
+
+                Self::Gtree(gtree) => {
+                    FragmentsIter::Gtree(gtree.leaves_from_first())
+                },
+            }
+        }
+
+        #[inline]
         pub fn len(&self) -> Length {
             match self {
                 Self::Array(array) => array.total_len,
@@ -418,6 +445,37 @@ mod fragments {
                     });
                 },
             };
+        }
+    }
+
+    impl<const N: usize> gtree::Join for Fragments<N> {}
+
+    impl<const N: usize> gtree::Leaf for Fragments<N> {
+        type Length = Length;
+
+        #[inline]
+        fn len(&self) -> Self::Length {
+            self.len()
+        }
+    }
+
+    pub(crate) enum FragmentsIter<'a, const N: usize> {
+        Array(core::slice::Iter<'a, Fragment>),
+        Gtree(crate::gtree::Leaves<'a, N, Fragment>),
+    }
+
+    impl<'a, const N: usize> Iterator for FragmentsIter<'a, N> {
+        type Item = &'a Fragment;
+
+        #[inline]
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::Array(iter) => iter.next(),
+
+                Self::Gtree(iter) => {
+                    iter.next().map(|(_idx, fragment)| fragment)
+                },
+            }
         }
     }
 
@@ -681,48 +739,6 @@ mod fragments {
 
                 deserializer.deserialize_map(ArrayVisitor)
             }
-        }
-    }
-
-    impl<const N: usize> gtree::Join for Fragments<N> {}
-
-    impl<const N: usize> gtree::Leaf for Fragments<N> {
-        type Length = Length;
-
-        #[inline]
-        fn len(&self) -> Self::Length {
-            self.len()
-        }
-    }
-
-    impl<const N: usize> Fragments<N> {
-        #[inline]
-        pub fn leaves(&self) -> RunSplitLeaves<'_> {
-            match self {
-                Self::Array(array) => {
-                    let iter = Box::new(array.fragments().iter()) as _;
-                    RunSplitLeaves { iter }
-                },
-
-                Self::Gtree(gtree) => {
-                    let iter = Box::new(
-                        gtree.leaves_from_first().map(|(_idx, leaf)| leaf),
-                    ) as _;
-                    RunSplitLeaves { iter }
-                },
-            }
-        }
-    }
-
-    pub(crate) struct RunSplitLeaves<'a> {
-        iter: Box<dyn Iterator<Item = &'a Fragment> + 'a>,
-    }
-
-    impl<'a> Iterator for RunSplitLeaves<'a> {
-        type Item = &'a Fragment;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.iter.next()
         }
     }
 }
