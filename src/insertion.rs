@@ -94,13 +94,7 @@ impl Insertion {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::encode::{
-        BoolDecodeError,
-        Decode,
-        Encode,
-        Int,
-        IntDecodeError,
-    };
+    use crate::encode::{BoolDecodeError, Decode, Encode, IntDecodeError};
 
     impl Insertion {
         #[inline]
@@ -134,8 +128,8 @@ mod encode {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
             self.text.encode(buf);
-            Int::new(self.run_ts).encode(buf);
-            Int::new(self.lamport_ts).encode(buf);
+            self.run_ts.encode(buf);
+            self.lamport_ts.encode(buf);
             let run = InsertionRun::new(self);
             run.encode(buf);
             self.encode_anchor(run, buf);
@@ -181,8 +175,8 @@ mod encode {
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
             let (text, buf) = Text::decode(buf)?;
-            let (run_ts, buf) = Int::<RunTs>::decode(buf)?;
-            let (lamport_ts, buf) = Int::<LamportTs>::decode(buf)?;
+            let (run_ts, buf) = RunTs::decode(buf)?;
+            let (lamport_ts, buf) = LamportTs::decode(buf)?;
             let (run, buf) = InsertionRun::decode(buf)?;
             let (anchor, buf) = Self::decode_anchor(run, &text, run_ts, buf)?;
             let insertion = Self::new(anchor, text, lamport_ts, run_ts);

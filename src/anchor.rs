@@ -154,14 +154,14 @@ impl InnerAnchor {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::encode::{Decode, Encode, Int, IntDecodeError};
+    use crate::encode::{Decode, Encode, IntDecodeError};
 
     impl Encode for InnerAnchor {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
-            Int::new(self.replica_id()).encode(buf);
-            Int::new(self.run_ts()).encode(buf);
-            Int::new(self.offset()).encode(buf);
+            self.replica_id().encode(buf);
+            self.run_ts().encode(buf);
+            self.offset().encode(buf);
         }
     }
 
@@ -172,9 +172,9 @@ mod encode {
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (replica_id, buf) = Int::<ReplicaId>::decode(buf)?;
-            let (run_ts, buf) = Int::<RunTs>::decode(buf)?;
-            let (offset, buf) = Int::<Length>::decode(buf)?;
+            let (replica_id, buf) = ReplicaId::decode(buf)?;
+            let (run_ts, buf) = RunTs::decode(buf)?;
+            let (offset, buf) = Length::decode(buf)?;
             let anchor = Self::new(replica_id, offset, run_ts);
             Ok((anchor, buf))
         }

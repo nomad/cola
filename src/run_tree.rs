@@ -1160,7 +1160,6 @@ mod encode {
         Decode,
         DecodeWithCtx,
         Encode,
-        Int,
         IntDecodeError,
     };
     use crate::gtree::{Inode, InodeIdx, Lnode};
@@ -1171,7 +1170,7 @@ mod encode {
         fn encode(&self, buf: &mut Vec<u8>) {
             let indices = self.run_indices.iter();
 
-            Int::new(indices.len() as u64).encode(buf);
+            (indices.len() as u64).encode(buf);
 
             for (&replica_id, indices) in indices {
                 ReplicaRuns::new(replica_id, indices, &self.gtree).encode(buf);
@@ -1179,7 +1178,7 @@ mod encode {
 
             let inodes = self.gtree.inodes();
 
-            Int::new(inodes.len() as u64).encode(buf);
+            (inodes.len() as u64).encode(buf);
 
             for inode in inodes {
                 inode.encode(buf);
@@ -1236,7 +1235,7 @@ mod encode {
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (num_replicas, mut buf) = Int::<u64>::decode(buf)?;
+            let (num_replicas, mut buf) = u64::decode(buf)?;
 
             let mut ctx = RunTreeDecodeCtx::default();
 
@@ -1247,7 +1246,7 @@ mod encode {
 
             let RunTreeDecodeCtx { lnodes, run_indices, .. } = ctx;
 
-            let (num_inodes, mut buf) = Int::<u64>::decode(buf)?;
+            let (num_inodes, mut buf) = u64::decode(buf)?;
 
             let mut inodes = Vec::new();
 
@@ -1287,8 +1286,8 @@ mod encode {
     impl Encode for ReplicaRuns<'_> {
         #[inline(always)]
         fn encode(&self, buf: &mut Vec<u8>) {
-            Int::new(self.replica_id).encode(buf);
-            Int::new(self.runs.len() as RunTs).encode(buf);
+            self.replica_id.encode(buf);
+            (self.runs.len() as RunTs).encode(buf);
 
             for (fragments, _) in self.runs.iter() {
                 RunFragments::new(fragments, self.gtree).encode(buf);
@@ -1308,9 +1307,9 @@ mod encode {
             buf: &'buf [u8],
             ctx: &mut Self::Ctx,
         ) -> Result<(Self::Value, &'buf [u8]), Self::Error> {
-            let (replica_id, buf) = Int::<ReplicaId>::decode(buf)?;
+            let (replica_id, buf) = ReplicaId::decode(buf)?;
 
-            let (num_runs, mut buf) = Int::<RunTs>::decode(buf)?;
+            let (num_runs, mut buf) = RunTs::decode(buf)?;
 
             ctx.replica_id = replica_id;
 
@@ -1345,7 +1344,7 @@ mod encode {
     impl Encode for RunFragments<'_> {
         #[inline(always)]
         fn encode(&self, buf: &mut Vec<u8>) {
-            Int::new(self.fragments.len() as u64).encode(buf);
+            (self.fragments.len() as u64).encode(buf);
 
             for fragment in self.fragments.iter() {
                 RunFragment::new(fragment.leaf_idx(), self.gtree).encode(buf);
@@ -1365,7 +1364,7 @@ mod encode {
             buf: &'buf [u8],
             ctx: &mut Self::Ctx,
         ) -> Result<(Self::Value, &'buf [u8]), Self::Error> {
-            let (num_fragments, mut buf) = Int::<u64>::decode(buf)?;
+            let (num_fragments, mut buf) = u64::decode(buf)?;
 
             let initial_temporal_offset = ctx.temporal_offset;
 
@@ -1398,8 +1397,8 @@ mod encode {
         fn encode(&self, buf: &mut Vec<u8>) {
             let edit_run = self.gtree.leaf(self.leaf_idx);
 
-            Int::new(edit_run.text.len()).encode(buf);
-            Int::new(edit_run.lamport_ts).encode(buf);
+            edit_run.text.len().encode(buf);
+            edit_run.lamport_ts.encode(buf);
             edit_run.is_deleted.encode(buf);
             self.leaf_idx.encode(buf);
             self.gtree.parent(self.leaf_idx).encode(buf);
@@ -1418,8 +1417,8 @@ mod encode {
             buf: &'buf [u8],
             ctx: &mut Self::Ctx,
         ) -> Result<(Self::Value, &'buf [u8]), Self::Error> {
-            let (len, buf) = Int::<Length>::decode(buf)?;
-            let (lamport_ts, buf) = Int::<LamportTs>::decode(buf)?;
+            let (len, buf) = Length::decode(buf)?;
+            let (lamport_ts, buf) = LamportTs::decode(buf)?;
             let (is_deleted, buf) = bool::decode(buf)?;
             let (leaf_idx, buf) = LeafIdx::<EditRun>::decode(buf)?;
             let (parent_idx, buf) = InodeIdx::decode(buf)?;

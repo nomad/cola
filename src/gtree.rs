@@ -96,7 +96,7 @@ const _NODE_IDX_LAYOUT_CHECK: usize = {
 ///
 /// TODO: finish describing the data structure.
 #[derive(Clone, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "encode", derive(serde::Serialize, ::serde::Deserialize))]
 pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     /// The internal nodes of the Gtree.
     ///
@@ -3500,12 +3500,12 @@ mod iter {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::encode::{Decode, Encode, Int, IntDecodeError};
+    use crate::encode::{Decode, Encode, IntDecodeError};
 
     impl Encode for InodeIdx {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
-            Int::new(self.0).encode(buf);
+            self.0.encode(buf);
         }
     }
 
@@ -3516,7 +3516,7 @@ mod encode {
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (idx, rest) = Int::<usize>::decode(buf)?;
+            let (idx, rest) = usize::decode(buf)?;
             Ok((Self(idx), rest))
         }
     }
@@ -3524,7 +3524,7 @@ mod encode {
     impl<L> Encode for LeafIdx<L> {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
-            Int::new(self.idx).encode(buf);
+            self.idx.encode(buf);
         }
     }
 
@@ -3535,12 +3535,15 @@ mod encode {
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (idx, rest) = Int::<usize>::decode(buf)?;
+            let (idx, rest) = usize::decode(buf)?;
             Ok((Self::new(idx), rest))
         }
     }
 
-    impl<const N: usize, L: Leaf> Encode for Inode<N, L> {
+    impl<const N: usize, L: Leaf> Encode for Inode<N, L>
+    where
+        L::Length: Encode,
+    {
         #[inline]
         fn encode(&self, _buf: &mut Vec<u8>) {
             todo!();
