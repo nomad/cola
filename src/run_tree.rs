@@ -769,7 +769,7 @@ impl RunTree {
     pub fn new(first_run: EditRun) -> Self {
         let id = first_run.replica_id();
         let len = first_run.len();
-        let (gtree, idx) = Gtree::new(first_run);
+        let (gtree, idx) = Gtree::from_first_leaf(first_run);
         let mut run_indices = RunIndices::new();
         run_indices.get_mut(id).append(len, idx);
         Self { gtree, run_indices }
@@ -1152,6 +1152,8 @@ pub(crate) type DebugAsSelf<'a> =
 
 #[cfg(feature = "encode")]
 mod encode {
+    use core::mem;
+
     use super::*;
     use crate::encode::{
         BoolDecodeError,
@@ -1161,7 +1163,7 @@ mod encode {
         Int,
         IntDecodeError,
     };
-    use crate::gtree::{InodeIdx, Lnode};
+    use crate::gtree::{Inode, InodeIdx, Lnode};
     use crate::run_indices::{Fragment, Fragments, ReplicaIndices};
 
     impl Encode for RunTree {
@@ -1175,27 +1177,93 @@ mod encode {
                 ReplicaRuns::new(replica_id, indices, &self.gtree).encode(buf);
             }
 
-            // todo!("encode the inodes of the Gtree");
+            let inodes = self.gtree.inodes();
+
+            Int::new(inodes.len() as u64).encode(buf);
+
+            for inode in inodes {
+                inode.encode(buf);
+            }
+
+            self.gtree.root_idx().encode(buf);
         }
+    }
+
+    pub(crate) enum RunTreeDecodeError {
+        Bool(BoolDecodeError),
+        Int(IntDecodeError),
+    }
+
+    impl From<BoolDecodeError> for RunTreeDecodeError {
+        #[inline(always)]
+        fn from(err: BoolDecodeError) -> Self {
+            Self::Bool(err)
+        }
+    }
+
+    impl From<IntDecodeError> for RunTreeDecodeError {
+        #[inline(always)]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Int(err)
+        }
+    }
+
+    impl core::fmt::Display for RunTreeDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            match self {
+                Self::Bool(err) => err.fmt(f),
+                Self::Int(err) => err.fmt(f),
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct RunTreeDecodeCtx {
+        lnodes: Vec<Lnode<EditRun>>,
+        run_indices: RunIndices,
+        replica_indices: Vec<(Fragments, Length)>,
+        fragments: Fragments,
+        replica_id: ReplicaId,
+        run_ts: RunTs,
+        temporal_offset: Length,
     }
 
     impl Decode for RunTree {
         type Value = Self;
 
-        type Error = IntDecodeError;
+        type Error = RunTreeDecodeError;
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (mut num_replicas, rest) = Int::<u64>::decode(buf)?;
+            let (num_replicas, mut buf) = Int::<u64>::decode(buf)?;
 
-            let mut lnodes = Vec::<Lnode<EditRun>>::new();
+            let mut ctx = RunTreeDecodeCtx::default();
 
-            while num_replicas > 0 {
-                todo!();
-                num_replicas -= 1;
+            for _ in 0..num_replicas {
+                ((), buf) = ReplicaRuns::decode(buf, &mut ctx)?;
+                ctx.replica_indices.clear();
             }
 
-            todo!();
+            let RunTreeDecodeCtx { lnodes, run_indices, .. } = ctx;
+
+            let (num_inodes, mut buf) = Int::<u64>::decode(buf)?;
+
+            let mut inodes = Vec::new();
+
+            for _ in 0..num_inodes {
+                let (inode, new_buf) = Inode::decode(buf)?;
+                inodes.push(inode);
+                buf = new_buf;
+            }
+
+            let (root_idx, buf) = InodeIdx::decode(buf)?;
+
+            let gtree = Gtree::new(inodes, lnodes, root_idx);
+
+            let this = Self { gtree, run_indices };
+
+            Ok((this, buf))
         }
     }
 
@@ -1220,11 +1288,45 @@ mod encode {
         #[inline(always)]
         fn encode(&self, buf: &mut Vec<u8>) {
             Int::new(self.replica_id).encode(buf);
-            Int::new(self.runs.len()).encode(buf);
+            Int::new(self.runs.len() as RunTs).encode(buf);
 
             for (fragments, _) in self.runs.iter() {
                 RunFragments::new(fragments, self.gtree).encode(buf);
             }
+        }
+    }
+
+    impl DecodeWithCtx for ReplicaRuns<'_> {
+        type Value = ();
+
+        type Error = RunTreeDecodeError;
+
+        type Ctx = RunTreeDecodeCtx;
+
+        #[inline]
+        fn decode<'buf>(
+            buf: &'buf [u8],
+            ctx: &mut Self::Ctx,
+        ) -> Result<(Self::Value, &'buf [u8]), Self::Error> {
+            let (replica_id, buf) = Int::<ReplicaId>::decode(buf)?;
+
+            let (num_runs, mut buf) = Int::<RunTs>::decode(buf)?;
+
+            ctx.replica_id = replica_id;
+
+            ctx.temporal_offset = 0;
+
+            for run_ts in 0..num_runs {
+                ctx.run_ts = run_ts;
+                ((), buf) = RunFragments::decode(buf, ctx)?;
+            }
+
+            let indices = mem::take(&mut ctx.replica_indices);
+
+            *ctx.run_indices.get_mut(replica_id) =
+                ReplicaIndices::new(indices);
+
+            Ok(((), buf))
         }
     }
 
@@ -1243,11 +1345,39 @@ mod encode {
     impl Encode for RunFragments<'_> {
         #[inline(always)]
         fn encode(&self, buf: &mut Vec<u8>) {
-            Int::new(self.fragments.len()).encode(buf);
+            Int::new(self.fragments.len() as u64).encode(buf);
 
             for fragment in self.fragments.iter() {
                 RunFragment::new(fragment.leaf_idx(), self.gtree).encode(buf);
             }
+        }
+    }
+
+    impl DecodeWithCtx for RunFragments<'_> {
+        type Value = ();
+
+        type Error = RunTreeDecodeError;
+
+        type Ctx = RunTreeDecodeCtx;
+
+        #[inline]
+        fn decode<'buf>(
+            buf: &'buf [u8],
+            ctx: &mut Self::Ctx,
+        ) -> Result<(Self::Value, &'buf [u8]), Self::Error> {
+            let (num_fragments, mut buf) = Int::<u64>::decode(buf)?;
+
+            let initial_temporal_offset = ctx.temporal_offset;
+
+            for _ in 0..num_fragments {
+                ((), buf) = RunFragment::decode(buf, ctx)?;
+            }
+
+            let fragments = mem::take(&mut ctx.fragments);
+
+            ctx.replica_indices.push((fragments, initial_temporal_offset));
+
+            Ok(((), buf))
         }
     }
 
@@ -1276,52 +1406,17 @@ mod encode {
         }
     }
 
-    enum RunFragmentDecodeError {
-        Bool(BoolDecodeError),
-        Int(IntDecodeError),
-    }
-
-    impl From<BoolDecodeError> for RunFragmentDecodeError {
-        #[inline(always)]
-        fn from(err: BoolDecodeError) -> Self {
-            Self::Bool(err)
-        }
-    }
-
-    impl From<IntDecodeError> for RunFragmentDecodeError {
-        #[inline(always)]
-        fn from(err: IntDecodeError) -> Self {
-            Self::Int(err)
-        }
-    }
-
-    impl core::fmt::Display for RunFragmentDecodeError {
-        #[inline]
-        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            match self {
-                Self::Bool(err) => err.fmt(f),
-                Self::Int(err) => err.fmt(f),
-            }
-        }
-    }
-
-    struct RunFragmentDecodeCtx {
-        replica_id: ReplicaId,
-        run_ts: RunTs,
-        temporal_offset: Length,
-    }
-
     impl DecodeWithCtx for RunFragment<'_> {
-        type Value = (Lnode<EditRun>, Fragment);
+        type Value = ();
 
-        type Error = RunFragmentDecodeError;
+        type Error = RunTreeDecodeError;
 
-        type Ctx = RunFragmentDecodeCtx;
+        type Ctx = RunTreeDecodeCtx;
 
         #[inline]
         fn decode<'buf>(
             buf: &'buf [u8],
-            ctx: &Self::Ctx,
+            ctx: &mut Self::Ctx,
         ) -> Result<(Self::Value, &'buf [u8]), Self::Error> {
             let (len, buf) = Int::<Length>::decode(buf)?;
             let (lamport_ts, buf) = Int::<LamportTs>::decode(buf)?;
@@ -1329,19 +1424,22 @@ mod encode {
             let (leaf_idx, buf) = LeafIdx::<EditRun>::decode(buf)?;
             let (parent_idx, buf) = InodeIdx::decode(buf)?;
 
-            let temporal_range =
-                ctx.temporal_offset..ctx.temporal_offset + len;
+            ctx.fragments.append(Fragment::new(len, leaf_idx));
 
-            let text = Text::new(ctx.replica_id, temporal_range);
+            let temporal_start = ctx.temporal_offset;
+
+            ctx.temporal_offset += len;
+
+            let temporal_end = ctx.temporal_offset;
+
+            let text = Text::new(ctx.replica_id, temporal_start..temporal_end);
 
             let edit_run =
                 EditRun::new(text, ctx.run_ts, lamport_ts, is_deleted);
 
-            let lnode = Lnode::new(edit_run, parent_idx);
+            ctx.lnodes.push(Lnode::new(edit_run, parent_idx));
 
-            let fragment = Fragment::new(len, leaf_idx);
-
-            Ok(((lnode, fragment), buf))
+            Ok(((), buf))
         }
     }
 }

@@ -27,7 +27,7 @@ pub(crate) trait DecodeWithCtx {
     /// TODO: docs
     fn decode<'buf>(
         buf: &'buf [u8],
-        ctx: &Self::Ctx,
+        ctx: &mut Self::Ctx,
     ) -> Result<(Self::Value, &'buf [u8]), Self::Error>;
 }
 

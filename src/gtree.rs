@@ -479,6 +479,14 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         )
     }
 
+    /// Creates a new Gtree with the given leaf as its first leaf.
+    #[inline]
+    pub fn from_first_leaf(first_leaf: L) -> (Self, LeafIdx<L>) {
+        let mut this = Self::uninit();
+        let idx = this.initialize(first_leaf);
+        (this, idx)
+    }
+
     /// Creates a new Gtree with from an iterator over some leaves and the
     /// total length of the all the leaves the iterator will yield.
     ///
@@ -519,6 +527,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     #[inline(always)]
     pub fn leaf(&self, leaf_idx: LeafIdx<L>) -> &L {
         self.lnode(leaf_idx).value()
+    }
+
+    #[inline(always)]
+    pub fn inodes(&self) -> &[Inode<ARITY, L>] {
+        &self.inodes
     }
 
     /// Inserts a leaf at the given offset. The offset must be strictly
@@ -663,11 +676,13 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// Creates a new Gtree with the given leaf as its first leaf.
-    #[inline]
-    pub fn new(first_leaf: L) -> (Self, LeafIdx<L>) {
-        let mut this = Self::uninit();
-        let idx = this.initialize(first_leaf);
-        (this, idx)
+    #[inline(always)]
+    pub fn new(
+        inodes: Vec<Inode<ARITY, L>>,
+        lnodes: Vec<Lnode<L>>,
+        root_idx: InodeIdx,
+    ) -> Self {
+        Self { inodes, lnodes, root_idx, cursor: None }
     }
 
     /// Returns the index of the leaf that's directly after the leaf at the
@@ -2207,6 +2222,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.root_idx = new_root_idx;
     }
 
+    #[inline(always)]
+    pub(crate) fn root_idx(&self) -> InodeIdx {
+        self.root_idx
+    }
+
     #[inline]
     fn root_mut(&mut self) -> &mut Inode<ARITY, L> {
         self.inode_mut(self.root_idx)
@@ -2226,14 +2246,9 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     ///
     /// Once you have the first leaf makes sure to call [`initialize`] before
     /// calling any other methods on the Gtree.
-    #[inline]
+    #[inline(always)]
     fn uninit() -> Self {
-        Self {
-            inodes: Vec::new(),
-            lnodes: Vec::new(),
-            root_idx: InodeIdx::dangling(),
-            cursor: None,
-        }
+        Self::new(Vec::new(), Vec::new(), InodeIdx::dangling())
     }
 
     #[inline]
@@ -2404,7 +2419,7 @@ type ChildIdx = usize;
 
 /// An internal node of the Gtree.
 #[derive(Clone)]
-struct Inode<const ARITY: usize, L: Leaf> {
+pub(crate) struct Inode<const ARITY: usize, L: Leaf> {
     /// The total len of this node, which is the sum of the lengths of
     /// all of its children.
     tot_len: L::Length,
@@ -3522,6 +3537,24 @@ mod encode {
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
             let (idx, rest) = Int::<usize>::decode(buf)?;
             Ok((Self::new(idx), rest))
+        }
+    }
+
+    impl<const N: usize, L: Leaf> Encode for Inode<N, L> {
+        #[inline]
+        fn encode(&self, _buf: &mut Vec<u8>) {
+            todo!();
+        }
+    }
+
+    impl<const N: usize, L: Leaf> Decode for Inode<N, L> {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline]
+        fn decode(_buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            todo!();
         }
     }
 }

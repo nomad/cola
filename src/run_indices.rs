@@ -5,7 +5,7 @@ use crate::*;
 
 /// A data structure used when merging remote edits to efficiently map
 /// an [`Anchor`] to the [`LeafIdx`] of the [`EditRun`] that contains it.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunIndices {
     map: ReplicaIdMap<ReplicaIndices>,
@@ -39,7 +39,7 @@ impl RunIndices {
 
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
-        self.map.entry(id).or_insert_with(ReplicaIndices::new)
+        self.map.entry(id).or_default()
     }
 
     /// Returns the [`LeafIdx`] of the [`EditRun`] that contains the given
@@ -73,7 +73,7 @@ impl RunIndices {
 
 /// Contains the [`LeafIdx`]s of all the [`EditRun`]s that have been inserted
 /// by a given `Replica`.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ReplicaIndices {
     /// The [`Fragments`] are stored sequentially and in order of insertion.
@@ -83,6 +83,9 @@ pub(crate) struct ReplicaIndices {
     /// increase the length of the last [`Fragments`].
     ///
     /// Once that run ends we append new [`Fragments`], and so on.
+    ///
+    /// The `Length` field in the tuple is the cumulative length of all the
+    /// previous [`Fragments`] up to but not including the current one.
     vec: Vec<(Fragments, Length)>,
 }
 
@@ -121,7 +124,7 @@ impl ReplicaIndices {
     pub fn append(&mut self, len: Length, idx: LeafIdx<EditRun>) {
         let fragment = Fragment::new(len, idx);
 
-        let new_last = Fragments::new(fragment);
+        let new_last = Fragments::from_first_fragment(fragment);
 
         let (last_offset, last_len) = self
             .vec
@@ -198,9 +201,9 @@ impl ReplicaIndices {
         splits.move_len_to_prev_split(split_at_offset - *offset, len_moved);
     }
 
-    #[inline]
-    fn new() -> Self {
-        Self { vec: Vec::new() }
+    #[inline(always)]
+    pub(crate) fn new(vec: Vec<(Fragments, Length)>) -> Self {
+        Self { vec }
     }
 
     #[inline]
@@ -253,6 +256,17 @@ mod fragments {
                     .entries(gtree.leaves_from_first().map(|(_, split)| split))
                     .finish(),
             }
+        }
+    }
+
+    impl<const N: usize> Default for Fragments<N> {
+        #[inline]
+        fn default() -> Self {
+            Self::Array(Array {
+                fragments: [Fragment::null(); N],
+                len: 0,
+                total_len: 0,
+            })
         }
     }
 
@@ -335,6 +349,13 @@ mod fragments {
         }
 
         #[inline]
+        pub fn from_first_fragment(fragment: Fragment) -> Self {
+            let mut this = Self::default();
+            this.append(fragment);
+            this
+        }
+
+        #[inline]
         pub fn iter(&self) -> FragmentsIter<'_, INLINE> {
             match self {
                 Self::Array(array) => {
@@ -411,14 +432,6 @@ mod fragments {
                     });
                 },
             }
-        }
-
-        #[inline]
-        pub fn new(first_split: Fragment) -> Self {
-            let mut array = [Fragment::null(); INLINE];
-            let total_len = first_split.len;
-            array[0] = first_split;
-            Self::Array(Array { fragments: array, len: 1, total_len })
         }
 
         #[inline]
