@@ -429,6 +429,14 @@ mod fragments {
         }
 
         #[inline]
+        pub(crate) fn num_fragments(&self) -> usize {
+            match self {
+                Self::Array(array) => array.len,
+                Self::Gtree(gtree) => gtree.num_leaves(),
+            }
+        }
+
+        #[inline]
         pub fn split(&mut self, at_offset: Length, new_idx: LeafIdx<EditRun>) {
             match self {
                 Fragments::Array(array) => {

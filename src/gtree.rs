@@ -518,6 +518,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     #[inline(always)]
+    pub fn num_leaves(&self) -> usize {
+        self.lnodes.len()
+    }
+
+    #[inline(always)]
     pub fn inodes(&self) -> &[Inode<ARITY, L>] {
         &self.inodes
     }

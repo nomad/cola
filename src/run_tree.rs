@@ -1319,7 +1319,7 @@ mod encode {
     impl Encode for RunFragments<'_> {
         #[inline(always)]
         fn encode(&self, buf: &mut Vec<u8>) {
-            (self.fragments.len() as u64).encode(buf);
+            (self.fragments.num_fragments() as u64).encode(buf);
 
             for fragment in self.fragments.iter() {
                 RunFragment::new(fragment.leaf_idx(), self.gtree).encode(buf);
