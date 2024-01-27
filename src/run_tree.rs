@@ -1074,38 +1074,6 @@ impl EditRun {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Diff {
-    Add(Length),
-    Subtract(Length),
-}
-
-impl gtree::Length for Length {
-    type Diff = Diff;
-
-    #[inline]
-    fn zero() -> Self {
-        0
-    }
-
-    #[inline]
-    fn diff(from: Self, to: Self) -> Diff {
-        if from < to {
-            Diff::Add(to - from)
-        } else {
-            Diff::Subtract(from - to)
-        }
-    }
-
-    #[inline]
-    fn apply_diff(&mut self, diff: Diff) {
-        match diff {
-            Diff::Add(add) => *self += add,
-            Diff::Subtract(sub) => *self -= sub,
-        }
-    }
-}
-
 impl gtree::Join for EditRun {
     #[inline]
     fn append(&mut self, other: Self) -> Result<(), Self> {
@@ -1136,10 +1104,8 @@ impl gtree::Delete for EditRun {
 }
 
 impl gtree::Leaf for EditRun {
-    type Length = Length;
-
     #[inline]
-    fn len(&self) -> Self::Length {
+    fn len(&self) -> Length {
         self.visible_len()
     }
 }

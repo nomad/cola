@@ -465,10 +465,8 @@ mod fragments {
     impl<const N: usize> gtree::Join for Fragments<N> {}
 
     impl<const N: usize> gtree::Leaf for Fragments<N> {
-        type Length = Length;
-
         #[inline]
-        fn len(&self) -> Self::Length {
+        fn len(&self) -> Length {
             self.len()
         }
     }
@@ -808,10 +806,8 @@ impl Fragment {
 impl gtree::Join for Fragment {}
 
 impl gtree::Leaf for Fragment {
-    type Length = Length;
-
     #[inline]
-    fn len(&self) -> Self::Length {
+    fn len(&self) -> Length {
         self.len
     }
 }
