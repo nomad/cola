@@ -1128,3 +1128,92 @@ pub(crate) type DebugAsBtree<'a> =
 
 pub(crate) type DebugAsSelf<'a> =
     gtree::DebugAsSelf<'a, RUN_TREE_ARITY, EditRun>;
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::encode::{Encode, Int};
+    use crate::run_indices::{Fragment, Fragments, ReplicaIndices};
+
+    impl Encode for RunTree {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            for (&replica_id, indices) in self.run_indices.iter() {
+                let runs = ReplicaRuns::new(replica_id, indices, &self.gtree);
+                runs.encode(buf);
+            }
+
+            todo!("encode the inodes of the Gtree");
+        }
+    }
+
+    struct ReplicaRuns<'a> {
+        gtree: &'a Gtree,
+        _replica_id: ReplicaId,
+        runs: &'a ReplicaIndices,
+    }
+
+    impl<'a> ReplicaRuns<'a> {
+        #[inline(always)]
+        fn new(
+            replica_id: ReplicaId,
+            indices: &'a ReplicaIndices,
+            gtree: &'a Gtree,
+        ) -> Self {
+            Self { _replica_id: replica_id, runs: indices, gtree }
+        }
+    }
+
+    impl Encode for ReplicaRuns<'_> {
+        #[inline(always)]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.runs.len()).encode(buf);
+
+            for (fragments, _) in self.runs.iter() {
+                let fragments = RunFragments::new(fragments, self.gtree);
+                fragments.encode(buf);
+            }
+        }
+    }
+
+    struct RunFragments<'a> {
+        fragments: &'a Fragments,
+        gtree: &'a Gtree,
+    }
+
+    impl<'a> RunFragments<'a> {
+        #[inline(always)]
+        fn new(fragments: &'a Fragments, gtree: &'a Gtree) -> Self {
+            Self { fragments, gtree }
+        }
+    }
+
+    impl Encode for RunFragments<'_> {
+        #[inline(always)]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            for fragment in self.fragments.iter() {
+                let fragment = RunFragment::new(fragment, self.gtree);
+                fragment.encode(buf);
+            }
+        }
+    }
+
+    struct RunFragment<'a> {
+        _fragment: &'a Fragment,
+        _gtree: &'a Gtree,
+    }
+
+    impl<'a> RunFragment<'a> {
+        #[inline(always)]
+        fn new(fragment: &'a Fragment, gtree: &'a Gtree) -> Self {
+            Self { _fragment: fragment, _gtree: gtree }
+        }
+    }
+
+    impl Encode for RunFragment<'_> {
+        #[inline(always)]
+        fn encode(&self, _buf: &mut Vec<u8>) {
+            todo!();
+        }
+    }
+}
