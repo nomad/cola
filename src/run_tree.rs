@@ -1128,7 +1128,7 @@ mod encode {
         Encode,
         IntDecodeError,
     };
-    use crate::gtree::{Inode, InodeIdx, Lnode};
+    use crate::gtree::{encode::InodeDecodeError, Inode, InodeIdx, Lnode};
     use crate::run_indices::{Fragment, Fragments, ReplicaIndices};
 
     impl Encode for RunTree {
@@ -1156,6 +1156,7 @@ mod encode {
 
     pub(crate) enum RunTreeDecodeError {
         Bool(BoolDecodeError),
+        Inode(InodeDecodeError),
         Int(IntDecodeError),
     }
 
@@ -1163,6 +1164,13 @@ mod encode {
         #[inline(always)]
         fn from(err: BoolDecodeError) -> Self {
             Self::Bool(err)
+        }
+    }
+
+    impl From<InodeDecodeError> for RunTreeDecodeError {
+        #[inline(always)]
+        fn from(err: InodeDecodeError) -> Self {
+            Self::Inode(err)
         }
     }
 
@@ -1176,10 +1184,13 @@ mod encode {
     impl core::fmt::Display for RunTreeDecodeError {
         #[inline]
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            match self {
-                Self::Bool(err) => err.fmt(f),
-                Self::Int(err) => err.fmt(f),
-            }
+            let err: &dyn core::fmt::Display = match self {
+                Self::Bool(err) => err,
+                Self::Inode(err) => err,
+                Self::Int(err) => err,
+            };
+
+            write!(f, "RunTree: couldn't be decoded: {err}")
         }
     }
 

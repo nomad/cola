@@ -3485,9 +3485,9 @@ mod iter {
 }
 
 #[cfg(feature = "encode")]
-mod encode {
+pub(crate) mod encode {
     use super::*;
-    use crate::encode::{Decode, Encode, IntDecodeError};
+    use crate::encode::{BoolDecodeError, Decode, Encode, IntDecodeError};
 
     impl Encode for InodeIdx {
         #[inline]
@@ -3548,22 +3548,84 @@ mod encode {
 
     impl<const N: usize, L: Leaf> Encode for Inode<N, L>
     where
-        L::Length: Encode,
+        Length: Encode,
     {
         #[inline]
-        fn encode(&self, _buf: &mut Vec<u8>) {
-            todo!();
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.tot_len.encode(buf);
+            self.parent.encode(buf);
+            self.num_children.encode(buf);
+            self.has_leaves.encode(buf);
+
+            match self.children() {
+                Either::Internal(inode_idxs) => {
+                    for idx in inode_idxs {
+                        idx.encode(buf);
+                    }
+                },
+
+                Either::Leaf(leaf_idxs) => {
+                    for idx in leaf_idxs {
+                        idx.encode(buf);
+                    }
+                },
+            }
         }
     }
 
-    impl<const N: usize, L: Leaf> Decode for Inode<N, L> {
+    pub(crate) enum InodeDecodeError {
+        Bool(BoolDecodeError),
+        Int(IntDecodeError),
+    }
+
+    impl From<BoolDecodeError> for InodeDecodeError {
+        #[inline]
+        fn from(err: BoolDecodeError) -> Self {
+            Self::Bool(err)
+        }
+    }
+
+    impl From<IntDecodeError> for InodeDecodeError {
+        #[inline]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Int(err)
+        }
+    }
+
+    impl core::fmt::Display for InodeDecodeError {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let err: &dyn core::fmt::Display = match self {
+                Self::Bool(err) => err,
+                Self::Int(err) => err,
+            };
+
+            write!(f, "Inode couldn't be decoded: {err}")
+        }
+    }
+
+    impl<const N: usize, L: Leaf> Decode for Inode<N, L>
+    where
+        Length: Decode,
+    {
         type Value = Self;
 
-        type Error = IntDecodeError;
+        type Error = InodeDecodeError;
 
         #[inline]
-        fn decode(_buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            todo!();
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (tot_len, buf) = Length::decode(buf)?;
+            let (parent, buf) = InodeIdx::decode(buf)?;
+            let (num_children, buf) = usize::decode(buf)?;
+            let (has_leaves, mut buf) = bool::decode(buf)?;
+            let mut children = [NodeIdx::dangling(); N];
+            for idx in 0..num_children {
+                let (node_idx, new_buf) = NodeIdx::decode(buf)?;
+                children[idx] = node_idx;
+                buf = new_buf;
+            }
+            let this =
+                Self { tot_len, parent, num_children, has_leaves, children };
+            Ok((this, buf))
         }
     }
 }
