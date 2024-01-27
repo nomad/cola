@@ -16,6 +16,54 @@ pub(crate) trait Decode {
     fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error>;
 }
 
+impl Encode for bool {
+    #[inline]
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.push(*self as u8);
+    }
+}
+
+impl Decode for bool {
+    type Value = bool;
+
+    type Error = BoolDecodeError;
+
+    #[inline]
+    fn decode(buf: &[u8]) -> Result<(bool, &[u8]), Self::Error> {
+        let (&byte, buf) =
+            buf.split_first().ok_or(BoolDecodeError::EmptyBuffer)?;
+
+        match byte {
+            0 => Ok((false, buf)),
+            1 => Ok((true, buf)),
+            _ => Err(BoolDecodeError::InvalidByte(byte)),
+        }
+    }
+}
+
+pub(crate) enum BoolDecodeError {
+    EmptyBuffer,
+    InvalidByte(u8),
+}
+
+impl core::fmt::Display for BoolDecodeError {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EmptyBuffer => f.write_str(
+                "bool couldn't be decoded because the buffer is empty",
+            ),
+            Self::InvalidByte(byte) => {
+                write!(
+                    f,
+                    "bool cannot be decoded from byte {}, it must be 0 or 1",
+                    byte,
+                )
+            },
+        }
+    }
+}
+
 /// A variable-length encoded integer.
 ///
 /// This is a newtype around integers that can be `Encode`d using a variable

@@ -94,7 +94,13 @@ impl Insertion {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::encode::{Decode, Encode, Int, IntDecodeError};
+    use crate::encode::{
+        BoolDecodeError,
+        Decode,
+        Encode,
+        Int,
+        IntDecodeError,
+    };
 
     impl Insertion {
         #[inline]
@@ -138,7 +144,7 @@ mod encode {
 
     pub(crate) enum InsertionDecodeError {
         Int(IntDecodeError),
-        Run(InsertionRunDecodeError),
+        Run(BoolDecodeError),
     }
 
     impl From<IntDecodeError> for InsertionDecodeError {
@@ -148,9 +154,9 @@ mod encode {
         }
     }
 
-    impl From<InsertionRunDecodeError> for InsertionDecodeError {
+    impl From<BoolDecodeError> for InsertionDecodeError {
         #[inline]
-        fn from(err: InsertionRunDecodeError) -> Self {
+        fn from(err: BoolDecodeError) -> Self {
             Self::Run(err)
         }
     }
@@ -254,55 +260,23 @@ mod encode {
     impl Encode for InsertionRun {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
-            let is_continuation = matches!(self, Self::ContinuesExisting);
-            buf.push(is_continuation as u8);
-        }
-    }
-
-    pub(crate) enum InsertionRunDecodeError {
-        EmptyBuffer,
-        InvalidByte(u8),
-    }
-
-    impl core::fmt::Display for InsertionRunDecodeError {
-        #[inline]
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            match self {
-                Self::EmptyBuffer => f.write_str(
-                    "InsertionRun couldn't be decoded because the buffer is \
-                     empty",
-                ),
-                Self::InvalidByte(byte) => {
-                    write!(
-                        f,
-                        "InsertionRun cannot be decoded from byte {}, it \
-                         must be 0 or 1",
-                        byte,
-                    )
-                },
-            }
+            matches!(self, Self::ContinuesExisting).encode(buf);
         }
     }
 
     impl Decode for InsertionRun {
         type Value = Self;
 
-        type Error = InsertionRunDecodeError;
+        type Error = BoolDecodeError;
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (&first_byte, rest) = buf
-                .split_first()
-                .ok_or(InsertionRunDecodeError::EmptyBuffer)?;
-
-            let this = match first_byte {
-                0 => Self::BeginsNew,
-                1 => Self::ContinuesExisting,
-                other => {
-                    return Err(InsertionRunDecodeError::InvalidByte(other))
-                },
+            let (is_continuation, rest) = bool::decode(buf)?;
+            let this = if is_continuation {
+                Self::ContinuesExisting
+            } else {
+                Self::BeginsNew
             };
-
             Ok((this, rest))
         }
     }
