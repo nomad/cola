@@ -135,7 +135,7 @@ pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
 /// get access to the inode.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-struct InodeIdx(usize);
+pub(crate) struct InodeIdx(usize);
 
 impl InodeIdx {
     /// Returns a "dangling" index which doesn't point to any inode of the
@@ -737,6 +737,12 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         }
 
         offset
+    }
+
+    /// Returns the [`InodeIdx`] of the parent node of the given leaf.
+    #[inline(always)]
+    pub fn parent(&self, leaf_idx: LeafIdx<L>) -> InodeIdx {
+        self.lnode(leaf_idx).parent()
     }
 
     /// Prepends a new leaf node to start of the Gtree, returning its newly
@@ -3472,6 +3478,50 @@ mod iter {
             let leaf = self.gtree.leaf(first);
             self.leaf_idxs = rest;
             Some((first, leaf))
+        }
+    }
+}
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::encode::{Decode, Encode, Int, IntDecodeError};
+
+    impl Encode for InodeIdx {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.0).encode(buf);
+        }
+    }
+
+    impl Decode for InodeIdx {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (idx, rest) = Int::<usize>::decode(buf)?;
+            Ok((Self(idx), rest))
+        }
+    }
+
+    impl<L> Encode for LeafIdx<L> {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.idx).encode(buf);
+        }
+    }
+
+    impl<L> Decode for LeafIdx<L> {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (idx, rest) = Int::<usize>::decode(buf)?;
+            Ok((Self::new(idx), rest))
         }
     }
 }
