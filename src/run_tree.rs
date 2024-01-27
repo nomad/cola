@@ -1133,14 +1133,13 @@ pub(crate) type DebugAsSelf<'a> =
 mod encode {
     use super::*;
     use crate::encode::{Encode, Int};
-    use crate::run_indices::{Fragment, Fragments, ReplicaIndices};
+    use crate::run_indices::{Fragments, ReplicaIndices};
 
     impl Encode for RunTree {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
             for (&replica_id, indices) in self.run_indices.iter() {
-                let runs = ReplicaRuns::new(replica_id, indices, &self.gtree);
-                runs.encode(buf);
+                ReplicaRuns::new(replica_id, indices, &self.gtree).encode(buf);
             }
 
             todo!("encode the inodes of the Gtree");
@@ -1148,30 +1147,30 @@ mod encode {
     }
 
     struct ReplicaRuns<'a> {
-        gtree: &'a Gtree,
-        _replica_id: ReplicaId,
+        replica_id: ReplicaId,
         runs: &'a ReplicaIndices,
+        gtree: &'a Gtree,
     }
 
     impl<'a> ReplicaRuns<'a> {
         #[inline(always)]
         fn new(
             replica_id: ReplicaId,
-            indices: &'a ReplicaIndices,
+            runs: &'a ReplicaIndices,
             gtree: &'a Gtree,
         ) -> Self {
-            Self { _replica_id: replica_id, runs: indices, gtree }
+            Self { replica_id, runs, gtree }
         }
     }
 
     impl Encode for ReplicaRuns<'_> {
         #[inline(always)]
         fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.replica_id).encode(buf);
             Int::new(self.runs.len()).encode(buf);
 
             for (fragments, _) in self.runs.iter() {
-                let fragments = RunFragments::new(fragments, self.gtree);
-                fragments.encode(buf);
+                RunFragments::new(fragments, self.gtree).encode(buf);
             }
         }
     }
@@ -1191,29 +1190,35 @@ mod encode {
     impl Encode for RunFragments<'_> {
         #[inline(always)]
         fn encode(&self, buf: &mut Vec<u8>) {
+            Int::new(self.fragments.len()).encode(buf);
+
             for fragment in self.fragments.iter() {
-                let fragment = RunFragment::new(fragment, self.gtree);
-                fragment.encode(buf);
+                RunFragment::new(fragment.leaf_idx(), self.gtree).encode(buf);
             }
         }
     }
 
     struct RunFragment<'a> {
-        _fragment: &'a Fragment,
-        _gtree: &'a Gtree,
+        leaf_idx: LeafIdx<EditRun>,
+        gtree: &'a Gtree,
     }
 
     impl<'a> RunFragment<'a> {
         #[inline(always)]
-        fn new(fragment: &'a Fragment, gtree: &'a Gtree) -> Self {
-            Self { _fragment: fragment, _gtree: gtree }
+        fn new(leaf_idx: LeafIdx<EditRun>, gtree: &'a Gtree) -> Self {
+            Self { leaf_idx, gtree }
         }
     }
 
     impl Encode for RunFragment<'_> {
         #[inline(always)]
-        fn encode(&self, _buf: &mut Vec<u8>) {
-            todo!();
+        fn encode(&self, buf: &mut Vec<u8>) {
+            let edit_run = self.gtree.leaf(self.leaf_idx);
+            Int::new(edit_run.text.len()).encode(buf);
+            Int::new(edit_run.lamport_ts).encode(buf);
+            edit_run.is_deleted.encode(buf);
+            self.leaf_idx.encode(buf);
+            self.gtree.parent(self.leaf_idx).encode(buf);
         }
     }
 }

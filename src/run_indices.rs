@@ -768,6 +768,11 @@ impl Fragment {
         *self == Self::null()
     }
 
+    #[inline(always)]
+    pub(crate) fn leaf_idx(&self) -> LeafIdx<EditRun> {
+        self.idx
+    }
+
     #[inline]
     fn new(len: Length, idx: LeafIdx<EditRun>) -> Self {
         Self { idx, len }
