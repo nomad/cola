@@ -60,7 +60,8 @@ impl RunIndices {
     #[inline]
     pub(crate) fn iter(
         &self,
-    ) -> impl Iterator<Item = (&ReplicaId, &ReplicaIndices)> + '_ {
+    ) -> impl ExactSizeIterator<Item = (&ReplicaId, &ReplicaIndices)> + '_
+    {
         self.map.iter()
     }
 
@@ -774,7 +775,7 @@ impl Fragment {
     }
 
     #[inline]
-    fn new(len: Length, idx: LeafIdx<EditRun>) -> Self {
+    pub(crate) fn new(len: Length, idx: LeafIdx<EditRun>) -> Self {
         Self { idx, len }
     }
 

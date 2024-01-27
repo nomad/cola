@@ -16,6 +16,21 @@ pub(crate) trait Decode {
     fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error>;
 }
 
+/// TODO: docs
+pub(crate) trait DecodeWithCtx {
+    type Value: Sized;
+
+    type Error: Display;
+
+    type Ctx;
+
+    /// TODO: docs
+    fn decode<'buf>(
+        buf: &'buf [u8],
+        ctx: &Self::Ctx,
+    ) -> Result<(Self::Value, &'buf [u8]), Self::Error>;
+}
+
 impl Encode for bool {
     #[inline]
     fn encode(&self, buf: &mut Vec<u8>) {

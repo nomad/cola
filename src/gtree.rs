@@ -2732,7 +2732,7 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
 /// A leaf node of the Gtree.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
-struct Lnode<Leaf> {
+pub(crate) struct Lnode<Leaf> {
     /// The value of this leaf node.
     value: Leaf,
 
@@ -2747,7 +2747,7 @@ impl<L: Leaf> Lnode<L> {
     }
 
     #[inline(always)]
-    fn new(value: L, parent: InodeIdx) -> Self {
+    pub(crate) fn new(value: L, parent: InodeIdx) -> Self {
         Self { value, parent }
     }
 

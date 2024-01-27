@@ -880,8 +880,11 @@ impl Replica {
 
         let initial_text = Text::new(id, 0..len);
 
-        let first_run =
-            EditRun::new(initial_text, run_clock.next(), lamport_clock.next());
+        let first_run = EditRun::new_visible(
+            initial_text,
+            run_clock.next(),
+            lamport_clock.next(),
+        );
 
         let run_tree = RunTree::new(first_run);
 
