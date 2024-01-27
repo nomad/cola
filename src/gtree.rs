@@ -142,7 +142,7 @@ impl InodeIdx {
     ///
     /// 2. For the root node, to indicate that it has no parent.
     #[inline]
-    const fn dangling() -> Self {
+    pub(crate) const fn dangling() -> Self {
         Self(usize::MAX)
     }
 
@@ -182,8 +182,13 @@ impl<L> LeafIdx<L> {
     /// Returns a "dangling" index which doesn't point to any leaf of the
     /// Gtree.
     #[inline]
-    pub const fn dangling() -> Self {
+    pub(crate) const fn dangling() -> Self {
         Self::new(usize::MAX)
+    }
+
+    #[inline]
+    pub(crate) fn into_usize(self) -> usize {
+        self.idx
     }
 
     #[inline]

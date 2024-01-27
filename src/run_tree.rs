@@ -1129,12 +1129,26 @@ mod encode {
     use crate::gtree::{encode::InodeDecodeError, Inode, InodeIdx, Lnode};
     use crate::run_indices::{Fragment, Fragments, ReplicaIndices};
 
+    impl EditRun {
+        #[inline(always)]
+        fn dummy() -> Self {
+            Self {
+                text: Text::new(0, 0..0),
+                run_ts: 0,
+                lamport_ts: 0,
+                is_deleted: false,
+            }
+        }
+    }
+
     impl Encode for RunTree {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
             let indices = self.run_indices.iter();
 
             (indices.len() as u64).encode(buf);
+
+            (self.gtree.num_leaves() as u64).encode(buf);
 
             for (&replica_id, indices) in indices {
                 ReplicaRuns::new(replica_id, indices, &self.gtree).encode(buf);
@@ -1210,9 +1224,16 @@ mod encode {
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (num_replicas, mut buf) = u64::decode(buf)?;
+            let (num_replicas, buf) = u64::decode(buf)?;
+
+            let (num_leaves, mut buf) = u64::decode(buf)?;
 
             let mut ctx = RunTreeDecodeCtx::default();
+
+            let dummy_lnode =
+                Lnode::new(EditRun::dummy(), InodeIdx::dangling());
+
+            ctx.lnodes.resize(num_leaves as usize, dummy_lnode);
 
             for _ in 0..num_replicas {
                 ((), buf) = ReplicaRuns::decode(buf, &mut ctx)?;
@@ -1411,7 +1432,8 @@ mod encode {
             let edit_run =
                 EditRun::new(text, ctx.run_ts, lamport_ts, is_deleted);
 
-            ctx.lnodes.push(Lnode::new(edit_run, parent_idx));
+            ctx.lnodes[leaf_idx.into_usize()] =
+                Lnode::new(edit_run, parent_idx);
 
             Ok(((), buf))
         }
