@@ -6,7 +6,6 @@ use crate::*;
 /// A data structure used when merging remote edits to efficiently map
 /// an [`Anchor`] to the [`LeafIdx`] of the [`EditRun`] that contains it.
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunIndices {
     map: ReplicaIdMap<ReplicaIndices>,
 }
@@ -74,7 +73,6 @@ impl RunIndices {
 /// Contains the [`LeafIdx`]s of all the [`EditRun`]s that have been inserted
 /// by a given `Replica`.
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct ReplicaIndices {
     /// The [`Fragments`] are stored sequentially and in order of insertion.
     ///
@@ -232,10 +230,6 @@ mod fragments {
 
     /// The `Fragment`s that an insertion run has been fragmented into.
     #[derive(Clone, PartialEq)]
-    #[cfg_attr(
-        feature = "encode",
-        derive(serde::Serialize, serde::Deserialize)
-    )]
     pub(crate) enum Fragments<const INLINE: usize> {
         /// The first `INLINE` fragments are stored inline to avoid
         /// allocating a `Gtree` for runs that are not heavily fragmented.
@@ -623,141 +617,10 @@ mod fragments {
             crate::insert_in_slice(fragments, new_fragment, idx + 1);
         }
     }
-
-    #[cfg(feature = "encode")]
-    mod array_serde {
-        use serde::ser::SerializeMap;
-        use serde::{de, ser};
-
-        use super::*;
-
-        impl<const N: usize> ser::Serialize for Array<N> {
-            fn serialize<S: ser::Serializer>(
-                &self,
-                serializer: S,
-            ) -> Result<S::Ok, S::Error> {
-                let mut map = serializer.serialize_map(Some(3))?;
-                map.serialize_entry("fragments", self.fragments())?;
-                map.serialize_entry("len", &self.len)?;
-                map.serialize_entry("total_len", &self.total_len)?;
-                map.end()
-            }
-        }
-
-        impl<'de, const N: usize> de::Deserialize<'de> for Array<N> {
-            fn deserialize<D: de::Deserializer<'de>>(
-                deserializer: D,
-            ) -> Result<Self, D::Error> {
-                struct ArrayVisitor<const N: usize>;
-
-                impl<'de, const N: usize> de::Visitor<'de> for ArrayVisitor<N> {
-                    type Value = Array<N>;
-
-                    #[inline]
-                    fn expecting(
-                        &self,
-                        formatter: &mut core::fmt::Formatter,
-                    ) -> core::fmt::Result {
-                        formatter.write_str("a map representing an Array")
-                    }
-
-                    #[inline]
-                    fn visit_map<V: de::MapAccess<'de>>(
-                        self,
-                        mut map: V,
-                    ) -> Result<Self::Value, V::Error> {
-                        let mut len = None;
-                        let mut total_len = None;
-                        let mut fragments_vec = None;
-
-                        while let Some(key) = map.next_key()? {
-                            match key {
-                                "len" => {
-                                    if len.is_some() {
-                                        return Err(
-                                            de::Error::duplicate_field("len"),
-                                        );
-                                    }
-                                    len = Some(map.next_value()?);
-                                },
-
-                                "total_len" => {
-                                    if total_len.is_some() {
-                                        return Err(
-                                            de::Error::duplicate_field(
-                                                "total_len",
-                                            ),
-                                        );
-                                    }
-                                    total_len = Some(map.next_value()?);
-                                },
-
-                                "fragments" => {
-                                    if fragments_vec.is_some() {
-                                        return Err(
-                                            de::Error::duplicate_field(
-                                                "fragments",
-                                            ),
-                                        );
-                                    }
-                                    fragments_vec = Some(
-                                        map.next_value::<Vec<Fragment>>()?,
-                                    );
-                                },
-
-                                _ => {
-                                    return Err(de::Error::unknown_field(
-                                        key,
-                                        &["fragments", "len", "total_len"],
-                                    ));
-                                },
-                            }
-                        }
-
-                        let len = len
-                            .ok_or_else(|| de::Error::missing_field("len"))?;
-
-                        let total_len = total_len.ok_or_else(|| {
-                            de::Error::missing_field("total_len")
-                        })?;
-
-                        let fragments_vec =
-                            fragments_vec.ok_or_else(|| {
-                                de::Error::missing_field("fragments")
-                            })?;
-
-                        if fragments_vec.len() != len {
-                            return Err(de::Error::invalid_length(
-                                fragments_vec.len(),
-                                &len.to_string().as_str(),
-                            ));
-                        }
-
-                        if fragments_vec.len() > N {
-                            return Err(de::Error::invalid_length(
-                                fragments_vec.len(),
-                                &format!("no more than {N}").as_str(),
-                            ));
-                        }
-
-                        let mut fragments = [Fragment::null(); N];
-
-                        fragments[..len]
-                            .copy_from_slice(fragments_vec.as_slice());
-
-                        Ok(Array { fragments, len, total_len })
-                    }
-                }
-
-                deserializer.deserialize_map(ArrayVisitor)
-            }
-        }
-    }
 }
 
 /// The length and [`LeafIdx`] of a fragment of a single insertion run.
 #[derive(Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Fragment {
     len: Length,
     idx: LeafIdx<EditRun>,

@@ -10,7 +10,6 @@ const RUN_TREE_ARITY: usize = 32;
 type Gtree = crate::Gtree<RUN_TREE_ARITY, EditRun>;
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct RunTree {
     /// The tree of runs.
     gtree: Gtree,
@@ -844,7 +843,6 @@ impl RunTree {
 
 /// TODO: docs
 #[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct EditRun {
     /// TODO: docs
     text: Text,
@@ -1418,4 +1416,10 @@ mod encode {
             Ok(((), buf))
         }
     }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_serialize!(super::RunTree);
+    crate::encode::impl_deserialize!(super::RunTree);
 }
