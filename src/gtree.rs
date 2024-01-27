@@ -3527,6 +3527,25 @@ mod encode {
         }
     }
 
+    impl<L> Encode for NodeIdx<L> {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.into_usize().encode(buf);
+        }
+    }
+
+    impl<L> Decode for NodeIdx<L> {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (idx, rest) = usize::decode(buf)?;
+            Ok((Self::from_internal(InodeIdx(idx)), rest))
+        }
+    }
+
     impl<const N: usize, L: Leaf> Encode for Inode<N, L>
     where
         L::Length: Encode,
