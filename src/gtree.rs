@@ -99,7 +99,7 @@ const _NODE_IDX_LAYOUT_CHECK: usize = {
 /// which the internal and leaf nodes are stored in memory.
 ///
 /// TODO: finish describing the data structure.
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     /// The internal nodes of the Gtree.
     ///
@@ -2391,6 +2391,29 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             },
 
             _ => (None, None, None),
+        }
+    }
+}
+
+impl<const N: usize, const M: usize, L: Leaf> PartialEq<Gtree<M, L>>
+    for Gtree<N, L>
+where
+    L: PartialEq,
+{
+    #[inline]
+    fn eq(&self, other: &Gtree<M, L>) -> bool {
+        let mut this = self.leaves_from_first();
+        let mut other = other.leaves_from_first();
+        loop {
+            match (this.next(), other.next()) {
+                (None, None) => return true,
+                (Some((_, this)), Some((_, other))) => {
+                    if this != other {
+                        return false;
+                    }
+                },
+                _ => return false,
+            }
         }
     }
 }
