@@ -410,7 +410,7 @@ impl Replica {
             mut version_map,
             mut deletion_map,
             backlog,
-        )) = encode::decode(encoded.bytes())
+        )) = old_encode::decode(encoded.bytes())
         else {
             return Err(DecodeError::InvalidData);
         };
@@ -516,7 +516,7 @@ impl Replica {
     #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[inline]
     pub fn encode(&self) -> EncodedReplica {
-        let bytes = encode::encode(self);
+        let bytes = old_encode::encode(self);
         let checksum = checksum(&bytes);
         EncodedReplica::new(PROTOCOL_VERSION, checksum, bytes)
     }
@@ -1045,6 +1045,48 @@ pub type DeletionTs = u64;
 
 #[cfg(feature = "encode")]
 mod encode {
+    use super::*;
+    use crate::encode::{Decode, Encode, IntDecodeError};
+
+    impl Encode for LamportClock {
+        #[inline(always)]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.0.encode(buf)
+        }
+    }
+
+    impl Decode for LamportClock {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline(always)]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), IntDecodeError> {
+            LamportTs::decode(buf).map(|(ts, buf)| (Self(ts), buf))
+        }
+    }
+
+    impl Encode for RunClock {
+        #[inline(always)]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.0.encode(buf)
+        }
+    }
+
+    impl Decode for RunClock {
+        type Value = Self;
+
+        type Error = IntDecodeError;
+
+        #[inline(always)]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), IntDecodeError> {
+            RunTs::decode(buf).map(|(ts, buf)| (Self(ts), buf))
+        }
+    }
+}
+
+#[cfg(feature = "encode")]
+mod old_encode {
     use serde::{de, ser};
 
     use super::*;
