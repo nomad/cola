@@ -111,6 +111,16 @@ impl InsertionsBacklog {
 
         self.insertions.insert(offset, insertion);
     }
+
+    #[inline(always)]
+    fn iter(&self) -> impl Iterator<Item = &Insertion> + '_ {
+        self.insertions.iter()
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.insertions.len()
+    }
 }
 
 /// Stores the backlogged [`Deletion`]s of a particular replica.
@@ -158,6 +168,16 @@ impl DeletionsBacklog {
             .unwrap_err();
 
         self.deletions.insert(offset, deletion);
+    }
+
+    #[inline(always)]
+    fn iter(&self) -> impl Iterator<Item = &Deletion> + '_ {
+        self.deletions.iter()
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.deletions.len()
     }
 }
 
@@ -282,3 +302,85 @@ impl Iterator for BackloggedInsertions<'_> {
 }
 
 impl core::iter::FusedIterator for BackloggedInsertions<'_> {}
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::encode::Encode;
+
+    impl Encode for Backlog {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            for (id, insertions) in &self.insertions {
+                ReplicaIdInsertions::new(*id, insertions).encode(buf);
+            }
+            for (id, deletions) in &self.deletions {
+                ReplicaIdDeletions::new(*id, deletions).encode(buf);
+            }
+        }
+    }
+
+    struct ReplicaIdInsertions<'a> {
+        replica_id: ReplicaId,
+        insertions: &'a InsertionsBacklog,
+    }
+
+    impl<'a> ReplicaIdInsertions<'a> {
+        #[inline]
+        fn new(
+            replica_id: ReplicaId,
+            insertions: &'a InsertionsBacklog,
+        ) -> Self {
+            Self { replica_id, insertions }
+        }
+    }
+
+    impl Encode for ReplicaIdInsertions<'_> {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.replica_id.encode(buf);
+
+            (self.insertions.len() as u64).encode(buf);
+
+            for insertion in self.insertions.iter() {
+                insertion.anchor().encode(buf);
+                let range = insertion.text().temporal_range();
+                range.start.encode(buf);
+                range.len().encode(buf);
+                insertion.run_ts().encode(buf);
+                insertion.lamport_ts().encode(buf);
+            }
+        }
+    }
+
+    struct ReplicaIdDeletions<'a> {
+        replica_id: ReplicaId,
+        deletions: &'a DeletionsBacklog,
+    }
+
+    impl<'a> ReplicaIdDeletions<'a> {
+        #[inline]
+        fn new(
+            replica_id: ReplicaId,
+            deletions: &'a DeletionsBacklog,
+        ) -> Self {
+            Self { replica_id, deletions }
+        }
+    }
+
+    impl Encode for ReplicaIdDeletions<'_> {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.replica_id.encode(buf);
+
+            (self.deletions.len() as u64).encode(buf);
+
+            for deletion in self.deletions.iter() {
+                deletion.start().encode(buf);
+                deletion.end().encode(buf);
+                deletion.version_map().encode(buf);
+                deletion.deletion_ts().encode(buf);
+            }
+        }
+    }
+}
