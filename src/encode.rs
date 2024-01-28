@@ -79,74 +79,76 @@ impl core::fmt::Display for BoolDecodeError {
     }
 }
 
-#[allow(dead_code)]
-struct Int<I>(I);
+// When encoding integers we use a variable-length encoding scheme that aims to
+// minimize the number of bytes used to encode small integers, where small is
+// approx < 2 ^ 16.
+//
+// There are 3 separate branches based on how big the integer is:
+//
+// - if the integer is between 0 and 63, we can encode it with 6 bits. In this
+//   case we use the lower 6 bits of the first byte, and set the 2 highest bits
+//   to `01`;
+//
+// - if the integer is between 64 and 2 ^ 15 - 1, we can encode it with 15
+//   bits. In this case we use the lower 7 bits of the first byte and all the
+//   bits of the second byte. The highest bit of the first byte is set to `1`;
+//
+// - if the integer is greater than 2 ^ 15 - 1, we use the first byte to encode
+//   the number of bytes used to encode the integer, and then we encode the
+//   integer itself in little endian, throwing away any trailing zeros.
+//
+// With this scheme we can encode integers up to 63 with 1 byte, integers up
+// to 2 ^ 15 - 1 with 2 bytes, and integers greater than 2 ^ 15 - 1 with 3
+// or more bytes.
 
-/// An error that can occur when decoding an [`Int`].
-#[cfg_attr(test, derive(PartialEq, Eq))]
-pub(crate) enum IntDecodeError {
-    /// The buffer passed to `Int::decode` is empty. This is always an error,
-    /// even if the integer being decoded is zero.
-    EmptyBuffer,
+const ENCODE_ONE_BYTE_MASK: u8 = 0b0100_0000;
 
-    /// The actual byte length of the buffer is less than what was specified
-    /// in the prefix.
-    LengthLessThanPrefix { prefix: u8, actual: u8 },
+const ENCODE_TWO_BYTES_MASK: u8 = 0b1000_0000;
+
+const LAST_BIT_MASK: u8 = 0b1000_0000;
+
+#[inline(always)]
+fn encode_one_byte(int: u8) -> u8 {
+    debug_assert!(int < 1 << 6);
+    int | ENCODE_ONE_BYTE_MASK
 }
 
-impl Display for IntDecodeError {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::EmptyBuffer => f.write_str(
-                "Int couldn't be decoded because the buffer is empty",
-            ),
-            Self::LengthLessThanPrefix { prefix, actual } => {
-                write!(
-                    f,
-                    "Int couldn't be decoded because the buffer's length is \
-                     {actual}, but the prefix specified a length of {prefix}",
-                )
-            },
-        }
-    }
+#[inline(always)]
+fn decode_one_byte(int: u8) -> u8 {
+    int & !ENCODE_ONE_BYTE_MASK
 }
 
-// When encoding integers, we:
-//
-// - turn the integer into the corresponding little-endian byte array. The
-//   resulting array will have a fixed length equal to `mem::size_of::<I>`;
-//
-// - ignore any trailing zeroes in the resulting byte array;
-//
-// - push the length of the resulting byte slice;
-//
-// - push the byte slice;
-//
-// For example, `256u64` gets encoded as `[2, 0, 1]`.
-//
-// With this scheme we could potentially encode integers up to
-// `2 ^ (255 * 8) - 1`, which is ridiculously overkill for our use case since
-// we only need to encode integers up to `u64::MAX`.
-//
-// Because of this, we actually use the first byte to encode the integer
-// itself if it's either 0 or between 9 and 255. We don't do this for 1..=8
-// because we need to reserve those to represent the number of bytes that
-// follow.
-//
-// A few examples:
-//
-// - `0` is encoded as `[0]`;
-//
-// - `1` is encoded as `[1, 1]`;
-//
-// - `8` is encoded as `[1, 8]`;
-//
-// - `9` is encoded as `[9]`;
-//
-// - `255` is encoded as `[255]`;
-//
-// - numbers greater than 255 are always encoded as `[length, ..bytes..]`.
+#[inline(always)]
+fn encode_two_bytes(int: u16) -> (u8, u8) {
+    debug_assert!((1 << 6..1 << 15).contains(&int));
+
+    let [mut lo, mut hi] = int.to_le_bytes();
+
+    // Move the last bit of the low byte to the last bit of the high byte.
+    //
+    // We know this doesn't lose any information because the int is less than
+    // 2 ^ 15, so the last bit of the high byte is 0.
+    hi |= lo & LAST_BIT_MASK;
+
+    // Set the last bit of the low byte to 1 to indicate that this number is
+    // encoded with 2 bytes.
+    lo |= ENCODE_TWO_BYTES_MASK;
+
+    (lo, hi)
+}
+
+#[inline(always)]
+fn decode_two_bytes(mut lo: u8, mut hi: u8) -> u16 {
+    lo &= !ENCODE_TWO_BYTES_MASK;
+
+    // Move the last bit of the high byte to the last bit of the low byte.
+    lo |= hi & LAST_BIT_MASK;
+
+    // Reset the last bit of the high byte to 0.
+    hi &= !LAST_BIT_MASK;
+
+    u16::from_le_bytes([lo, hi])
+}
 
 impl_int_encode!(u16);
 impl_int_encode!(u32);
@@ -181,10 +183,13 @@ macro_rules! impl_int_encode {
             fn encode(&self, buf: &mut Vec<u8>) {
                 let int = *self;
 
-                // We can encode the entire integer with a single byte if it
-                // falls within this range.
-                if int == 0 || (int > 8 && int <= u8::MAX as $ty) {
-                    buf.push(int as u8);
+                if int < 1 << 6 {
+                    buf.push(encode_one_byte(int as u8));
+                    return;
+                } else if int < 1 << 15 {
+                    let (first, second) = encode_two_bytes(int as u16);
+                    buf.push(first);
+                    buf.push(second);
                     return;
                 }
 
@@ -198,6 +203,9 @@ macro_rules! impl_int_encode {
                     .count();
 
                 let len = array.len() - num_trailing_zeros;
+
+                // Make sure that the first 2 bits are 0.
+                debug_assert_eq!(len & 0b1100_0000, 0);
 
                 buf.push(len as u8);
 
@@ -218,13 +226,28 @@ macro_rules! impl_int_decode {
 
             #[inline]
             fn decode(buf: &[u8]) -> Result<($ty, &[u8]), Self::Error> {
-                let (&len, buf) =
+                let (&first, buf) =
                     buf.split_first().ok_or(IntDecodeError::EmptyBuffer)?;
 
-                if len == 0 || len > 8 {
-                    let int = len as $ty;
+                if first & ENCODE_TWO_BYTES_MASK != 0 {
+                    let lo = first;
+
+                    let (&hi, buf) = buf.split_first().ok_or(
+                        IntDecodeError::LengthLessThanPrefix {
+                            prefix: 2,
+                            actual: 1,
+                        },
+                    )?;
+
+                    let int = decode_two_bytes(lo, hi) as $ty;
+
+                    return Ok((int, buf));
+                } else if first & ENCODE_ONE_BYTE_MASK != 0 {
+                    let int = decode_one_byte(first) as $ty;
                     return Ok((int, buf));
                 }
+
+                let len = first;
 
                 if len as usize > buf.len() {
                     return Err(IntDecodeError::LengthLessThanPrefix {
@@ -248,6 +271,37 @@ macro_rules! impl_int_decode {
 }
 
 use impl_int_decode;
+
+/// An error that can occur when decoding an [`Int`].
+#[cfg_attr(test, derive(PartialEq, Eq))]
+pub(crate) enum IntDecodeError {
+    /// The buffer passed to `Int::decode` is empty. This is always an error,
+    /// even if the integer being decoded is zero.
+    EmptyBuffer,
+
+    /// The actual byte length of the buffer is less than what was specified
+    /// in the prefix.
+    LengthLessThanPrefix { prefix: u8, actual: u8 },
+}
+
+impl Display for IntDecodeError {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EmptyBuffer => f.write_str(
+                "Int couldn't be decoded because the buffer is empty",
+            ),
+            Self::LengthLessThanPrefix { prefix, actual } => {
+                write!(
+                    f,
+                    "Int couldn't be decoded because the buffer's length is \
+                     {actual}, but the prefix specified a length of {prefix}",
+                )
+            },
+        }
+    }
+}
+
 #[cfg(feature = "serde")]
 pub(crate) use serde::{impl_deserialize, impl_serialize};
 
@@ -352,11 +406,9 @@ mod tests {
     /// Tests that some integers can be encoded with a single byte.
     #[test]
     fn encode_int_single_byte() {
-        let ints = core::iter::once(0).chain(9..=u8::MAX as u64);
-
         let mut buf = Vec::new();
 
-        for int in ints {
+        for int in 0..1 << 6 {
             int.encode(&mut buf);
             assert_eq!(buf.len(), 1);
             let (decoded, rest) = u64::decode(&buf).unwrap();
@@ -369,8 +421,37 @@ mod tests {
     /// Tests that integers are encoded using the correct number of bytes.
     #[test]
     fn encode_int_num_bytes() {
+        fn expected_len(int: u64) -> u8 {
+            if int < 1 << 6 {
+                1
+            } else if int < 1 << 15 {
+                2
+            } else if int < 1 << 16 {
+                3
+            } else if int < 1 << 24 {
+                4
+            } else if int < 1 << 32 {
+                5
+            } else if int < 1 << 40 {
+                6
+            } else if int < 1 << 48 {
+                7
+            } else if int < 1 << 56 {
+                8
+            } else {
+                9
+            }
+        }
+
         let ints = (1..=8).chain([
-            u8::MAX as u64 + 1,
+            0,
+            (1 << 6) - 1,
+            1 << 6,
+            (1 << 6) + 1,
+            (1 << 15) - 1,
+            1 << 15,
+            (1 << 15) + 1,
+            u16::MAX as u64 - 1,
             u16::MAX as u64,
             u16::MAX as u64 + 1,
             u32::MAX as u64,
@@ -380,26 +461,10 @@ mod tests {
 
         let mut buf = Vec::new();
 
-        // The highest number that can be represented with this many bytes.
-        let max_num_with_n_bytes = |n_bytes: u8| {
-            let bits = n_bytes * 8;
-            // We use a u128 here to avoid overlowing if `n_bytes` is 8.
-            ((1u128 << bits) - 1) as u64
-        };
-
         for int in ints {
             int.encode(&mut buf);
 
-            let expected_len = (1..=8)
-                .map(|n_bytes| (n_bytes, max_num_with_n_bytes(n_bytes)))
-                .find_map(|(n_bytes, max_for_bytes)| {
-                    (int <= max_for_bytes).then_some(n_bytes)
-                })
-                .unwrap();
-
-            assert_eq!(buf[0], expected_len);
-
-            assert_eq!(buf[1..].len() as u8, expected_len);
+            assert_eq!(buf.len(), expected_len(int) as usize);
 
             let (decoded, rest) = u64::decode(&buf).unwrap();
 
@@ -411,7 +476,7 @@ mod tests {
         }
     }
 
-    /// Tests that decoding an `Int` fails if the buffer is empty.
+    /// Tests that decoding an integer fails if the buffer is empty.
     #[test]
     fn encode_int_fails_if_buffer_empty() {
         let mut buf = Vec::new();
@@ -426,13 +491,13 @@ mod tests {
         );
     }
 
-    /// Tests that decoding an `Int` fails if the length specified in the
+    /// Tests that decoding an integer fails if the length specified in the
     /// prefix is greater than the actual length of the buffer.
     #[test]
     fn encode_int_fails_if_buffer_too_short() {
         let mut buf = Vec::new();
 
-        (u8::MAX as u16 + 1).encode(&mut buf);
+        u16::MAX.encode(&mut buf);
 
         buf.pop();
 

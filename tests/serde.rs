@@ -164,25 +164,25 @@ mod serde {
         );
     }
 
-    // `cargo t --features=serde serde_automerge_json_sizes -- --nocapture`
+    // `cargo t --release --features=serde serde_automerge_json_sizes -- --nocapture`
     #[test]
     fn serde_automerge_json_sizes() {
         serde_sizes::<SerdeJson>(&traces::automerge());
     }
 
-    // `cargo t --features=serde serde_automerge_bincode_sizes -- --nocapture`
+    // `cargo t --release --features=serde serde_automerge_bincode_sizes -- --nocapture`
     #[test]
     fn serde_automerge_bincode_sizes() {
         serde_sizes::<Bincode>(&traces::automerge());
     }
 
-    // `cargo t --features=serde serde_automerge_compressed_json_sizes -- --nocapture`
+    // `cargo t --release --features=serde serde_automerge_compressed_json_sizes -- --nocapture`
     #[test]
     fn serde_automerge_compressed_json_sizes() {
         serde_sizes::<Zstd<SerdeJson>>(&traces::automerge());
     }
 
-    // `cargo t --features=serde serde_automerge_compressed_bincode_sizes -- --nocapture`
+    // `cargo t --release --features=serde serde_automerge_compressed_bincode_sizes -- --nocapture`
     #[test]
     fn serde_automerge_compressed_bincode_sizes() {
         serde_sizes::<Zstd<Bincode>>(&traces::automerge());
