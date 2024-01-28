@@ -10,10 +10,6 @@ pub type VersionMap = BaseMap<Length>;
 /// of the local `Replica` (and the corresponding `T`) stored separately from
 /// the `HashMap` itself.
 #[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 pub struct BaseMap<T> {
     /// The `ReplicaId` of the `Replica` that this map is used in.
     this_id: ReplicaId,
@@ -154,4 +150,93 @@ impl PartialOrd for VersionMap {
 
         update_order(iter, order)
     }
+}
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::encode::{Decode, Encode, IntDecodeError};
+
+    impl<T: Encode> Encode for BaseMap<T> {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.this_id.encode(buf);
+            self.this_value.encode(buf);
+            (self.rest.len() as u64).encode(buf);
+            for (id, value) in self.rest.iter() {
+                id.encode(buf);
+                value.encode(buf);
+            }
+        }
+    }
+
+    pub(crate) enum BaseMapDecodeError<T: Decode> {
+        Key(IntDecodeError),
+        Value(T::Error),
+    }
+
+    impl<T: Decode> From<IntDecodeError> for BaseMapDecodeError<T> {
+        #[inline(always)]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Key(err)
+        }
+    }
+
+    impl<T: Decode> core::fmt::Display for BaseMapDecodeError<T> {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let err: &dyn core::fmt::Display = match self {
+                Self::Key(err) => err,
+                Self::Value(err) => err,
+            };
+
+            write!(
+                f,
+                "BaseMap<{:?}>: couldn't be decoded: {err}",
+                core::any::type_name::<T>()
+            )
+        }
+    }
+
+    impl<T: Decode<Value = T>> Decode for BaseMap<T> {
+        type Value = Self;
+
+        type Error = BaseMapDecodeError<T>;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error> {
+            let (this_id, buf) = ReplicaId::decode(buf)?;
+
+            let (this_value, buf) =
+                T::decode(buf).map_err(BaseMapDecodeError::Value)?;
+
+            let (rest_len, mut buf) = u64::decode(buf)?;
+
+            let mut rest = ReplicaIdMap::default();
+
+            for _ in 0..rest_len {
+                let (id, new_buf) = ReplicaId::decode(buf)?;
+
+                let (value, new_buf) =
+                    T::decode(new_buf).map_err(BaseMapDecodeError::Value)?;
+
+                rest.insert(id, value);
+
+                buf = new_buf;
+            }
+
+            let this = Self { this_id, this_value, rest };
+
+            Ok((this, buf))
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_serialize!(super::DeletionMap);
+    crate::encode::impl_deserialize!(super::DeletionMap);
+
+    crate::encode::impl_serialize!(super::VersionMap);
+    crate::encode::impl_deserialize!(super::VersionMap);
 }
