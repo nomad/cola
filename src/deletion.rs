@@ -82,3 +82,113 @@ impl Deletion {
         &self.version_map
     }
 }
+
+#[cfg(feature = "encode")]
+mod encode {
+    use super::*;
+    use crate::encode::{Decode, Encode, IntDecodeError};
+    use crate::version_map::encode::BaseMapDecodeError;
+
+    impl Encode for Deletion {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            Anchors::new(&self.start, &self.end).encode(buf);
+            self.version_map.encode(buf);
+            self.deletion_ts.encode(buf);
+        }
+    }
+
+    pub(crate) enum DeletionDecodeError {
+        Anchors(AnchorsDecodeError),
+        Int(IntDecodeError),
+        VersionMap(BaseMapDecodeError<Length>),
+    }
+
+    impl From<AnchorsDecodeError> for DeletionDecodeError {
+        #[inline(always)]
+        fn from(err: AnchorsDecodeError) -> Self {
+            Self::Anchors(err)
+        }
+    }
+
+    impl From<IntDecodeError> for DeletionDecodeError {
+        #[inline(always)]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Int(err)
+        }
+    }
+
+    impl From<BaseMapDecodeError<Length>> for DeletionDecodeError {
+        #[inline(always)]
+        fn from(err: BaseMapDecodeError<Length>) -> Self {
+            Self::VersionMap(err)
+        }
+    }
+
+    impl core::fmt::Display for DeletionDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let err: &dyn core::fmt::Display = match self {
+                Self::Anchors(err) => err,
+                Self::Int(err) => err,
+                Self::VersionMap(err) => err,
+            };
+
+            write!(f, "Deletion couldn't be decoded: {err}")
+        }
+    }
+
+    impl Decode for Deletion {
+        type Value = Self;
+
+        type Error = DeletionDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let ((start, end), buf) = Anchors::decode(buf)?;
+            let (version_map, buf) = VersionMap::decode(buf)?;
+            let (deletion_ts, buf) = DeletionTs::decode(buf)?;
+            let this = Self::new(start, end, version_map, deletion_ts);
+            Ok((this, buf))
+        }
+    }
+
+    /// TODO: docs
+    #[allow(dead_code)]
+    struct Anchors<'a> {
+        start: &'a Anchor,
+        end: &'a Anchor,
+    }
+
+    impl<'a> Anchors<'a> {
+        #[inline]
+        fn new(start: &'a Anchor, end: &'a Anchor) -> Self {
+            Self { start, end }
+        }
+    }
+
+    impl Encode for Anchors<'_> {
+        #[inline]
+        fn encode(&self, _buf: &mut Vec<u8>) {}
+    }
+
+    pub(crate) enum AnchorsDecodeError {}
+
+    impl core::fmt::Display for AnchorsDecodeError {
+        #[inline]
+        fn fmt(&self, _f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            todo!()
+        }
+    }
+
+    impl Decode for Anchors<'_> {
+        type Value = (Anchor, Anchor);
+
+        type Error = AnchorsDecodeError;
+
+        #[inline]
+        fn decode(_buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error> {
+            todo!();
+        }
+    }
+}
