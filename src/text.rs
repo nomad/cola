@@ -112,13 +112,13 @@ impl Text {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::encode::{Decode, Encode, Int, IntDecodeError};
+    use crate::encode::{Decode, Encode, IntDecodeError};
 
     impl Encode for Text {
         #[inline]
         fn encode(&self, buf: &mut Vec<u8>) {
-            Int::new(self.inserted_by).encode(buf);
-            Int::new(self.start()).encode(buf);
+            self.inserted_by.encode(buf);
+            self.start().encode(buf);
             // We encode the length of the text because it's often smaller than
             // its end, especially for longer editing sessions.
             //
@@ -126,7 +126,7 @@ mod encode {
             // inserted 1000 before, it's better to encode `1000, 1` rather
             // than `1000, 1001`.
             let len = self.end() - self.start();
-            Int::new(len).encode(buf);
+            len.encode(buf);
         }
     }
 
@@ -137,9 +137,9 @@ mod encode {
 
         #[inline]
         fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-            let (inserted_by, buf) = Int::<ReplicaId>::decode(buf)?;
-            let (start, buf) = Int::<usize>::decode(buf)?;
-            let (len, buf) = Int::<usize>::decode(buf)?;
+            let (inserted_by, buf) = ReplicaId::decode(buf)?;
+            let (start, buf) = usize::decode(buf)?;
+            let (len, buf) = usize::decode(buf)?;
             let text = Self { inserted_by, range: start..start + len };
             Ok((text, buf))
         }

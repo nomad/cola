@@ -8,7 +8,6 @@ use crate::*;
 ///
 /// See [`Replica::backlogged`] for more information.
 #[derive(Debug, Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Backlog {
     insertions: ReplicaIdMap<InsertionsBacklog>,
     deletions: ReplicaIdMap<DeletionsBacklog>,
@@ -69,7 +68,6 @@ impl Backlog {
 
 /// Stores the backlogged [`Insertion`]s of a particular replica.
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct InsertionsBacklog {
     insertions: VecDeque<Insertion>,
 }
@@ -115,7 +113,6 @@ impl InsertionsBacklog {
 
 /// Stores the backlogged [`Deletion`]s of a particular replica.
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct DeletionsBacklog {
     deletions: VecDeque<Deletion>,
 }
@@ -282,3 +279,276 @@ impl Iterator for BackloggedInsertions<'_> {
 }
 
 impl core::iter::FusedIterator for BackloggedInsertions<'_> {}
+
+#[cfg(feature = "encode")]
+pub(crate) mod encode {
+    use super::*;
+    use crate::encode::{Decode, DecodeWithCtx, Encode, IntDecodeError};
+    use crate::version_map::encode::BaseMapDecodeError;
+
+    impl InsertionsBacklog {
+        #[inline(always)]
+        fn iter(&self) -> impl Iterator<Item = &Insertion> + '_ {
+            self.insertions.iter()
+        }
+
+        #[inline(always)]
+        fn len(&self) -> usize {
+            self.insertions.len()
+        }
+
+        #[inline(always)]
+        fn push(&mut self, insertion: Insertion) {
+            self.insertions.push_back(insertion);
+        }
+    }
+
+    impl DeletionsBacklog {
+        #[inline(always)]
+        fn iter(&self) -> impl Iterator<Item = &Deletion> + '_ {
+            self.deletions.iter()
+        }
+
+        #[inline(always)]
+        fn len(&self) -> usize {
+            self.deletions.len()
+        }
+
+        #[inline(always)]
+        fn push(&mut self, deletion: Deletion) {
+            self.deletions.push_back(deletion);
+        }
+    }
+
+    impl Encode for Backlog {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            (self.insertions.len() as u64).encode(buf);
+
+            for (id, insertions) in &self.insertions {
+                ReplicaIdInsertions::new(*id, insertions).encode(buf);
+            }
+
+            (self.deletions.len() as u64).encode(buf);
+
+            for (id, deletions) in &self.deletions {
+                ReplicaIdDeletions::new(*id, deletions).encode(buf);
+            }
+        }
+    }
+
+    pub(crate) enum BacklogDecodeError {
+        Int(IntDecodeError),
+        VersionMap(BaseMapDecodeError<Length>),
+    }
+
+    impl From<IntDecodeError> for BacklogDecodeError {
+        #[inline(always)]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Int(err)
+        }
+    }
+
+    impl From<BaseMapDecodeError<Length>> for BacklogDecodeError {
+        #[inline(always)]
+        fn from(err: BaseMapDecodeError<Length>) -> Self {
+            Self::VersionMap(err)
+        }
+    }
+
+    impl core::fmt::Display for BacklogDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let err: &dyn core::fmt::Display = match self {
+                Self::VersionMap(err) => err,
+                Self::Int(err) => err,
+            };
+
+            write!(f, "Backlog: couldn't be decoded: {err}")
+        }
+    }
+
+    impl Decode for Backlog {
+        type Value = Self;
+
+        type Error = BacklogDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error> {
+            let (num_replicas, mut buf) = u64::decode(buf)?;
+
+            let mut insertions = ReplicaIdMap::default();
+
+            for _ in 0..num_replicas {
+                let ((), new_buf) =
+                    ReplicaIdInsertions::decode(buf, &mut insertions)?;
+                buf = new_buf;
+            }
+
+            let (num_replicas, mut buf) = u64::decode(buf)?;
+
+            let mut deletions = ReplicaIdMap::default();
+
+            for _ in 0..num_replicas {
+                let ((), new_buf) =
+                    ReplicaIdDeletions::decode(buf, &mut deletions)?;
+                buf = new_buf;
+            }
+
+            let this = Self { insertions, deletions };
+
+            Ok((this, buf))
+        }
+    }
+
+    struct ReplicaIdInsertions<'a> {
+        replica_id: ReplicaId,
+        insertions: &'a InsertionsBacklog,
+    }
+
+    impl<'a> ReplicaIdInsertions<'a> {
+        #[inline]
+        fn new(
+            replica_id: ReplicaId,
+            insertions: &'a InsertionsBacklog,
+        ) -> Self {
+            Self { replica_id, insertions }
+        }
+    }
+
+    impl Encode for ReplicaIdInsertions<'_> {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.replica_id.encode(buf);
+
+            (self.insertions.len() as u64).encode(buf);
+
+            for insertion in self.insertions.iter() {
+                insertion.anchor().encode(buf);
+                let range = insertion.text().temporal_range();
+                range.start.encode(buf);
+                range.len().encode(buf);
+                insertion.run_ts().encode(buf);
+                insertion.lamport_ts().encode(buf);
+            }
+        }
+    }
+
+    impl DecodeWithCtx for ReplicaIdInsertions<'_> {
+        type Value = ();
+
+        type Ctx = ReplicaIdMap<InsertionsBacklog>;
+
+        type Error = BacklogDecodeError;
+
+        #[inline]
+        fn decode<'buf>(
+            buf: &'buf [u8],
+            ctx: &mut Self::Ctx,
+        ) -> Result<((), &'buf [u8]), Self::Error> {
+            let (replica_id, buf) = ReplicaId::decode(buf)?;
+
+            let (num_insertions, mut buf) = u64::decode(buf)?;
+
+            let mut insertions = InsertionsBacklog::default();
+
+            for _ in 0..num_insertions {
+                let (anchor, new_buf) = InnerAnchor::decode(buf)?;
+                let (start, new_buf) = Length::decode(new_buf)?;
+                let (len, new_buf) = Length::decode(new_buf)?;
+                let (run_ts, new_buf) = RunTs::decode(new_buf)?;
+                let (lamport_ts, new_buf) = LamportTs::decode(new_buf)?;
+
+                let insertion = Insertion::new(
+                    anchor,
+                    Text::new(replica_id, start..start + len),
+                    lamport_ts,
+                    run_ts,
+                );
+
+                insertions.push(insertion);
+
+                buf = new_buf;
+            }
+
+            ctx.insert(replica_id, insertions);
+
+            Ok(((), buf))
+        }
+    }
+
+    struct ReplicaIdDeletions<'a> {
+        replica_id: ReplicaId,
+        deletions: &'a DeletionsBacklog,
+    }
+
+    impl<'a> ReplicaIdDeletions<'a> {
+        #[inline]
+        fn new(
+            replica_id: ReplicaId,
+            deletions: &'a DeletionsBacklog,
+        ) -> Self {
+            Self { replica_id, deletions }
+        }
+    }
+
+    impl Encode for ReplicaIdDeletions<'_> {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.replica_id.encode(buf);
+
+            (self.deletions.len() as u64).encode(buf);
+
+            for deletion in self.deletions.iter() {
+                deletion.start().encode(buf);
+                deletion.end().encode(buf);
+                deletion.version_map().encode(buf);
+                deletion.deletion_ts().encode(buf);
+            }
+        }
+    }
+
+    impl DecodeWithCtx for ReplicaIdDeletions<'_> {
+        type Value = ();
+
+        type Ctx = ReplicaIdMap<DeletionsBacklog>;
+
+        type Error = BacklogDecodeError;
+
+        #[inline]
+        fn decode<'buf>(
+            buf: &'buf [u8],
+            ctx: &mut Self::Ctx,
+        ) -> Result<((), &'buf [u8]), Self::Error> {
+            let (replica_id, buf) = ReplicaId::decode(buf)?;
+
+            let (num_deletions, mut buf) = u64::decode(buf)?;
+
+            let mut deletions = DeletionsBacklog::default();
+
+            for _ in 0..num_deletions {
+                let (start, new_buf) = InnerAnchor::decode(buf)?;
+                let (end, new_buf) = InnerAnchor::decode(new_buf)?;
+                let (version_map, new_buf) = VersionMap::decode(new_buf)?;
+                let (deletion_ts, new_buf) = DeletionTs::decode(new_buf)?;
+
+                let deletion =
+                    Deletion::new(start, end, version_map, deletion_ts);
+
+                deletions.push(deletion);
+
+                buf = new_buf;
+            }
+
+            ctx.insert(replica_id, deletions);
+
+            Ok(((), buf))
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_serialize!(super::Backlog);
+    crate::encode::impl_deserialize!(super::Backlog);
+}

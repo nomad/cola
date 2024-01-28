@@ -16,6 +16,69 @@ pub(crate) trait Decode {
     fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error>;
 }
 
+/// TODO: docs
+pub(crate) trait DecodeWithCtx {
+    type Value: Sized;
+
+    type Error: Display;
+
+    type Ctx;
+
+    /// TODO: docs
+    fn decode<'buf>(
+        buf: &'buf [u8],
+        ctx: &mut Self::Ctx,
+    ) -> Result<(Self::Value, &'buf [u8]), Self::Error>;
+}
+
+impl Encode for bool {
+    #[inline]
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.push(*self as u8);
+    }
+}
+
+impl Decode for bool {
+    type Value = bool;
+
+    type Error = BoolDecodeError;
+
+    #[inline]
+    fn decode(buf: &[u8]) -> Result<(bool, &[u8]), Self::Error> {
+        let (&byte, buf) =
+            buf.split_first().ok_or(BoolDecodeError::EmptyBuffer)?;
+
+        match byte {
+            0 => Ok((false, buf)),
+            1 => Ok((true, buf)),
+            _ => Err(BoolDecodeError::InvalidByte(byte)),
+        }
+    }
+}
+
+pub(crate) enum BoolDecodeError {
+    EmptyBuffer,
+    InvalidByte(u8),
+}
+
+impl core::fmt::Display for BoolDecodeError {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::EmptyBuffer => f.write_str(
+                "bool couldn't be decoded because the buffer is empty",
+            ),
+            Self::InvalidByte(byte) => {
+                write!(
+                    f,
+                    "bool cannot be decoded from byte {}, it must be 0 or 1",
+                    byte,
+                )
+            },
+        }
+    }
+}
+
 /// A variable-length encoded integer.
 ///
 /// This is a newtype around integers that can be `Encode`d using a variable
@@ -54,14 +117,8 @@ pub(crate) trait Decode {
 /// - `255` is encoded as `[255]`;
 ///
 /// - numbers greater than 255 are always encoded as `[length, ..bytes..]`.
-pub(crate) struct Int<I>(I);
-
-impl<I> Int<I> {
-    #[inline]
-    pub(crate) fn new(integer: I) -> Self {
-        Self(integer)
-    }
-}
+#[allow(dead_code)]
+struct Int<I>(I);
 
 /// An error that can occur when decoding an [`Int`].
 #[cfg_attr(test, derive(PartialEq, Eq))]
@@ -103,30 +160,30 @@ impl_int_decode!(u16);
 impl_int_decode!(u32);
 impl_int_decode!(u64);
 
-impl Encode for Int<usize> {
+impl Encode for usize {
     #[inline(always)]
     fn encode(&self, buf: &mut Vec<u8>) {
-        Int(self.0 as u64).encode(buf)
+        (*self as u64).encode(buf)
     }
 }
 
-impl Decode for Int<usize> {
+impl Decode for usize {
     type Value = usize;
 
     type Error = IntDecodeError;
 
     #[inline(always)]
     fn decode(buf: &[u8]) -> Result<(usize, &[u8]), Self::Error> {
-        Int::<u64>::decode(buf).map(|(value, rest)| (value as usize, rest))
+        u64::decode(buf).map(|(value, rest)| (value as usize, rest))
     }
 }
 
 macro_rules! impl_int_encode {
     ($ty:ty) => {
-        impl Encode for Int<$ty> {
+        impl Encode for $ty {
             #[inline]
             fn encode(&self, buf: &mut Vec<u8>) {
-                let int = self.0;
+                let int = *self;
 
                 // We can encode the entire integer with a single byte if it
                 // falls within this range.
@@ -158,8 +215,8 @@ use impl_int_encode;
 
 macro_rules! impl_int_decode {
     ($ty:ty) => {
-        impl Decode for Int<$ty> {
-            type Value = $ty;
+        impl Decode for $ty {
+            type Value = Self;
 
             type Error = $crate::encode::IntDecodeError;
 
@@ -304,9 +361,9 @@ mod tests {
         let mut buf = Vec::new();
 
         for int in ints {
-            Int::new(int).encode(&mut buf);
+            int.encode(&mut buf);
             assert_eq!(buf.len(), 1);
-            let (decoded, rest) = Int::<u64>::decode(&buf).unwrap();
+            let (decoded, rest) = u64::decode(&buf).unwrap();
             assert_eq!(int, decoded);
             assert!(rest.is_empty());
             buf.clear();
@@ -335,7 +392,7 @@ mod tests {
         };
 
         for int in ints {
-            Int::new(int).encode(&mut buf);
+            int.encode(&mut buf);
 
             let expected_len = (1..=8)
                 .map(|n_bytes| (n_bytes, max_num_with_n_bytes(n_bytes)))
@@ -348,7 +405,7 @@ mod tests {
 
             assert_eq!(buf[1..].len() as u8, expected_len);
 
-            let (decoded, rest) = Int::<u64>::decode(&buf).unwrap();
+            let (decoded, rest) = u64::decode(&buf).unwrap();
 
             assert_eq!(int, decoded);
 
@@ -363,12 +420,12 @@ mod tests {
     fn encode_int_fails_if_buffer_empty() {
         let mut buf = Vec::new();
 
-        Int::new(42u32).encode(&mut buf);
+        42u32.encode(&mut buf);
 
         buf.clear();
 
         assert_eq!(
-            Int::<u32>::decode(&buf).unwrap_err(),
+            u32::decode(&buf).unwrap_err(),
             IntDecodeError::EmptyBuffer
         );
     }
@@ -379,12 +436,12 @@ mod tests {
     fn encode_int_fails_if_buffer_too_short() {
         let mut buf = Vec::new();
 
-        Int::new(u8::MAX as u16 + 1).encode(&mut buf);
+        (u8::MAX as u16 + 1).encode(&mut buf);
 
         buf.pop();
 
         assert_eq!(
-            Int::<u32>::decode(&buf).unwrap_err(),
+            u32::decode(&buf).unwrap_err(),
             IntDecodeError::LengthLessThanPrefix { prefix: 2, actual: 1 }
         );
     }

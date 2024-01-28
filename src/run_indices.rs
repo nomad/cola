@@ -5,8 +5,7 @@ use crate::*;
 
 /// A data structure used when merging remote edits to efficiently map
 /// an [`Anchor`] to the [`LeafIdx`] of the [`EditRun`] that contains it.
-#[derive(Clone, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Default, PartialEq)]
 pub(crate) struct RunIndices {
     map: ReplicaIdMap<ReplicaIndices>,
 }
@@ -25,7 +24,7 @@ impl RunIndices {
             let mut offset = 0;
 
             for (idx, splits) in indices.splits().enumerate() {
-                for split in splits.leaves() {
+                for split in splits.iter() {
                     let run = run_tree.run(split.idx);
                     assert_eq!(replica_id, run.replica_id());
                     assert_eq!(split.len, run.len());
@@ -39,7 +38,7 @@ impl RunIndices {
 
     #[inline]
     pub fn get_mut(&mut self, id: ReplicaId) -> &mut ReplicaIndices {
-        self.map.entry(id).or_insert_with(ReplicaIndices::new)
+        self.map.entry(id).or_default()
     }
 
     /// Returns the [`LeafIdx`] of the [`EditRun`] that contains the given
@@ -58,6 +57,14 @@ impl RunIndices {
     }
 
     #[inline]
+    pub(crate) fn iter(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (&ReplicaId, &ReplicaIndices)> + '_
+    {
+        self.map.iter()
+    }
+
+    #[inline]
     pub fn new() -> Self {
         Self { map: ReplicaIdMap::default() }
     }
@@ -65,8 +72,7 @@ impl RunIndices {
 
 /// Contains the [`LeafIdx`]s of all the [`EditRun`]s that have been inserted
 /// by a given `Replica`.
-#[derive(Clone, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Default, PartialEq)]
 pub(crate) struct ReplicaIndices {
     /// The [`Fragments`] are stored sequentially and in order of insertion.
     ///
@@ -75,6 +81,9 @@ pub(crate) struct ReplicaIndices {
     /// increase the length of the last [`Fragments`].
     ///
     /// Once that run ends we append new [`Fragments`], and so on.
+    ///
+    /// The `Length` field in the tuple is the cumulative length of all the
+    /// previous [`Fragments`] up to but not including the current one.
     vec: Vec<(Fragments, Length)>,
 }
 
@@ -113,7 +122,7 @@ impl ReplicaIndices {
     pub fn append(&mut self, len: Length, idx: LeafIdx<EditRun>) {
         let fragment = Fragment::new(len, idx);
 
-        let new_last = Fragments::new(fragment);
+        let new_last = Fragments::from_first_fragment(fragment);
 
         let (last_offset, last_len) = self
             .vec
@@ -156,6 +165,13 @@ impl ReplicaIndices {
         splits.fragment_at_offset(at_offset - offset, bias).idx
     }
 
+    #[inline(always)]
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = &(Fragments, Length)> + '_ {
+        self.vec.iter()
+    }
+
     #[inline]
     pub fn len(&self) -> usize {
         self.vec.len()
@@ -183,9 +199,9 @@ impl ReplicaIndices {
         splits.move_len_to_prev_split(split_at_offset - *offset, len_moved);
     }
 
-    #[inline]
-    fn new() -> Self {
-        Self { vec: Vec::new() }
+    #[inline(always)]
+    pub(crate) fn new(vec: Vec<(Fragments, Length)>) -> Self {
+        Self { vec }
     }
 
     #[inline]
@@ -207,17 +223,13 @@ impl ReplicaIndices {
 
 const FRAGMENTS_INLINE: usize = 8;
 
-type Fragments = fragments::Fragments<FRAGMENTS_INLINE>;
+pub(crate) type Fragments = fragments::Fragments<FRAGMENTS_INLINE>;
 
 mod fragments {
     use super::*;
 
     /// The `Fragment`s that an insertion run has been fragmented into.
     #[derive(Clone, PartialEq)]
-    #[cfg_attr(
-        feature = "encode",
-        derive(serde::Serialize, serde::Deserialize)
-    )]
     pub(crate) enum Fragments<const INLINE: usize> {
         /// The first `INLINE` fragments are stored inline to avoid
         /// allocating a `Gtree` for runs that are not heavily fragmented.
@@ -238,6 +250,17 @@ mod fragments {
                     .entries(gtree.leaves_from_first().map(|(_, split)| split))
                     .finish(),
             }
+        }
+    }
+
+    impl<const N: usize> Default for Fragments<N> {
+        #[inline]
+        fn default() -> Self {
+            Self::Array(Array {
+                fragments: [Fragment::null(); N],
+                len: 0,
+                total_len: 0,
+            })
         }
     }
 
@@ -320,6 +343,26 @@ mod fragments {
         }
 
         #[inline]
+        pub fn from_first_fragment(fragment: Fragment) -> Self {
+            let mut this = Self::default();
+            this.append(fragment);
+            this
+        }
+
+        #[inline]
+        pub fn iter(&self) -> FragmentsIter<'_, INLINE> {
+            match self {
+                Self::Array(array) => {
+                    FragmentsIter::Array(array.fragments().iter())
+                },
+
+                Self::Gtree(gtree) => {
+                    FragmentsIter::Gtree(gtree.leaves_from_first())
+                },
+            }
+        }
+
+        #[inline]
         pub fn len(&self) -> Length {
             match self {
                 Self::Array(array) => array.total_len,
@@ -386,11 +429,11 @@ mod fragments {
         }
 
         #[inline]
-        pub fn new(first_split: Fragment) -> Self {
-            let mut array = [Fragment::null(); INLINE];
-            let total_len = first_split.len;
-            array[0] = first_split;
-            Self::Array(Array { fragments: array, len: 1, total_len })
+        pub(crate) fn num_fragments(&self) -> usize {
+            match self {
+                Self::Array(array) => array.len,
+                Self::Gtree(gtree) => gtree.num_leaves(),
+            }
         }
 
         #[inline]
@@ -418,6 +461,35 @@ mod fragments {
                     });
                 },
             };
+        }
+    }
+
+    impl<const N: usize> gtree::Join for Fragments<N> {}
+
+    impl<const N: usize> gtree::Leaf for Fragments<N> {
+        #[inline]
+        fn len(&self) -> Length {
+            self.len()
+        }
+    }
+
+    pub(crate) enum FragmentsIter<'a, const N: usize> {
+        Array(core::slice::Iter<'a, Fragment>),
+        Gtree(crate::gtree::Leaves<'a, N, Fragment>),
+    }
+
+    impl<'a, const N: usize> Iterator for FragmentsIter<'a, N> {
+        type Item = &'a Fragment;
+
+        #[inline]
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::Array(iter) => iter.next(),
+
+                Self::Gtree(iter) => {
+                    iter.next().map(|(_idx, fragment)| fragment)
+                },
+            }
         }
     }
 
@@ -553,183 +625,10 @@ mod fragments {
             crate::insert_in_slice(fragments, new_fragment, idx + 1);
         }
     }
-
-    #[cfg(feature = "encode")]
-    mod array_serde {
-        use serde::ser::SerializeMap;
-        use serde::{de, ser};
-
-        use super::*;
-
-        impl<const N: usize> ser::Serialize for Array<N> {
-            fn serialize<S: ser::Serializer>(
-                &self,
-                serializer: S,
-            ) -> Result<S::Ok, S::Error> {
-                let mut map = serializer.serialize_map(Some(3))?;
-                map.serialize_entry("fragments", self.fragments())?;
-                map.serialize_entry("len", &self.len)?;
-                map.serialize_entry("total_len", &self.total_len)?;
-                map.end()
-            }
-        }
-
-        impl<'de, const N: usize> de::Deserialize<'de> for Array<N> {
-            fn deserialize<D: de::Deserializer<'de>>(
-                deserializer: D,
-            ) -> Result<Self, D::Error> {
-                struct ArrayVisitor<const N: usize>;
-
-                impl<'de, const N: usize> de::Visitor<'de> for ArrayVisitor<N> {
-                    type Value = Array<N>;
-
-                    #[inline]
-                    fn expecting(
-                        &self,
-                        formatter: &mut core::fmt::Formatter,
-                    ) -> core::fmt::Result {
-                        formatter.write_str("a map representing an Array")
-                    }
-
-                    #[inline]
-                    fn visit_map<V: de::MapAccess<'de>>(
-                        self,
-                        mut map: V,
-                    ) -> Result<Self::Value, V::Error> {
-                        let mut len = None;
-                        let mut total_len = None;
-                        let mut fragments_vec = None;
-
-                        while let Some(key) = map.next_key()? {
-                            match key {
-                                "len" => {
-                                    if len.is_some() {
-                                        return Err(
-                                            de::Error::duplicate_field("len"),
-                                        );
-                                    }
-                                    len = Some(map.next_value()?);
-                                },
-
-                                "total_len" => {
-                                    if total_len.is_some() {
-                                        return Err(
-                                            de::Error::duplicate_field(
-                                                "total_len",
-                                            ),
-                                        );
-                                    }
-                                    total_len = Some(map.next_value()?);
-                                },
-
-                                "fragments" => {
-                                    if fragments_vec.is_some() {
-                                        return Err(
-                                            de::Error::duplicate_field(
-                                                "fragments",
-                                            ),
-                                        );
-                                    }
-                                    fragments_vec = Some(
-                                        map.next_value::<Vec<Fragment>>()?,
-                                    );
-                                },
-
-                                _ => {
-                                    return Err(de::Error::unknown_field(
-                                        key,
-                                        &["fragments", "len", "total_len"],
-                                    ));
-                                },
-                            }
-                        }
-
-                        let len = len
-                            .ok_or_else(|| de::Error::missing_field("len"))?;
-
-                        let total_len = total_len.ok_or_else(|| {
-                            de::Error::missing_field("total_len")
-                        })?;
-
-                        let fragments_vec =
-                            fragments_vec.ok_or_else(|| {
-                                de::Error::missing_field("fragments")
-                            })?;
-
-                        if fragments_vec.len() != len {
-                            return Err(de::Error::invalid_length(
-                                fragments_vec.len(),
-                                &len.to_string().as_str(),
-                            ));
-                        }
-
-                        if fragments_vec.len() > N {
-                            return Err(de::Error::invalid_length(
-                                fragments_vec.len(),
-                                &format!("no more than {N}").as_str(),
-                            ));
-                        }
-
-                        let mut fragments = [Fragment::null(); N];
-
-                        fragments[..len]
-                            .copy_from_slice(fragments_vec.as_slice());
-
-                        Ok(Array { fragments, len, total_len })
-                    }
-                }
-
-                deserializer.deserialize_map(ArrayVisitor)
-            }
-        }
-    }
-
-    impl<const N: usize> gtree::Join for Fragments<N> {}
-
-    impl<const N: usize> gtree::Leaf for Fragments<N> {
-        type Length = Length;
-
-        #[inline]
-        fn len(&self) -> Self::Length {
-            self.len()
-        }
-    }
-
-    impl<const N: usize> Fragments<N> {
-        #[inline]
-        pub fn leaves(&self) -> RunSplitLeaves<'_> {
-            match self {
-                Self::Array(array) => {
-                    let iter = Box::new(array.fragments().iter()) as _;
-                    RunSplitLeaves { iter }
-                },
-
-                Self::Gtree(gtree) => {
-                    let iter = Box::new(
-                        gtree.leaves_from_first().map(|(_idx, leaf)| leaf),
-                    ) as _;
-                    RunSplitLeaves { iter }
-                },
-            }
-        }
-    }
-
-    pub(crate) struct RunSplitLeaves<'a> {
-        iter: Box<dyn Iterator<Item = &'a Fragment> + 'a>,
-    }
-
-    impl<'a> Iterator for RunSplitLeaves<'a> {
-        type Item = &'a Fragment;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.iter.next()
-        }
-    }
 }
 
 /// The length and [`LeafIdx`] of a fragment of a single insertion run.
 #[derive(Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Fragment {
     len: Length,
     idx: LeafIdx<EditRun>,
@@ -752,8 +651,13 @@ impl Fragment {
         *self == Self::null()
     }
 
+    #[inline(always)]
+    pub(crate) fn leaf_idx(&self) -> LeafIdx<EditRun> {
+        self.idx
+    }
+
     #[inline]
-    fn new(len: Length, idx: LeafIdx<EditRun>) -> Self {
+    pub(crate) fn new(len: Length, idx: LeafIdx<EditRun>) -> Self {
         Self { idx, len }
     }
 
@@ -773,10 +677,8 @@ impl Fragment {
 impl gtree::Join for Fragment {}
 
 impl gtree::Leaf for Fragment {
-    type Length = Length;
-
     #[inline]
-    fn len(&self) -> Self::Length {
+    fn len(&self) -> Length {
         self.len
     }
 }

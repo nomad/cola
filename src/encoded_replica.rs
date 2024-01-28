@@ -1,11 +1,14 @@
 use sha2::{Digest, Sha256};
 
+use crate::encode::{Decode, Encode, IntDecodeError};
 use crate::*;
 
 /// We use this instead of a `Vec<u8>` because it's 1/3 the size on the stack.
 pub(crate) type Checksum = Box<ChecksumArray>;
 
 pub(crate) type ChecksumArray = [u8; 32];
+
+const CHECKSUM_LEN: usize = core::mem::size_of::<ChecksumArray>();
 
 /// A [`Replica`] encoded into a compact binary format suitable for
 /// transmission over the network.
@@ -16,7 +19,6 @@ pub(crate) type ChecksumArray = [u8; 32];
 /// more information.
 #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
 #[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EncodedReplica {
     protocol_version: ProtocolVersion,
     checksum: Checksum,
@@ -69,6 +71,100 @@ impl EncodedReplica {
     #[inline]
     pub(crate) fn protocol_version(&self) -> ProtocolVersion {
         self.protocol_version
+    }
+}
+
+impl Encode for EncodedReplica {
+    #[inline]
+    fn encode(&self, buf: &mut Vec<u8>) {
+        self.protocol_version.encode(buf);
+        buf.extend_from_slice(&*self.checksum);
+        (self.bytes.len() as u64).encode(buf);
+        buf.extend_from_slice(&*self.bytes);
+    }
+}
+
+pub(crate) enum EncodedReplicaDecodeError {
+    Int(IntDecodeError),
+    Checksum { actual: usize },
+    Bytes { actual: usize, advertised: u64 },
+}
+
+impl From<IntDecodeError> for EncodedReplicaDecodeError {
+    #[inline]
+    fn from(err: IntDecodeError) -> Self {
+        Self::Int(err)
+    }
+}
+
+impl core::fmt::Display for EncodedReplicaDecodeError {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let prefix = "Couldn't decode EncodedReplica";
+
+        match self {
+            EncodedReplicaDecodeError::Int(err) => {
+                write!(f, "{prefix}: {err}")
+            },
+
+            EncodedReplicaDecodeError::Checksum { actual } => {
+                write!(
+                    f,
+                    "{prefix}: need {CHECKSUM_LEN} bytes to decode checksum, \
+                     but there are only {actual}",
+                )
+            },
+
+            EncodedReplicaDecodeError::Bytes { actual, advertised } => {
+                write!(
+                    f,
+                    "{prefix}: {advertised} bytes were encoded, but there \
+                     are only {actual}",
+                )
+            },
+        }
+    }
+}
+
+impl Decode for EncodedReplica {
+    type Value = Self;
+
+    type Error = EncodedReplicaDecodeError;
+
+    #[inline]
+    fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+        let (protocol_version, buf) = ProtocolVersion::decode(buf)?;
+
+        if buf.len() < CHECKSUM_LEN {
+            return Err(EncodedReplicaDecodeError::Checksum {
+                actual: buf.len(),
+            });
+        }
+
+        let (checksum_slice, buf) = buf.split_at(CHECKSUM_LEN);
+
+        let mut checksum = [0; CHECKSUM_LEN];
+
+        checksum.copy_from_slice(checksum_slice);
+
+        let (num_bytes, buf) = u64::decode(buf)?;
+
+        if (buf.len() as u64) < num_bytes {
+            return Err(EncodedReplicaDecodeError::Bytes {
+                actual: buf.len(),
+                advertised: num_bytes,
+            });
+        }
+
+        let (bytes, buf) = buf.split_at(num_bytes as usize);
+
+        let this = Self {
+            protocol_version,
+            checksum: Box::new(checksum),
+            bytes: bytes.into(),
+        };
+
+        Ok((this, buf))
     }
 }
 
@@ -141,4 +237,10 @@ pub(crate) fn checksum(bytes: &[u8]) -> Checksum {
 pub(crate) fn checksum_array(bytes: &[u8]) -> ChecksumArray {
     let checksum = Sha256::digest(bytes);
     *checksum.as_ref()
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_serialize!(super::EncodedReplica);
+    crate::encode::impl_deserialize!(super::EncodedReplica);
 }
