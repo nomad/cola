@@ -4,6 +4,10 @@
 
 ### Changed
 
+- the `Serialize` impl of `EncodedReplica` now produces ~7x smaller payloads,
+  depending on the data format used
+  ([#6](https://github.com/nomad/cola/pull/6));
+
 - the `Serialize` impl of `Insertion` now produces 3-4x smaller payloads,
   depending on the data format used ([#5](https://github.com/nomad/cola/pull/5));
 
