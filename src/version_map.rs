@@ -153,7 +153,7 @@ impl PartialOrd for VersionMap {
 }
 
 #[cfg(feature = "encode")]
-mod encode {
+pub(crate) mod encode {
     use super::*;
     use crate::encode::{Decode, Encode, IntDecodeError};
 
