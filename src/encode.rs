@@ -79,47 +79,33 @@ impl core::fmt::Display for BoolDecodeError {
     }
 }
 
-// When encoding integers, we:
+// When encoding integers we use a variable-length encoding scheme that aims to
+// minimize the number of bytes used to encode small integers, where small is
+// approx < 2 ^ 16.
 //
-// - turn the integer into the corresponding little-endian byte array. The
-//   resulting array will have a fixed length equal to `mem::size_of::<I>`;
+// There are 3 separate branches based on how big the integer is:
 //
-// - ignore any trailing zeroes in the resulting byte array;
+// - if the integer is between 0 and 63, we can encode it with 6 bits. In this
+//   case we use the lower 6 bits of the first byte, and set the 2 highest bits
+//   to `01`;
 //
-// - push the length of the resulting byte slice;
+// - if the integer is between 64 and 2 ^ 15 - 1, we can encode it with 15
+//   bits. In this case we use the lower 7 bits of the first byte and all the
+//   bits of the second byte. The highest bit of the first byte is set to `1`;
 //
-// - push the byte slice;
+// - if the integer is greater than 2 ^ 15 - 1, we use the first byte to encode
+//   the number of bytes used to encode the integer, and then we encode the
+//   integer itself in little endian, throwing away any trailing zeros.
 //
-// For example, `256u64` gets encoded as `[2, 0, 1]`.
-//
-// With this scheme we could potentially encode integers up to
-// `2 ^ (255 * 8) - 1`, which is ridiculously overkill for our use case since
-// we only need to encode integers up to `u64::MAX`.
-//
-// Because of this, we actually use the first byte to encode the integer
-// itself if it's either 0 or between 9 and 255. We don't do this for 1..=8
-// because we need to reserve those to represent the number of bytes that
-// follow.
-//
-// A few examples:
-//
-// - `0` is encoded as `[0]`;
-//
-// - `1` is encoded as `[1, 1]`;
-//
-// - `8` is encoded as `[1, 8]`;
-//
-// - `9` is encoded as `[9]`;
-//
-// - `255` is encoded as `[255]`;
-//
-// - numbers greater than 255 are always encoded as `[length, ..bytes..]`.
+// With this scheme we can encode integers up to 63 with 1 byte, integers up
+// to 2 ^ 15 - 1 with 2 bytes, and integers greater than 2 ^ 15 - 1 with 3
+// or more bytes.
 
-/// TODO: docs
 const ENCODE_ONE_BYTE_MASK: u8 = 0b0100_0000;
 
-/// TODO: docs
 const ENCODE_TWO_BYTES_MASK: u8 = 0b1000_0000;
+
+const LAST_BIT_MASK: u8 = 0b1000_0000;
 
 #[inline(always)]
 fn encode_one_byte(int: u8) -> u8 {
@@ -142,7 +128,7 @@ fn encode_two_bytes(int: u16) -> (u8, u8) {
     //
     // We know this doesn't lose any information because the int is less than
     // 2 ^ 15, so the last bit of the high byte is 0.
-    hi |= lo & 0b1000_0000;
+    hi |= lo & LAST_BIT_MASK;
 
     // Set the last bit of the low byte to 1 to indicate that this number is
     // encoded with 2 bytes.
@@ -156,10 +142,10 @@ fn decode_two_bytes(mut lo: u8, mut hi: u8) -> u16 {
     lo &= !ENCODE_TWO_BYTES_MASK;
 
     // Move the last bit of the high byte to the last bit of the low byte.
-    lo |= hi & 0b1000_0000;
+    lo |= hi & LAST_BIT_MASK;
 
     // Reset the last bit of the high byte to 0.
-    hi &= !0b1000_0000;
+    hi &= !LAST_BIT_MASK;
 
     u16::from_le_bytes([lo, hi])
 }
