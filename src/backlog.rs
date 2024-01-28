@@ -281,7 +281,7 @@ impl Iterator for BackloggedInsertions<'_> {
 impl core::iter::FusedIterator for BackloggedInsertions<'_> {}
 
 #[cfg(feature = "encode")]
-mod encode {
+pub(crate) mod encode {
     use super::*;
     use crate::encode::{Decode, DecodeWithCtx, Encode, IntDecodeError};
     use crate::version_map::encode::BaseMapDecodeError;

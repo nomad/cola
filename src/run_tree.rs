@@ -1115,7 +1115,7 @@ pub(crate) type DebugAsSelf<'a> =
     gtree::DebugAsSelf<'a, RUN_TREE_ARITY, EditRun>;
 
 #[cfg(feature = "encode")]
-mod encode {
+pub(crate) mod encode {
     use core::mem;
 
     use super::*;
