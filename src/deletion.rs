@@ -10,10 +10,6 @@ use crate::*;
 ///
 /// See the documentation of those methods for more information.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 pub struct Deletion {
     /// The anchor point of the start of the deleted range.
     start: Anchor,
@@ -355,4 +351,10 @@ mod encode {
             Ok((this, buf))
         }
     }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_serialize!(super::Deletion);
+    crate::encode::impl_deserialize!(super::Deletion);
 }
