@@ -8,7 +8,6 @@ use crate::*;
 ///
 /// See [`Replica::backlogged`] for more information.
 #[derive(Debug, Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct Backlog {
     insertions: ReplicaIdMap<InsertionsBacklog>,
     deletions: ReplicaIdMap<DeletionsBacklog>,
@@ -69,7 +68,6 @@ impl Backlog {
 
 /// Stores the backlogged [`Insertion`]s of a particular replica.
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct InsertionsBacklog {
     insertions: VecDeque<Insertion>,
 }
@@ -115,7 +113,6 @@ impl InsertionsBacklog {
 
 /// Stores the backlogged [`Deletion`]s of a particular replica.
 #[derive(Clone, Default, PartialEq)]
-#[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct DeletionsBacklog {
     deletions: VecDeque<Deletion>,
 }
@@ -548,4 +545,10 @@ mod encode {
             Ok(((), buf))
         }
     }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_serialize!(super::Backlog);
+    crate::encode::impl_deserialize!(super::Backlog);
 }
