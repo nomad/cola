@@ -187,7 +187,7 @@ mod encode {
                     self.start.run_ts().encode(buf);
                     self.start.offset().encode(buf);
                     // The start and end are on the same run, so we know that
-                    // the end is after the start.
+                    // the end has a greater offset than the start.
                     let length = self.end.offset() - self.start.offset();
                     length.encode(buf);
                 },

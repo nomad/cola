@@ -4,6 +4,10 @@
 
 ### Changed
 
+- the `Serialize` impl of `Deletion` now produces ~3x smaller payloads,
+  depending on the data format used
+  ([#7](https://github.com/nomad/cola/pull/7));
+
 - the `Serialize` impl of `EncodedReplica` now produces ~7x smaller payloads,
   depending on the data format used
   ([#6](https://github.com/nomad/cola/pull/6));
