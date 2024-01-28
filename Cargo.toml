@@ -16,15 +16,11 @@ exclude = ["/.github/*", "/examples/**", "/fuzz/**", "/tests/**"]
 features = ["serde"]
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lib]
-name = "cola"
-
 [features]
-encode = ["dep:bincode", "dep:sha2", "dep:serde"]
+encode = ["dep:sha2"]
 serde = ["encode", "dep:serde"]
 
 [dependencies]
-bincode = { version = "1.3", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 sha2 = { version = "0.10", optional = true }
 
