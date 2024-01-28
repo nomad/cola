@@ -14,10 +14,6 @@ use crate::*;
 /// [`Replica::create_anchor()`][crate::Replica::create_anchor] and
 /// [`Replica::resolve_anchor()`][crate::Replica::resolve_anchor].
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 pub struct Anchor {
     /// TODO: docs
     inner: InnerAnchor,
@@ -69,10 +65,6 @@ impl Anchor {
 /// create a new [`Anchor`]. See the documentation of that method for more
 /// information.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 pub enum AnchorBias {
     /// The anchor should attach to the left.
     Left,
@@ -83,10 +75,6 @@ pub enum AnchorBias {
 
 /// TODO: docs
 #[derive(Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    any(feature = "encode", feature = "serde"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 pub(crate) struct InnerAnchor {
     /// TODO: docs
     replica_id: ReplicaId,
@@ -154,7 +142,60 @@ impl InnerAnchor {
 #[cfg(feature = "encode")]
 mod encode {
     use super::*;
-    use crate::encode::{Decode, Encode, IntDecodeError};
+    use crate::encode::{BoolDecodeError, Decode, Encode, IntDecodeError};
+
+    impl Encode for Anchor {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            self.inner.encode(buf);
+            self.bias.encode(buf);
+        }
+    }
+
+    pub(crate) enum AnchorDecodeError {
+        Bool(BoolDecodeError),
+        Int(IntDecodeError),
+    }
+
+    impl From<BoolDecodeError> for AnchorDecodeError {
+        #[inline(always)]
+        fn from(err: BoolDecodeError) -> Self {
+            Self::Bool(err)
+        }
+    }
+
+    impl From<IntDecodeError> for AnchorDecodeError {
+        #[inline(always)]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Int(err)
+        }
+    }
+
+    impl core::fmt::Display for AnchorDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let err: &dyn core::fmt::Display = match self {
+                Self::Bool(err) => err,
+                Self::Int(err) => err,
+            };
+
+            write!(f, "Anchor couldn't be decoded: {}", err)
+        }
+    }
+
+    impl Decode for Anchor {
+        type Value = Self;
+
+        type Error = AnchorDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (inner, buf) = InnerAnchor::decode(buf)?;
+            let (bias, buf) = AnchorBias::decode(buf)?;
+            let anchor = Self::new(inner, bias);
+            Ok((anchor, buf))
+        }
+    }
 
     impl Encode for InnerAnchor {
         #[inline]
@@ -179,4 +220,30 @@ mod encode {
             Ok((anchor, buf))
         }
     }
+
+    impl Encode for AnchorBias {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            matches!(self, Self::Right).encode(buf);
+        }
+    }
+
+    impl Decode for AnchorBias {
+        type Value = Self;
+
+        type Error = BoolDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
+            let (is_right, buf) = bool::decode(buf)?;
+            let bias = if is_right { Self::Right } else { Self::Left };
+            Ok((bias, buf))
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod serde {
+    crate::encode::impl_serialize!(super::Anchor);
+    crate::encode::impl_deserialize!(super::Anchor);
 }
