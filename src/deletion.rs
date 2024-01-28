@@ -156,28 +156,77 @@ mod encode {
     /// TODO: docs
     #[allow(dead_code)]
     struct Anchors<'a> {
-        start: &'a Anchor,
-        end: &'a Anchor,
+        start: &'a InnerAnchor,
+        end: &'a InnerAnchor,
     }
 
     impl<'a> Anchors<'a> {
         #[inline]
-        fn new(start: &'a Anchor, end: &'a Anchor) -> Self {
+        fn new(start: &'a InnerAnchor, end: &'a InnerAnchor) -> Self {
             Self { start, end }
         }
     }
 
     impl Encode for Anchors<'_> {
         #[inline]
-        fn encode(&self, _buf: &mut Vec<u8>) {}
+        fn encode(&self, buf: &mut Vec<u8>) {
+            let flag = AnchorsFlag::from_anchors(self);
+
+            flag.encode(buf);
+
+            match flag {
+                AnchorsFlag::DifferentReplicaIds => {
+                    self.start.encode(buf);
+                    self.end.encode(buf);
+                },
+                AnchorsFlag::SameReplicaId => {
+                    self.start.replica_id().encode(buf);
+                    self.start.run_ts().encode(buf);
+                    self.start.offset().encode(buf);
+                    self.end.run_ts().encode(buf);
+                    self.end.offset().encode(buf);
+                },
+                AnchorsFlag::SameReplicaIdAndRunTs => {
+                    self.start.replica_id().encode(buf);
+                    self.start.run_ts().encode(buf);
+                    self.start.offset().encode(buf);
+                    // The start and end are on the same run, so we know that
+                    // the end is after the start.
+                    let length = self.end.offset() - self.start.offset();
+                    length.encode(buf);
+                },
+            }
+        }
     }
 
-    pub(crate) enum AnchorsDecodeError {}
+    pub(crate) enum AnchorsDecodeError {
+        Int(IntDecodeError),
+        Flag(AnchorsFlagDecodeError),
+    }
+
+    impl From<IntDecodeError> for AnchorsDecodeError {
+        #[inline(always)]
+        fn from(err: IntDecodeError) -> Self {
+            Self::Int(err)
+        }
+    }
+
+    impl From<AnchorsFlagDecodeError> for AnchorsDecodeError {
+        #[inline(always)]
+        fn from(err: AnchorsFlagDecodeError) -> Self {
+            Self::Flag(err)
+        }
+    }
 
     impl core::fmt::Display for AnchorsDecodeError {
         #[inline]
-        fn fmt(&self, _f: &mut core::fmt::Formatter) -> core::fmt::Result {
-            todo!()
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            let err: &dyn core::fmt::Display = match self {
+                Self::Int(err) => err,
+                Self::Flag(err) => err,
+            };
+
+            write!(f, "Anchors couldn't be decoded: {err}")
         }
     }
 
@@ -187,8 +236,123 @@ mod encode {
         type Error = AnchorsDecodeError;
 
         #[inline]
-        fn decode(_buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error> {
-            todo!();
+        fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error> {
+            let (flag, buf) = AnchorsFlag::decode(buf)?;
+
+            match flag {
+                AnchorsFlag::DifferentReplicaIds => {
+                    let (start, buf) = InnerAnchor::decode(buf)?;
+                    let (end, buf) = InnerAnchor::decode(buf)?;
+                    Ok(((start, end), buf))
+                },
+                AnchorsFlag::SameReplicaId => {
+                    let (replica_id, buf) = ReplicaId::decode(buf)?;
+                    let (start_run_ts, buf) = RunTs::decode(buf)?;
+                    let (start_offset, buf) = Length::decode(buf)?;
+                    let (end_run_ts, buf) = RunTs::decode(buf)?;
+                    let (end_offset, buf) = Length::decode(buf)?;
+
+                    let start = InnerAnchor::new(
+                        replica_id,
+                        start_offset,
+                        start_run_ts,
+                    );
+
+                    let end =
+                        InnerAnchor::new(replica_id, end_offset, end_run_ts);
+
+                    Ok(((start, end), buf))
+                },
+                AnchorsFlag::SameReplicaIdAndRunTs => {
+                    let (replica_id, buf) = ReplicaId::decode(buf)?;
+                    let (run_ts, buf) = RunTs::decode(buf)?;
+                    let (offset, buf) = Length::decode(buf)?;
+                    let (length, buf) = Length::decode(buf)?;
+                    let start = InnerAnchor::new(replica_id, offset, run_ts);
+                    let end =
+                        InnerAnchor::new(replica_id, offset + length, run_ts);
+                    Ok(((start, end), buf))
+                },
+            }
+        }
+    }
+
+    enum AnchorsFlag {
+        SameReplicaId,
+        SameReplicaIdAndRunTs,
+        DifferentReplicaIds,
+    }
+
+    impl AnchorsFlag {
+        #[inline(always)]
+        fn from_anchors(anchors: &Anchors) -> Self {
+            if anchors.start.replica_id() == anchors.end.replica_id() {
+                if anchors.start.run_ts() == anchors.end.run_ts() {
+                    Self::SameReplicaIdAndRunTs
+                } else {
+                    Self::SameReplicaId
+                }
+            } else {
+                Self::DifferentReplicaIds
+            }
+        }
+    }
+
+    impl Encode for AnchorsFlag {
+        #[inline]
+        fn encode(&self, buf: &mut Vec<u8>) {
+            let flag: u8 = match self {
+                Self::DifferentReplicaIds => 0,
+                Self::SameReplicaId => 1,
+                Self::SameReplicaIdAndRunTs => 2,
+            };
+
+            buf.push(flag);
+        }
+    }
+
+    pub(crate) enum AnchorsFlagDecodeError {
+        EmptyBuffer,
+        InvalidByte(u8),
+    }
+
+    impl core::fmt::Display for AnchorsFlagDecodeError {
+        #[inline]
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            match self {
+                Self::EmptyBuffer => write!(
+                    f,
+                    "AnchorsFlag can't be decoded from an empty buffer"
+                ),
+                Self::InvalidByte(byte) => write!(
+                    f,
+                    "AnchorsFlag can't be decoded from {}, it must be 0, 1, \
+                     or 2",
+                    byte
+                ),
+            }
+        }
+    }
+
+    impl Decode for AnchorsFlag {
+        type Value = Self;
+
+        type Error = AnchorsFlagDecodeError;
+
+        #[inline]
+        fn decode(buf: &[u8]) -> Result<(Self::Value, &[u8]), Self::Error> {
+            let (&flag, buf) = buf
+                .split_first()
+                .ok_or(AnchorsFlagDecodeError::EmptyBuffer)?;
+
+            let this = match flag {
+                0 => Self::DifferentReplicaIds,
+                1 => Self::SameReplicaId,
+                2 => Self::SameReplicaIdAndRunTs,
+                _ => return Err(AnchorsFlagDecodeError::InvalidByte(flag)),
+            };
+
+            Ok((this, buf))
         }
     }
 }
