@@ -56,6 +56,7 @@ impl RunIndices {
         )
     }
 
+    #[cfg(feature = "encode")]
     #[inline]
     pub(crate) fn iter(
         &self,
@@ -165,6 +166,7 @@ impl ReplicaIndices {
         splits.fragment_at_offset(at_offset - offset, bias).idx
     }
 
+    #[cfg(feature = "encode")]
     #[inline(always)]
     pub(crate) fn iter(
         &self,
@@ -199,6 +201,7 @@ impl ReplicaIndices {
         splits.move_len_to_prev_split(split_at_offset - *offset, len_moved);
     }
 
+    #[cfg(feature = "encode")]
     #[inline(always)]
     pub(crate) fn new(vec: Vec<(Fragments, Length)>) -> Self {
         Self { vec }
@@ -428,6 +431,7 @@ mod fragments {
             }
         }
 
+        #[cfg(feature = "encode")]
         #[inline]
         pub(crate) fn num_fragments(&self) -> usize {
             match self {
@@ -651,6 +655,7 @@ impl Fragment {
         *self == Self::null()
     }
 
+    #[cfg(feature = "encode")]
     #[inline(always)]
     pub(crate) fn leaf_idx(&self) -> LeafIdx<EditRun> {
         self.idx

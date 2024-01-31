@@ -186,6 +186,7 @@ impl<L> LeafIdx<L> {
         Self::new(usize::MAX)
     }
 
+    #[cfg(feature = "encode")]
     #[inline]
     pub(crate) fn into_usize(self) -> usize {
         self.idx
@@ -522,11 +523,13 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.lnode(leaf_idx).value()
     }
 
+    #[cfg(feature = "encode")]
     #[inline(always)]
     pub fn num_leaves(&self) -> usize {
         self.lnodes.len()
     }
 
+    #[cfg(feature = "encode")]
     #[inline(always)]
     pub fn inodes(&self) -> &[Inode<ARITY, L>] {
         &self.inodes
@@ -750,6 +753,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     /// Returns the [`InodeIdx`] of the parent node of the given leaf.
+    #[cfg(feature = "encode")]
     #[inline(always)]
     pub fn parent(&self, leaf_idx: LeafIdx<L>) -> InodeIdx {
         self.lnode(leaf_idx).parent()
@@ -2209,6 +2213,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         self.root_idx = new_root_idx;
     }
 
+    #[cfg(feature = "encode")]
     #[inline(always)]
     pub(crate) fn root_idx(&self) -> InodeIdx {
         self.root_idx
@@ -2487,6 +2492,7 @@ impl<L> Clone for NodeIdx<L> {
 }
 
 impl<L> NodeIdx<L> {
+    #[cfg(feature = "encode")]
     #[inline]
     const fn into_usize(self) -> usize {
         // SAFETY: both `InodeIdx` and `LeafIdx<L>` are basically `usize`s.
