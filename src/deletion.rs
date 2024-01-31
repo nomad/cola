@@ -33,6 +33,19 @@ pub struct Deletion {
 }
 
 impl Deletion {
+    /// Returns the [`ReplicaId`] of the [`Replica`] that performed the
+    /// deletion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use cola::Replica;
+    /// let mut replica1 = Replica::new(1, 10);
+    ///
+    /// let deletion = replica1.inserted(3..7);
+    ///
+    /// assert_eq!(deletion.deleted_by(), replica1.id());
+    /// ```
     #[inline(always)]
     pub(crate) fn deleted_by(&self) -> ReplicaId {
         self.version_map.this_id()

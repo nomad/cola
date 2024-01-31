@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- a new `Deletion::deleted_by()` to get the `ReplicaId` of the peer that
+  performed the deletion;
+
 ## [0.4.0] - Jan 28 2024
 
 ### Changed
