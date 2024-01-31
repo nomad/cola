@@ -42,7 +42,7 @@ impl Deletion {
     /// # use cola::Replica;
     /// let mut replica1 = Replica::new(1, 10);
     ///
-    /// let deletion = replica1.inserted(3..7);
+    /// let deletion = replica1.deleted(3..7);
     ///
     /// assert_eq!(deletion.deleted_by(), replica1.id());
     /// ```
