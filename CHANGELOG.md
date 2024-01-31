@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [0.4.1] - Jan 31 2024
+## [0.4.2] - Jan 31 2024
 
 ### Added
 
@@ -59,8 +59,8 @@
 - fixed a bug that would cause `Replica::decode()` to fail if it was encoded
   on a machine with a different pointer size (#1);
 
-[Unreleased]: https://github.com/nomad/cola/compare/v0.4.1...HEAD
-[0.4.1]: https://github.com/nomad/cola/compare/v0.4.0...v0.4.1
+[Unreleased]: https://github.com/nomad/cola/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/nomad/cola/compare/v0.4.0...v0.4.2
 [0.4.0]: https://github.com/nomad/cola/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nomad/cola/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/nomad/cola/compare/v0.2.0...v0.2.1

@@ -47,7 +47,7 @@ impl Deletion {
     /// assert_eq!(deletion.deleted_by(), replica1.id());
     /// ```
     #[inline(always)]
-    pub(crate) fn deleted_by(&self) -> ReplicaId {
+    pub fn deleted_by(&self) -> ReplicaId {
         self.version_map.this_id()
     }
 
