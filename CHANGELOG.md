@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- the `Deletion`'s internal `VersionMap` now only includes entries for the
+  `ReplicaId`s that were between the start and the end of the deleted range,
+  instead of including every single `ReplicaId` the `Replica` had ever seen.
+  This results in much smaller `Deletion`s when deleting small ranges in
+  buffers edited by many peers ([#9](https://github.com/nomad/cola/pull/9));
+
 ## [0.4.3] - Jan 31 2024
 
 ### Fixed
