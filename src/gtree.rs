@@ -404,15 +404,17 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// always return the leaf index of the leaves returned by `delete_from`
     /// and `delete_up_to`, in that order.
     #[inline]
-    pub fn delete<DelRange, DelFrom, DelUpTo>(
+    pub fn delete<BeforeDelete, DelRange, DelFrom, DelUpTo>(
         &mut self,
         range: Range<Length>,
+        mut before_delete: BeforeDelete,
         delete_range: DelRange,
         delete_from: DelFrom,
         delete_up_to: DelUpTo,
     ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
     where
         L: Delete,
+        BeforeDelete: FnMut(&L),
         DelRange: FnOnce(&mut L, Range<Length>) -> (Option<L>, Option<L>),
         DelFrom: FnOnce(&mut L, Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, Length) -> Option<L>,
@@ -426,6 +428,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                     cursor.offset,
                     cursor.child_idx,
                     range - cursor.offset,
+                    &mut before_delete,
                     delete_range,
                 );
             }
@@ -441,25 +444,34 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                         cursor_end,
                         child_idx,
                         range - cursor_end,
+                        &mut before_delete,
                         delete_range,
                     );
                 }
             }
         }
 
-        self.delete_range(range, delete_range, delete_from, delete_up_to)
+        self.delete_range(
+            range,
+            &mut before_delete,
+            delete_range,
+            delete_from,
+            delete_up_to,
+        )
     }
 
     #[inline]
-    pub fn delete_leaf_range<F>(
+    pub fn delete_leaf_range<F, BeforeDelete>(
         &mut self,
         leaf_idx: LeafIdx<L>,
         leaf_offset: Length,
         range: Range<Length>,
+        mut before_delete: BeforeDelete,
         delete_with: F,
     ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
     where
         L: Delete,
+        BeforeDelete: FnMut(&L),
         F: FnOnce(&mut L, Range<Length>) -> (Option<L>, Option<L>),
     {
         let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
@@ -469,6 +481,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             leaf_offset,
             idx_in_parent,
             range,
+            &mut before_delete,
             delete_with,
         )
     }
@@ -1204,19 +1217,25 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     #[inline]
-    fn delete_child(&mut self, of_inode: InodeIdx, child_idx: ChildIdx)
-    where
+    fn delete_child<BeforeDelete>(
+        &mut self,
+        of_inode: InodeIdx,
+        child_idx: ChildIdx,
+        before_delete: &mut BeforeDelete,
+    ) where
         L: Delete,
+        BeforeDelete: FnMut(&L),
     {
         let child_len = match self.inode(of_inode).child(child_idx) {
             Either::Internal(inode_idx) => {
                 let inode = self.inode_mut(inode_idx);
                 let old_len = inode.len();
-                self.delete_inode(inode_idx);
+                self.delete_inode(inode_idx, before_delete);
                 old_len
             },
             Either::Leaf(leaf_idx) => {
                 let leaf = self.leaf_mut(leaf_idx);
+                before_delete(leaf);
                 let old_len = leaf.len();
                 leaf.delete();
                 old_len
@@ -1228,9 +1247,13 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
     /// Recursively deletes the given inode and all of its children.
     #[inline]
-    fn delete_inode(&mut self, inode: InodeIdx)
-    where
+    fn delete_inode<BeforeDelete>(
+        &mut self,
+        inode: InodeIdx,
+        before_delete: &mut BeforeDelete,
+    ) where
         L: Delete,
+        BeforeDelete: FnMut(&L),
     {
         let inode = self.inode_mut(inode);
 
@@ -1248,7 +1271,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 let inode_idxs =
                     unsafe { mem::transmute::<_, &[InodeIdx]>(inode_idxs) };
                 for &inode_idx in inode_idxs {
-                    self.delete_inode(inode_idx);
+                    self.delete_inode(inode_idx, before_delete);
                 }
             },
 
@@ -1256,23 +1279,27 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                 let leaf_idxs =
                     unsafe { mem::transmute::<_, &[LeafIdx<L>]>(leaf_idxs) };
                 for &leaf_idx in leaf_idxs {
-                    self.leaf_mut(leaf_idx).delete();
+                    let leaf = self.leaf_mut(leaf_idx);
+                    before_delete(leaf);
+                    leaf.delete();
                 }
             },
         }
     }
 
     #[inline]
-    fn delete_range_in_leaf<F>(
+    fn delete_range_in_leaf<BeforeDelete, F>(
         &mut self,
         leaf_idx: LeafIdx<L>,
         leaf_offset: Length,
         idx_in_parent: ChildIdx,
         range: Range<Length>,
+        before_delete: &mut BeforeDelete,
         delete_with: F,
     ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
     where
         L: Delete,
+        BeforeDelete: FnMut(&L),
         F: FnOnce(&mut L, Range<Length>) -> (Option<L>, Option<L>),
     {
         debug_assert!(range.start < range.end);
@@ -1281,6 +1308,8 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         debug_assert_eq!(leaf_offset, self.offset_of_leaf(leaf_idx));
 
         let lnode = self.lnode_mut(leaf_idx);
+
+        before_delete(lnode.value());
 
         let old_len = lnode.len();
 
@@ -1428,15 +1457,17 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     #[inline]
-    fn delete_range<DelRange, DelFrom, DelUpTo>(
+    fn delete_range<BeforeDelete, DelRange, DelFrom, DelUpTo>(
         &mut self,
         mut range: Range<Length>,
+        before_delete: &mut BeforeDelete,
         delete_range: DelRange,
         delete_from: DelFrom,
         delete_up_to: DelUpTo,
     ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
     where
         L: Delete,
+        BeforeDelete: FnMut(&L),
         DelRange: FnOnce(&mut L, Range<Length>) -> (Option<L>, Option<L>),
         DelFrom: FnOnce(&mut L, Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, Length) -> Option<L>,
@@ -1469,6 +1500,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                                 leaf_offset,
                                 child_idx,
                                 range,
+                                before_delete,
                                 delete_range,
                             );
                         },
@@ -1482,6 +1514,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                     return self.delete_range_in_inode(
                         idx,
                         range,
+                        before_delete,
                         delete_from,
                         delete_up_to,
                     );
@@ -1491,15 +1524,17 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     }
 
     #[inline]
-    fn delete_range_in_inode<DelFrom, DelUpTo>(
+    fn delete_range_in_inode<BeforeDelete, DelFrom, DelUpTo>(
         &mut self,
         idx: InodeIdx,
         range: Range<Length>,
+        before_delete: &mut BeforeDelete,
         delete_from: DelFrom,
         delete_up_to: DelUpTo,
     ) -> (Option<LeafIdx<L>>, Option<LeafIdx<L>>)
     where
         L: Delete,
+        BeforeDelete: FnMut(&L),
         DelFrom: FnOnce(&mut L, Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, Length) -> Option<L>,
     {
@@ -1513,6 +1548,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             self,
             idx,
             range,
+            before_delete,
             delete_from,
             delete_up_to,
         );
@@ -2884,15 +2920,23 @@ mod delete {
     use super::*;
 
     #[allow(clippy::type_complexity)]
-    pub(super) fn delete_range_in_inode<const N: usize, L, DelFrom, DelUpTo>(
+    pub(super) fn delete_range_in_inode<
+        const N: usize,
+        L,
+        BeforeDelete,
+        DelFrom,
+        DelUpTo,
+    >(
         gtree: &mut Gtree<N, L>,
         idx: InodeIdx,
         range: Range<Length>,
+        before_delete: &mut BeforeDelete,
         del_from: DelFrom,
         del_up_to: DelUpTo,
     ) -> ((Option<LeafIdx<L>>, Option<LeafIdx<L>>), Option<Inode<N, L>>)
     where
         L: Leaf + Delete,
+        BeforeDelete: FnMut(&L),
         DelFrom: FnOnce(&mut L, Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, Length) -> Option<L>,
     {
@@ -2927,6 +2971,7 @@ mod delete {
                                         gtree,
                                         inode_idx,
                                         range.start - offset,
+                                        before_delete,
                                         del_from,
                                     )
                                 },
@@ -2943,10 +2988,13 @@ mod delete {
                     },
 
                     Either::Leaf(leaf_idx) => {
-                        let split = gtree
-                            .with_leaf_mut_handle_parent(leaf_idx, |leaf| {
+                        let split = gtree.with_leaf_mut_handle_parent(
+                            leaf_idx,
+                            |leaf| {
+                                before_delete(leaf);
                                 del_from(leaf, range.start - offset)
-                            });
+                            },
+                        );
 
                         if let Some(split) = split {
                             let len = split.len();
@@ -2984,6 +3032,7 @@ mod delete {
                                         gtree,
                                         inode_idx,
                                         range.end - offset,
+                                        before_delete,
                                         del_up_to,
                                     )
                                 },
@@ -3000,10 +3049,13 @@ mod delete {
                     },
 
                     Either::Leaf(leaf_idx) => {
-                        let split = gtree
-                            .with_leaf_mut_handle_parent(leaf_idx, |leaf| {
+                        let split = gtree.with_leaf_mut_handle_parent(
+                            leaf_idx,
+                            |leaf| {
+                                before_delete(leaf);
                                 del_up_to(leaf, range.end - offset)
-                            });
+                            },
+                        );
 
                         if let Some(split) = split {
                             let len = split.len();
@@ -3019,7 +3071,7 @@ mod delete {
 
                 break;
             } else {
-                gtree.delete_child(idx, child_idx);
+                gtree.delete_child(idx, child_idx, before_delete);
             }
         }
 
@@ -3053,14 +3105,16 @@ mod delete {
         ((leaf_idx_start, leaf_idx_end), split)
     }
 
-    fn delete_from<const N: usize, L, DelFrom>(
+    fn delete_from<const N: usize, L, BeforeDelete, DelFrom>(
         gtree: &mut Gtree<N, L>,
         inode_idx: InodeIdx,
         mut from: Length,
+        before_delete: &mut BeforeDelete,
         del_from: DelFrom,
     ) -> (Option<LeafIdx<L>>, Option<Inode<N, L>>)
     where
         L: Leaf + Delete,
+        BeforeDelete: FnMut(&L),
         DelFrom: FnOnce(&mut L, Length) -> Option<L>,
     {
         let len = gtree.inode(inode_idx).num_children();
@@ -3074,7 +3128,7 @@ mod delete {
 
             if offset > from {
                 for child_idx in child_idx + 1..len {
-                    gtree.delete_child(inode_idx, child_idx);
+                    gtree.delete_child(inode_idx, child_idx, before_delete);
                 }
 
                 offset -= child_measure;
@@ -3087,7 +3141,13 @@ mod delete {
                             next_idx,
                             child_idx,
                             |gtree| {
-                                delete_from(gtree, next_idx, from, del_from)
+                                delete_from(
+                                    gtree,
+                                    next_idx,
+                                    from,
+                                    before_delete,
+                                    del_from,
+                                )
                             },
                         ),
 
@@ -3096,7 +3156,10 @@ mod delete {
                             .with_leaf_mut_handle_split(
                                 leaf_idx,
                                 child_idx,
-                                |leaf| (del_from(leaf, from), None),
+                                |leaf| {
+                                    before_delete(leaf);
+                                    (del_from(leaf, from), None)
+                                },
                             );
 
                         (idx, split)
@@ -3108,14 +3171,16 @@ mod delete {
         unreachable!();
     }
 
-    fn delete_up_to<const N: usize, L, DelUpTo>(
+    fn delete_up_to<const N: usize, L, BeforeDelete, DelUpTo>(
         gtree: &mut Gtree<N, L>,
         idx: InodeIdx,
         mut up_to: Length,
+        before_delete: &mut BeforeDelete,
         del_up_to: DelUpTo,
     ) -> (Option<LeafIdx<L>>, Option<Inode<N, L>>)
     where
         L: Leaf + Delete,
+        BeforeDelete: FnMut(&L),
         DelUpTo: FnOnce(&mut L, Length) -> Option<L>,
     {
         let mut offset = 0;
@@ -3136,7 +3201,13 @@ mod delete {
                             next_idx,
                             child_idx,
                             |gtree| {
-                                delete_up_to(gtree, next_idx, up_to, del_up_to)
+                                delete_up_to(
+                                    gtree,
+                                    next_idx,
+                                    up_to,
+                                    before_delete,
+                                    del_up_to,
+                                )
                             },
                         ),
 
@@ -3145,14 +3216,17 @@ mod delete {
                             .with_leaf_mut_handle_split(
                                 leaf_idx,
                                 child_idx,
-                                |leaf| (del_up_to(leaf, up_to), None),
+                                |leaf| {
+                                    before_delete(leaf);
+                                    (del_up_to(leaf, up_to), None)
+                                },
                             );
 
                         (idx, split)
                     },
                 };
             } else {
-                gtree.delete_child(idx, child_idx);
+                gtree.delete_child(idx, child_idx, before_delete);
             }
         }
 

@@ -177,8 +177,13 @@ impl RunTree {
             run.delete_range(range)
         };
 
-        let (first_idx, second_idx) =
-            self.gtree.delete(range, delete_range, delete_from, delete_up_to);
+        let (first_idx, second_idx) = self.gtree.delete(
+            range,
+            |_| {},
+            delete_range,
+            delete_from,
+            delete_up_to,
+        );
 
         if split_across_runs {
             if let Some(idx) = first_idx {
@@ -431,6 +436,7 @@ impl RunTree {
             leaf_idx,
             leaf_offset,
             range,
+            |_| {},
             |run, range| run.delete_range(range),
         );
 
