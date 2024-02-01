@@ -55,20 +55,31 @@ impl<T: Copy> BaseMap<T> {
 
     #[inline]
     pub fn fork_in_place(&mut self, new_id: ReplicaId, restart_at: T) {
-        self.insert(self.this_id, self.this_value);
+        self.rest.insert(self.this_id, self.this_value);
         self.this_id = new_id;
         self.this_value = restart_at;
     }
 
     #[inline]
     pub fn insert(&mut self, replica_id: ReplicaId, value: T) {
-        self.rest.insert(replica_id, value);
+        if replica_id != self.this_id {
+            self.rest.insert(replica_id, value);
+        }
     }
 
     #[inline]
     fn iter(&self) -> impl Iterator<Item = (ReplicaId, T)> + '_ {
         let this_entry = core::iter::once((self.this_id, self.this_value));
         this_entry.chain(self.rest.iter().map(|(&id, &value)| (id, value)))
+    }
+
+    #[inline]
+    pub(crate) fn iter_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (ReplicaId, &mut T)> + '_ {
+        let this_entry =
+            core::iter::once((self.this_id, &mut self.this_value));
+        this_entry.chain(self.rest.iter_mut().map(|(&id, value)| (id, value)))
     }
 
     #[inline]

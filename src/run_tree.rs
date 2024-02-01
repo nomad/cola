@@ -136,7 +136,11 @@ impl RunTree {
     }
 
     #[inline]
-    pub fn delete(&mut self, range: Range<Length>) -> (Anchor, Anchor) {
+    pub fn delete(
+        &mut self,
+        range: Range<Length>,
+        version_map: &mut VersionMap,
+    ) -> (Anchor, Anchor) {
         let mut id_start = 0;
         let mut run_ts_start = 0;
         let mut offset_start = 0;
@@ -146,6 +150,12 @@ impl RunTree {
         let mut offset_end = 0;
 
         let mut split_across_runs = false;
+
+        let before_delete = |run: &EditRun| {
+            if !run.is_deleted {
+                version_map.insert(run.replica_id(), 0);
+            }
+        };
 
         let delete_from = |run: &mut EditRun, offset: Length| {
             split_across_runs = true;
@@ -177,8 +187,13 @@ impl RunTree {
             run.delete_range(range)
         };
 
-        let (first_idx, second_idx) =
-            self.gtree.delete(range, delete_range, delete_from, delete_up_to);
+        let (first_idx, second_idx) = self.gtree.delete(
+            range,
+            before_delete,
+            delete_range,
+            delete_from,
+            delete_up_to,
+        );
 
         if split_across_runs {
             if let Some(idx) = first_idx {
@@ -431,6 +446,7 @@ impl RunTree {
             leaf_idx,
             leaf_offset,
             range,
+            |_| {},
             |run, range| run.delete_range(range),
         );
 
