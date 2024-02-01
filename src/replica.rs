@@ -479,16 +479,18 @@ impl Replica {
 
         let deleted_range = (start..end).into();
 
-        let (start, end) = self.run_tree.delete(deleted_range);
+        let mut version_map = VersionMap::new(self.id(), 0);
+
+        let (start, end) =
+            self.run_tree.delete(deleted_range, &mut version_map);
+
+        for (id, ts) in version_map.iter_mut() {
+            *ts = self.version_map.get(id);
+        }
 
         *self.deletion_map.this_mut() += 1;
 
-        Deletion::new(
-            start,
-            end,
-            self.version_map.clone(),
-            self.deletion_map.this(),
-        )
+        Deletion::new(start, end, version_map, self.deletion_map.this())
     }
 
     #[doc(hidden)]
