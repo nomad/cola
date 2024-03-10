@@ -1,4 +1,4 @@
-use core::cmp::{Ordering, PartialOrd};
+use core::cmp::Ordering;
 
 use crate::{DeletionTs, Length, ReplicaId, ReplicaIdMap};
 

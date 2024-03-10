@@ -1052,7 +1052,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             },
         }
 
-        if !inode.len() == 0 {
+        if inode.len() != 0 {
             assert_eq!(child_lengths, inode.len());
         }
     }

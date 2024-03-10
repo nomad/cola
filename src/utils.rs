@@ -1,4 +1,3 @@
-use core::cmp::Ord;
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 use core::ops::{Add, Range as StdRange, RangeBounds, Sub};
 
