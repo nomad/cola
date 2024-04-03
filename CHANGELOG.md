@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.5] - Apr 3 2024
+
 ### Added
 
 - a `Clone` impl for `Replica`;
@@ -84,7 +86,8 @@
 - fixed a bug that would cause `Replica::decode()` to fail if it was encoded
   on a machine with a different pointer size (#1);
 
-[Unreleased]: https://github.com/nomad/cola/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/nomad/cola/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/nomad/cola/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/nomad/cola/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/nomad/cola/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/nomad/cola/compare/v0.4.0...v0.4.2
