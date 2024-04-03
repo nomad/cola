@@ -539,7 +539,8 @@ impl Replica {
     ///
     /// # Panics
     ///
-    /// Panics if the [`ReplicaId`] is zero.
+    /// Panics if the [`ReplicaId`] is zero or if it's equal to the id of this
+    /// `Replica`.
     ///
     /// # Examples
     ///
@@ -554,6 +555,10 @@ impl Replica {
     pub fn fork(&self, new_id: ReplicaId) -> Self {
         if new_id == 0 {
             panic::replica_id_is_zero();
+        }
+
+        if new_id == self.id {
+            panic::replica_id_equal_to_forked();
         }
 
         Self {

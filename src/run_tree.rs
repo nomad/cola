@@ -2,7 +2,6 @@ use core::cmp::Ordering;
 use core::ops;
 
 use crate::anchor::{Anchor as BiasedAnchor, InnerAnchor as Anchor};
-use crate::gtree::LeafIdx;
 use crate::*;
 
 const RUN_TREE_ARITY: usize = 32;

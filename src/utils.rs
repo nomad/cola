@@ -142,6 +142,16 @@ pub mod panic_messages {
     #[track_caller]
     #[cold]
     #[inline(never)]
+    pub(crate) fn replica_id_equal_to_forked() -> ! {
+        panic!(
+            "invalid ReplicaId: must not be equal to the one of the forked \
+             Replica, consider cloning instead"
+        );
+    }
+
+    #[track_caller]
+    #[cold]
+    #[inline(never)]
     pub(crate) fn replica_id_is_zero() -> ! {
         panic!("invalid ReplicaId: must not be zero");
     }

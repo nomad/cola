@@ -6,6 +6,11 @@
 
 - a `Clone` impl for `Replica`;
 
+### Changed
+
+- `Replica::fork()` now panics if the given `ReplicaId` is the same as the one
+  of the `Replica` being forked;
+
 ## [0.4.4] - Feb 1 2024
 
 ### Changed
