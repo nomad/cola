@@ -46,6 +46,7 @@ use crate::*;
 ///
 /// Basically, you tell your `Replica` how your buffer changes, and it tells
 /// you how your buffer *should* change when receiving remote edits.
+#[derive(Clone)]
 pub struct Replica {
     /// The unique identifier of this replica.
     id: ReplicaId,

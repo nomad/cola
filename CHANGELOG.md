@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- a `Clone` impl for `Replica`;
+
 ## [0.4.4] - Feb 1 2024
 
 ### Changed
