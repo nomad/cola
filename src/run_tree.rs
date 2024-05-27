@@ -698,7 +698,7 @@ impl RunTree {
             // deleting up to the root.
             let gtree = unsafe {
                 #[allow(mutable_transmutes)]
-                core::mem::transmute::<_, &mut Gtree>(&self.gtree)
+                core::mem::transmute::<&Gtree, &mut Gtree>(&self.gtree)
             };
 
             gtree.with_leaf_mut(run_idx, EditRun::delete);

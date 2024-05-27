@@ -181,8 +181,9 @@ impl<'a> BackloggedDeletions<'a> {
         // SAFETY: this is safe because in the `Iterator` implementation we
         // never access the backlog through the `Replica`, neither directly nor
         // by calling any methods on `Replica` that would access the backlog.
-        let backlog =
-            unsafe { core::mem::transmute::<_, &mut Backlog>(backlog) };
+        let backlog = unsafe {
+            core::mem::transmute::<&mut Backlog, &mut Backlog>(backlog)
+        };
 
         let mut iter = backlog.deletions.values_mut();
 
@@ -244,8 +245,9 @@ impl<'a> BackloggedInsertions<'a> {
         // SAFETY: this is safe because in the `Iterator` implementation we
         // never access the backlog through the `Replica`, neither directly nor
         // by calling any methods on `Replica` that would access the backlog.
-        let backlog =
-            unsafe { core::mem::transmute::<_, &mut Backlog>(backlog) };
+        let backlog = unsafe {
+            core::mem::transmute::<&mut Backlog, &mut Backlog>(backlog)
+        };
 
         let mut iter = backlog.insertions.values_mut();
 

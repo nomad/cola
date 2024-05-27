@@ -106,10 +106,10 @@
 //! # Feature flags
 //!
 //! - `encode`: enables the [`encode`](Replica::encode) and
-//! [`decode`](Replica::decode) methods on [`Replica`] (disabled by default);
+//!   [`decode`](Replica::decode) methods on [`Replica`] (disabled by default);
 //!
 //! - `serde`: enables the [`Serialize`] and [`Deserialize`] impls for
-//! [`Insertion`], [`Deletion`] and [`EncodedReplica`] (disabled by default).
+//!   [`Insertion`], [`Deletion`] and [`EncodedReplica`] (disabled by default).
 //!
 //! [CRDT]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
 //! [cola]: https://nomad.foo/blog/cola

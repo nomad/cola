@@ -382,15 +382,15 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// `(Some(new_leaf), None)`:
     ///
     /// - if `new_leaf` is empty we'll try to join it with the leaf that comes
-    /// *after* the argument of the closure by calling `Join::prepend()`
-    /// on it. If that succeeds `new_leaf` gets joined to that leaf so
-    /// no new leaves are added to the Gtree, and this methods returns a
-    /// `(None, None)`,
+    ///   *after* the argument of the closure by calling `Join::prepend()`
+    ///   on it. If that succeeds `new_leaf` gets joined to that leaf so
+    ///   no new leaves are added to the Gtree, and this methods returns a
+    ///   `(None, None)`,
     ///
     /// - viceversa, if `new_leaf` is not empty we'll try to join the leaf that
-    /// was passed to the closure with the leaf that comes *before* it by
-    /// calling `Join::append()` on it. Like in the previous case, if that
-    /// succeeds this method returns a `(None, None)`.
+    ///   was passed to the closure with the leaf that comes *before* it by
+    ///   calling `Join::append()` on it. Like in the previous case, if that
+    ///   succeeds this method returns a `(None, None)`.
     ///
     /// # Range that spans multiple leaf nodes
     ///
@@ -1268,16 +1268,18 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         match inode.children() {
             Either::Internal(inode_idxs) => {
-                let inode_idxs =
-                    unsafe { mem::transmute::<_, &[InodeIdx]>(inode_idxs) };
+                let inode_idxs = unsafe {
+                    mem::transmute::<&[InodeIdx], &[InodeIdx]>(inode_idxs)
+                };
                 for &inode_idx in inode_idxs {
                     self.delete_inode(inode_idx, before_delete);
                 }
             },
 
             Either::Leaf(leaf_idxs) => {
-                let leaf_idxs =
-                    unsafe { mem::transmute::<_, &[LeafIdx<L>]>(leaf_idxs) };
+                let leaf_idxs = unsafe {
+                    mem::transmute::<&[LeafIdx<L>], &[LeafIdx<L>]>(leaf_idxs)
+                };
                 for &leaf_idx in leaf_idxs {
                     let leaf = self.leaf_mut(leaf_idx);
                     before_delete(leaf);
@@ -2596,11 +2598,14 @@ impl<const ARITY: usize, L: Leaf> Inode<ARITY, L> {
         // transmute it into either of them.
 
         if self.has_leaves {
-            let leaves =
-                unsafe { mem::transmute::<_, &[LeafIdx<L>]>(children) };
+            let leaves = unsafe {
+                mem::transmute::<&[NodeIdx<L>], &[LeafIdx<L>]>(children)
+            };
             Either::Leaf(leaves)
         } else {
-            let inodes = unsafe { mem::transmute::<_, &[InodeIdx]>(children) };
+            let inodes = unsafe {
+                mem::transmute::<&[NodeIdx<L>], &[InodeIdx]>(children)
+            };
             Either::Internal(inodes)
         }
     }

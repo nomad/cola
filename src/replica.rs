@@ -311,11 +311,11 @@ impl Replica {
     /// There are two special cases to be aware of:
     ///
     /// - when the offset is zero and the bias is [`AnchorBias::Left`], the
-    /// returned `Anchor` will always resolve to zero;
+    ///   returned `Anchor` will always resolve to zero;
     ///
     /// - when the offset is equal to the length of the buffer and the bias is
-    /// [`AnchorBias::Right`], the returned `Anchor` will always resolve to the
-    /// end of the buffer.
+    ///   [`AnchorBias::Right`], the returned `Anchor` will always resolve to
+    ///   the end of the buffer.
     ///
     /// ```
     /// # use cola::{Replica, AnchorBias};
@@ -667,16 +667,16 @@ impl Replica {
     /// The number of ranges can be:
     ///
     /// - zero, if the `Deletion` has already been integrated by this `Replica`
-    /// or if it depends on some context that this `Replica` doesn't yet have
-    /// (see the [`backlogged_deletions`](Replica::backlogged_deletions) method
-    /// which handles this case);
+    ///   or if it depends on some context that this `Replica` doesn't yet have
+    ///   (see the [`backlogged_deletions`](Replica::backlogged_deletions)
+    ///   method which handles this case);
     ///
     /// - one, if there haven't been any concurrent insertions (local or
-    /// remote) within the original range of the deletion;
+    ///   remote) within the original range of the deletion;
     ///
     /// - more than one, if there have been. In this case the deleted range has
-    /// been split into multiple smaller ranges that "skip over" the newly
-    /// inserted text.
+    ///   been split into multiple smaller ranges that "skip over" the newly
+    ///   inserted text.
     ///
     /// The ranges are guaranteed to be sorted in ascending order and to not
     /// overlap, i.e. for any two indices `i` and `j` where `i < j` and `j <
