@@ -2,6 +2,8 @@ mod common;
 
 #[cfg(feature = "serde")]
 mod serde {
+    use std::io::{self, Write};
+
     use serde::de::DeserializeOwned;
     use serde::ser::Serialize;
     use traces::{ConcurrentTraceInfos, Crdt, Edit, SequentialTrace};
@@ -141,14 +143,22 @@ mod serde {
             }
         };
 
+        let mut stdout = io::stdout();
+
         let replica_size = E::encode(&replica.encode()).len();
 
-        println!("{} | Replica: {}", E::name(), printed_size(replica_size));
+        let _ = writeln!(
+            &mut stdout,
+            "{} | Replica: {}",
+            E::name(),
+            printed_size(replica_size)
+        );
 
         let total_insertions_size =
             insertions.iter().map(Vec::len).sum::<usize>();
 
-        println!(
+        let _ = writeln!(
+            &mut stdout,
             "{} | Total insertions: {}",
             E::name(),
             printed_size(total_insertions_size)
@@ -157,7 +167,8 @@ mod serde {
         let total_deletions_size =
             deletions.iter().map(Vec::len).sum::<usize>();
 
-        println!(
+        let _ = writeln!(
+            &mut stdout,
             "{} | Total deletions: {}",
             E::name(),
             printed_size(total_deletions_size)
