@@ -6,6 +6,9 @@
 
 - `AnchorBias` now implements `Not`;
 
+- a `Insertion::inserted_by()` method to get the `ReplicaId` of the peer that
+  performed the insertion;
+
 ## [0.4.5] - Apr 3 2024
 
 ### Added
