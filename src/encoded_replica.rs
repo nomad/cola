@@ -29,7 +29,7 @@ impl core::fmt::Debug for EncodedReplica {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         struct HexSlice<'a>(&'a [u8]);
 
-        impl<'a> core::fmt::Debug for HexSlice<'a> {
+        impl core::fmt::Debug for HexSlice<'_> {
             fn fmt(
                 &self,
                 f: &mut core::fmt::Formatter<'_>,

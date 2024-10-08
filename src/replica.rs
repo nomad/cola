@@ -1186,7 +1186,7 @@ mod debug {
         }
     }
 
-    impl<'a> core::fmt::Debug for DebugAsSelf<'a> {
+    impl core::fmt::Debug for DebugAsSelf<'_> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             self.0.fmt(f)
         }
@@ -1206,7 +1206,7 @@ mod debug {
         }
     }
 
-    impl<'a> core::fmt::Debug for DebugAsBtree<'a> {
+    impl core::fmt::Debug for DebugAsBtree<'_> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             self.0.fmt(f)
         }
@@ -1217,7 +1217,7 @@ mod debug {
         debug_run_tree: T,
     }
 
-    impl<'a, T: Debug> Debug for BaseDebug<'a, T> {
+    impl<T: Debug> Debug for BaseDebug<'_, T> {
         fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
             let replica = &self.replica;
 

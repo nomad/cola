@@ -39,18 +39,16 @@ impl Insertion {
         self.text.range.end
     }
 
-    /// Returns the [`ReplicaId`] of the [`Replica`] that performed the
-    /// insertion.
+    /// Returns the [`ReplicaId`] of the [`Replica`](crate::Replica) that
+    /// performed the insertion.
     ///
     /// # Examples
     ///
     /// ```
     /// # use cola::Replica;
-    /// let mut replica1 = Replica::new(1, 3);
-    ///
-    /// let insertion = replica1.inserted(3, 7);
-    ///
-    /// assert_eq!(deletion.deleted_by(), replica1.id());
+    /// let mut replica = Replica::new(1, 3);
+    /// let insertion = replica.inserted(3, 7);
+    /// assert_eq!(insertion.inserted_by(), replica.id());
     /// ```
     #[inline]
     pub fn inserted_by(&self) -> ReplicaId {
