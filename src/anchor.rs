@@ -73,6 +73,18 @@ pub enum AnchorBias {
     Right,
 }
 
+impl core::ops::Not for AnchorBias {
+    type Output = Self;
+
+    #[inline]
+    fn not(self) -> Self::Output {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
 /// TODO: docs
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub(crate) struct InnerAnchor {

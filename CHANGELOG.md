@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `AnchorBias` now implements `Not`;
+
 ## [0.4.5] - Apr 3 2024
 
 ### Added
