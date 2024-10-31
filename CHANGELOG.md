@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.6] - Oct 31 2024
+
 ### Added
 
 - `AnchorBias` now implements `Not`;
@@ -93,7 +95,8 @@
 - fixed a bug that would cause `Replica::decode()` to fail if it was encoded
   on a machine with a different pointer size (#1);
 
-[Unreleased]: https://github.com/nomad/cola/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/nomad/cola/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/nomad/cola/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/nomad/cola/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/nomad/cola/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/nomad/cola/compare/v0.4.2...v0.4.3
