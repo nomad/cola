@@ -1,14 +1,13 @@
+use core::fmt;
+
 use sha2::{Digest, Sha256};
 
-use crate::encode::{Decode, Encode, IntDecodeError};
+use crate::encode::{Decode, Encode};
 use crate::*;
 
-/// We use this instead of a `Vec<u8>` because it's 1/3 the size on the stack.
-pub(crate) type Checksum = Box<ChecksumArray>;
+type Checksum = [u8; 32];
 
-pub(crate) type ChecksumArray = [u8; 32];
-
-const CHECKSUM_LEN: usize = core::mem::size_of::<ChecksumArray>();
+const CHECKSUM_LEN: usize = core::mem::size_of::<Checksum>();
 
 /// A [`Replica`] encoded into a compact binary format suitable for
 /// transmission over the network.
@@ -20,151 +19,97 @@ const CHECKSUM_LEN: usize = core::mem::size_of::<ChecksumArray>();
 #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
 #[derive(Clone, PartialEq, Eq)]
 pub struct EncodedReplica {
-    protocol_version: ProtocolVersion,
-    checksum: Checksum,
     bytes: Box<[u8]>,
 }
 
-impl core::fmt::Debug for EncodedReplica {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        struct HexSlice<'a>(&'a [u8]);
-
-        impl core::fmt::Debug for HexSlice<'_> {
-            fn fmt(
-                &self,
-                f: &mut core::fmt::Formatter<'_>,
-            ) -> core::fmt::Result {
-                for byte in self.0 {
-                    write!(f, "{:02x}", byte)?;
-                }
-                Ok(())
-            }
-        }
-
-        f.debug_struct("EncodedReplica")
-            .field("protocol_version", &self.protocol_version)
-            .field("checksum", &HexSlice(self.checksum()))
-            .finish_non_exhaustive()
-    }
-}
-
 impl EncodedReplica {
+    /// Returns the raw bytes of the encoded replica.
     #[inline]
-    pub(crate) fn bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         &*self.bytes
     }
 
+    /// Creates an `EncodedReplica` from the given bytes.
     #[inline]
-    pub(crate) fn checksum(&self) -> &[u8] {
-        &*self.checksum
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        Self { bytes: bytes.into() }
     }
 
     #[inline]
-    pub(crate) fn new(
-        protocol_version: ProtocolVersion,
-        checksum: Checksum,
-        bytes: Box<[u8]>,
-    ) -> Self {
-        Self { protocol_version, checksum, bytes }
+    pub(crate) fn from_replica(replica: &Replica) -> Self {
+        let mut bytes = Vec::new();
+        crate::PROTOCOL_VERSION.encode(&mut bytes);
+        let protocol_len = bytes.len();
+        let dummy_checksum = Checksum::default();
+        bytes.extend_from_slice(&dummy_checksum);
+        Encode::encode(replica, &mut bytes);
+        let replica_start = protocol_len + CHECKSUM_LEN;
+        let checksum = checksum(&bytes[replica_start..]);
+        bytes[protocol_len..protocol_len + CHECKSUM_LEN]
+            .copy_from_slice(&checksum);
+        Self { bytes: bytes.into() }
     }
 
     #[inline]
-    pub(crate) fn protocol_version(&self) -> ProtocolVersion {
-        self.protocol_version
+    pub(crate) fn to_replica(
+        &self,
+    ) -> Result<<Replica as Decode>::Value, DecodeError> {
+        let bytes = &*self.bytes;
+
+        let (protocol_version, buf) = ProtocolVersion::decode(bytes)
+            .map_err(|_| DecodeError::InvalidData)?;
+
+        if protocol_version != crate::PROTOCOL_VERSION {
+            return Err(DecodeError::DifferentProtocol {
+                encoded_on: protocol_version,
+                decoding_on: crate::PROTOCOL_VERSION,
+            });
+        }
+
+        if buf.len() < CHECKSUM_LEN {
+            return Err(DecodeError::InvalidData);
+        }
+
+        let (checksum_slice, buf) = buf.split_at(CHECKSUM_LEN);
+
+        if checksum_slice != checksum(buf) {
+            return Err(DecodeError::ChecksumFailed);
+        }
+
+        <Replica as Decode>::decode(buf)
+            .map(|(value, _rest)| value)
+            .map_err(|_| DecodeError::InvalidData)
+    }
+}
+
+impl fmt::Debug for EncodedReplica {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EncodedReplica").finish_non_exhaustive()
+    }
+}
+
+impl From<Box<[u8]>> for EncodedReplica {
+    #[inline]
+    fn from(bytes: Box<[u8]>) -> Self {
+        Self { bytes }
     }
 }
 
 impl Encode for EncodedReplica {
     #[inline]
     fn encode(&self, buf: &mut Vec<u8>) {
-        self.protocol_version.encode(buf);
-        buf.extend_from_slice(&*self.checksum);
-        (self.bytes.len() as u64).encode(buf);
+        debug_assert!(buf.is_empty());
         buf.extend_from_slice(&*self.bytes);
-    }
-}
-
-pub(crate) enum EncodedReplicaDecodeError {
-    Int(IntDecodeError),
-    Checksum { actual: usize },
-    Bytes { actual: usize, advertised: u64 },
-}
-
-impl From<IntDecodeError> for EncodedReplicaDecodeError {
-    #[inline]
-    fn from(err: IntDecodeError) -> Self {
-        Self::Int(err)
-    }
-}
-
-impl core::fmt::Display for EncodedReplicaDecodeError {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let prefix = "Couldn't decode EncodedReplica";
-
-        match self {
-            EncodedReplicaDecodeError::Int(err) => {
-                write!(f, "{prefix}: {err}")
-            },
-
-            EncodedReplicaDecodeError::Checksum { actual } => {
-                write!(
-                    f,
-                    "{prefix}: need {CHECKSUM_LEN} bytes to decode checksum, \
-                     but there are only {actual}",
-                )
-            },
-
-            EncodedReplicaDecodeError::Bytes { actual, advertised } => {
-                write!(
-                    f,
-                    "{prefix}: {advertised} bytes were encoded, but there \
-                     are only {actual}",
-                )
-            },
-        }
     }
 }
 
 impl Decode for EncodedReplica {
     type Value = Self;
-
-    type Error = EncodedReplicaDecodeError;
+    type Error = core::convert::Infallible;
 
     #[inline]
     fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-        let (protocol_version, buf) = ProtocolVersion::decode(buf)?;
-
-        if buf.len() < CHECKSUM_LEN {
-            return Err(EncodedReplicaDecodeError::Checksum {
-                actual: buf.len(),
-            });
-        }
-
-        let (checksum_slice, buf) = buf.split_at(CHECKSUM_LEN);
-
-        let mut checksum = [0; CHECKSUM_LEN];
-
-        checksum.copy_from_slice(checksum_slice);
-
-        let (num_bytes, buf) = u64::decode(buf)?;
-
-        if (buf.len() as u64) < num_bytes {
-            return Err(EncodedReplicaDecodeError::Bytes {
-                actual: buf.len(),
-                advertised: num_bytes,
-            });
-        }
-
-        let (bytes, buf) = buf.split_at(num_bytes as usize);
-
-        let this = Self {
-            protocol_version,
-            checksum: Box::new(checksum),
-            bytes: bytes.into(),
-        };
-
-        Ok((this, buf))
+        Ok((Self::from_bytes(buf), &[]))
     }
 }
 
@@ -208,11 +153,10 @@ pub enum DecodeError {
     InvalidData,
 }
 
-impl core::fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DecodeError::ChecksumFailed => f.write_str("checksum failed"),
-
             DecodeError::DifferentProtocol { encoded_on, decoding_on } => {
                 write!(
                     f,
@@ -220,7 +164,6 @@ impl core::fmt::Display for DecodeError {
                     encoded_on, decoding_on
                 )
             },
-
             DecodeError::InvalidData => f.write_str("invalid data"),
         }
     }
@@ -230,11 +173,6 @@ impl std::error::Error for DecodeError {}
 
 #[inline(always)]
 pub(crate) fn checksum(bytes: &[u8]) -> Checksum {
-    Box::new(checksum_array(bytes))
-}
-
-#[inline(always)]
-pub(crate) fn checksum_array(bytes: &[u8]) -> ChecksumArray {
     let checksum = Sha256::digest(bytes);
     *checksum.as_ref()
 }

@@ -394,30 +394,13 @@ impl Replica {
             panic::replica_id_is_zero();
         }
 
-        if encoded.protocol_version() != PROTOCOL_VERSION {
-            return Err(DecodeError::DifferentProtocol {
-                encoded_on: encoded.protocol_version(),
-                decoding_on: PROTOCOL_VERSION,
-            });
-        }
-
-        if encoded.checksum() != checksum_array(encoded.bytes()) {
-            return Err(DecodeError::ChecksumFailed);
-        }
-
-        let Ok((
-            (
-                run_tree,
-                lamport_clock,
-                mut version_map,
-                mut deletion_map,
-                backlog,
-            ),
-            _,
-        )) = <Self as crate::encode::Decode>::decode(encoded.bytes())
-        else {
-            return Err(DecodeError::InvalidData);
-        };
+        let (
+            run_tree,
+            lamport_clock,
+            mut version_map,
+            mut deletion_map,
+            backlog,
+        ) = encoded.to_replica()?;
 
         version_map.fork_in_place(id, 0);
 
@@ -522,10 +505,7 @@ impl Replica {
     #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[inline]
     pub fn encode(&self) -> EncodedReplica {
-        let mut buf = Vec::new();
-        crate::encode::Encode::encode(self, &mut buf);
-        let checksum = checksum(&buf);
-        EncodedReplica::new(PROTOCOL_VERSION, checksum, buf.into())
+        EncodedReplica::from_replica(self)
     }
 
     /// Creates a new `Replica` with the given [`ReplicaId`] but with the same
