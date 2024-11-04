@@ -149,8 +149,6 @@ use backlog::Backlog;
 pub use backlog::{BackloggedDeletions, BackloggedInsertions};
 pub use deletion::Deletion;
 #[cfg(feature = "encode")]
-use encoded_replica::{checksum, checksum_array};
-#[cfg(feature = "encode")]
 pub use encoded_replica::{DecodeError, EncodedReplica};
 use gtree::{Gtree, LeafIdx};
 pub use insertion::Insertion;
@@ -273,4 +271,4 @@ pub type Length = usize;
 ///
 /// See [`ProtocolVersion`] for more infos.
 #[cfg(feature = "encode")]
-const PROTOCOL_VERSION: ProtocolVersion = 2;
+const PROTOCOL_VERSION: ProtocolVersion = 3;

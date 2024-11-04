@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- a `as_bytes()` method on `EncodedReplica` to get its underlying bytes;
+- a `from_bytes()` method on `EncodedReplica` to create one from a byte slice;
+
+### Changed
+
+- the `EncodedReplica` struct now has a lifetime parameter tied to the
+  underlying buffer;
+
 ## [0.4.6] - Oct 31 2024
 
 ### Added
