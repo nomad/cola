@@ -1,4 +1,5 @@
 use core::fmt;
+use core::ops::Deref;
 
 use sha2::{Digest, Sha256};
 
@@ -17,37 +18,40 @@ const CHECKSUM_LEN: usize = core::mem::size_of::<Checksum>();
 /// [`decode`](Replica::decode). See the documentation of those methods for
 /// more information.
 #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
-#[derive(Clone, PartialEq, Eq)]
-pub struct EncodedReplica {
-    bytes: Box<[u8]>,
+#[derive(Clone)]
+pub struct EncodedReplica<'buf> {
+    bytes: Bytes<'buf>,
 }
 
-impl EncodedReplica {
+#[derive(Clone)]
+enum Bytes<'a> {
+    Owned(Box<[u8]>),
+    Borrowed(&'a [u8]),
+}
+
+impl<'buf> EncodedReplica<'buf> {
     /// Returns the raw bytes of the encoded replica.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        &*self.bytes
+        &self.bytes
     }
 
     /// Creates an `EncodedReplica` from the given bytes.
     #[inline]
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self { bytes: bytes.into() }
+    pub fn from_bytes(bytes: &'buf [u8]) -> Self {
+        bytes.into()
     }
 
+    /// Copies the underlying bytes into a new `EncodedReplica` with a static
+    /// lifetime.
     #[inline]
-    pub(crate) fn from_replica(replica: &Replica) -> Self {
-        let mut bytes = Vec::new();
-        crate::PROTOCOL_VERSION.encode(&mut bytes);
-        let protocol_len = bytes.len();
-        let dummy_checksum = Checksum::default();
-        bytes.extend_from_slice(&dummy_checksum);
-        Encode::encode(replica, &mut bytes);
-        let replica_start = protocol_len + CHECKSUM_LEN;
-        let checksum = checksum(&bytes[replica_start..]);
-        bytes[protocol_len..protocol_len + CHECKSUM_LEN]
-            .copy_from_slice(&checksum);
-        Self { bytes: bytes.into() }
+    pub fn to_static(&self) -> EncodedReplica<'static> {
+        EncodedReplica {
+            bytes: match &self.bytes {
+                Bytes::Owned(bytes) => Bytes::Owned(bytes.clone()),
+                Bytes::Borrowed(bytes) => Bytes::Owned((*bytes).into()),
+            },
+        }
     }
 
     #[inline]
@@ -82,20 +86,69 @@ impl EncodedReplica {
     }
 }
 
-impl fmt::Debug for EncodedReplica {
+impl EncodedReplica<'static> {
+    #[inline]
+    pub(crate) fn from_replica(replica: &Replica) -> Self {
+        let mut bytes = Vec::new();
+        crate::PROTOCOL_VERSION.encode(&mut bytes);
+        let protocol_len = bytes.len();
+        let dummy_checksum = Checksum::default();
+        bytes.extend_from_slice(&dummy_checksum);
+        Encode::encode(replica, &mut bytes);
+        let replica_start = protocol_len + CHECKSUM_LEN;
+        let checksum = checksum(&bytes[replica_start..]);
+        bytes[protocol_len..protocol_len + CHECKSUM_LEN]
+            .copy_from_slice(&checksum);
+        Self { bytes: Bytes::Owned(bytes.into()) }
+    }
+}
+
+impl fmt::Debug for EncodedReplica<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EncodedReplica").finish_non_exhaustive()
     }
 }
 
-impl From<Box<[u8]>> for EncodedReplica {
+impl<'buf> From<&'buf [u8]> for EncodedReplica<'buf> {
     #[inline]
-    fn from(bytes: Box<[u8]>) -> Self {
-        Self { bytes }
+    fn from(bytes: &'buf [u8]) -> Self {
+        Self { bytes: Bytes::Borrowed(bytes) }
     }
 }
 
-impl Encode for EncodedReplica {
+impl From<Box<[u8]>> for EncodedReplica<'static> {
+    #[inline]
+    fn from(bytes: Box<[u8]>) -> Self {
+        Self { bytes: Bytes::Owned(bytes) }
+    }
+}
+
+impl AsRef<[u8]> for EncodedReplica<'_> {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        &*self.bytes
+    }
+}
+
+impl Deref for EncodedReplica<'_> {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &*self.bytes
+    }
+}
+
+impl PartialEq<Self> for EncodedReplica<'_> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        *self.bytes == *other.bytes
+    }
+}
+
+impl Eq for EncodedReplica<'_> {}
+
+impl Encode for EncodedReplica<'_> {
     #[inline]
     fn encode(&self, buf: &mut Vec<u8>) {
         debug_assert!(buf.is_empty());
@@ -103,13 +156,25 @@ impl Encode for EncodedReplica {
     }
 }
 
-impl Decode for EncodedReplica {
+impl Decode for EncodedReplica<'static> {
     type Value = Self;
     type Error = core::convert::Infallible;
 
     #[inline]
     fn decode(buf: &[u8]) -> Result<(Self, &[u8]), Self::Error> {
-        Ok((Self::from_bytes(buf), &[]))
+        Ok((EncodedReplica::from_bytes(buf).to_static(), &[]))
+    }
+}
+
+impl Deref for Bytes<'_> {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Bytes::Owned(bytes) => bytes,
+            Bytes::Borrowed(bytes) => bytes,
+        }
     }
 }
 
@@ -179,6 +244,6 @@ pub(crate) fn checksum(bytes: &[u8]) -> Checksum {
 
 #[cfg(feature = "serde")]
 mod serde {
-    crate::encode::impl_serialize!(super::EncodedReplica);
-    crate::encode::impl_deserialize!(super::EncodedReplica);
+    crate::encode::impl_serialize!(super::EncodedReplica<'_>);
+    crate::encode::impl_deserialize!(super::EncodedReplica<'static>);
 }

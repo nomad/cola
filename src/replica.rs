@@ -388,7 +388,7 @@ impl Replica {
     #[inline]
     pub fn decode(
         id: ReplicaId,
-        encoded: &EncodedReplica,
+        encoded: &EncodedReplica<'_>,
     ) -> Result<Self, DecodeError> {
         if id == 0 {
             panic::replica_id_is_zero();
@@ -504,7 +504,7 @@ impl Replica {
     #[cfg(feature = "encode")]
     #[cfg_attr(docsrs, doc(cfg(feature = "encode")))]
     #[inline]
-    pub fn encode(&self) -> EncodedReplica {
+    pub fn encode(&self) -> EncodedReplica<'static> {
         EncodedReplica::from_replica(self)
     }
 
