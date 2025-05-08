@@ -191,7 +191,7 @@ mod encode {
                 Self::Int(err) => err,
             };
 
-            write!(f, "Anchor couldn't be decoded: {}", err)
+            write!(f, "Anchor couldn't be decoded: {err}")
         }
     }
 

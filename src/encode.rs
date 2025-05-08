@@ -71,8 +71,8 @@ impl core::fmt::Display for BoolDecodeError {
             Self::InvalidByte(byte) => {
                 write!(
                     f,
-                    "bool cannot be decoded from byte {}, it must be 0 or 1",
-                    byte,
+                    "bool cannot be decoded from byte {byte}, it must be 0 \
+                     or 1",
                 )
             },
         }

@@ -91,7 +91,7 @@ fn conflicting_insertions_2() {
 #[test]
 fn random_insertions() {
     let seed = rand::random::<u64>();
-    println!("seed: {}", seed);
+    println!("seed: {seed}");
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     test_random_insertions(&mut rng, 5, 1000, 5, 5);
 }
@@ -163,7 +163,7 @@ fn test_random_insertions(
 #[test]
 fn random_edits() {
     let seed = rand::random::<u64>();
-    println!("seed: {}", seed);
+    println!("seed: {seed}");
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     test_random_edits(&mut rng, 5, 1000, 5, 10, 10);
 }

@@ -133,7 +133,7 @@ mod serde {
             let num_bytes = num_bytes as f64;
 
             if num_bytes < 1024.0 {
-                format!("{} B", num_bytes)
+                format!("{num_bytes} B")
             } else if num_bytes < 1024.0 * 1024.0 {
                 format!("{:.2} KB", num_bytes / 1024.0)
             } else if num_bytes < 1024.0 * 1024.0 * 1024.0 {

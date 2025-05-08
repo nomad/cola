@@ -335,9 +335,8 @@ mod encode {
                 ),
                 Self::InvalidByte(byte) => write!(
                     f,
-                    "AnchorsFlag can't be decoded from {}, it must be 0, 1, \
-                     or 2",
-                    byte
+                    "AnchorsFlag can't be decoded from {byte}, it must be 0, \
+                     1, or 2",
                 ),
             }
         }

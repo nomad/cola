@@ -225,8 +225,8 @@ impl fmt::Display for DecodeError {
             DecodeError::DifferentProtocol { encoded_on, decoding_on } => {
                 write!(
                     f,
-                    "different protocol: encoded on {:?}, decoding on {:?}",
-                    encoded_on, decoding_on
+                    "different protocol: encoded on {encoded_on:?}, decoding \
+                     on {decoding_on:?}",
                 )
             },
             DecodeError::InvalidData => f.write_str("invalid data"),

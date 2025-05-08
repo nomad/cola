@@ -44,7 +44,7 @@ fn deletion_start_continued() {
 #[test]
 fn random_deletions() {
     let seed = rand::random::<u64>();
-    println!("seed: {}", seed);
+    println!("seed: {seed}");
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     test_random_deletions(&mut rng, 200_000, 5, 1000, 5, 5);
 }
