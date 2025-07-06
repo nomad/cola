@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.5.1] - July 6, 2025
+
+### Fixed
+
+- fixed compilation issues on non-x86 machines
+  ([#16](https://github.com/nomad/cola/pull/16));
+
 ## [0.5.0] - Nov 4 2024
 
 ### Added
@@ -107,7 +114,8 @@
 - fixed a bug that would cause `Replica::decode()` to fail if it was encoded
   on a machine with a different pointer size (#1);
 
-[Unreleased]: https://github.com/nomad/cola/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nomad/cola/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/nomad/cola/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/nomad/cola/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/nomad/cola/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/nomad/cola/compare/v0.4.4...v0.4.5
