@@ -46,8 +46,8 @@ macro_rules! decode {
 }
 
 encode!(encode_u16, u16, 3);
-encode!(encode_u32, u32, 3);
-encode!(encode_u64, u64, 3);
+encode!(encode_u32, u32, 5);
+encode!(encode_u64, u64, 10);
 
 decode!(decode_u16, u16);
 decode!(decode_u32, u32);
