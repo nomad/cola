@@ -98,6 +98,7 @@ impl From<unsigned_varint::decode::Error> for DecodeError {
             },
             unsigned_varint::decode::Error::Overflow => Self::Overflow,
             unsigned_varint::decode::Error::NotMinimal => Self::NotMinimal,
+            _ => unimplemented!(),
         }
     }
 }
