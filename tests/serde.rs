@@ -35,15 +35,27 @@ mod serde {
 
     struct Bincode;
 
+    impl Bincode {
+        const fn config() -> impl bincode::config::Config {
+            bincode::config::standard()
+                .with_little_endian()
+                .with_variable_int_encoding()
+        }
+    }
+
     impl Encoder for Bincode {
         const NAME: &'static str = "bincode";
 
         fn encode<T: Serialize>(value: &T) -> Vec<u8> {
-            bincode::serialize(value).unwrap()
+            bincode::serde::encode_to_vec(value, Self::config()).unwrap()
         }
 
         fn decode<T: DeserializeOwned>(buf: Vec<u8>) -> T {
-            bincode::deserialize(&buf).unwrap()
+            let (decoded, num_read) =
+                bincode::serde::decode_from_slice(&buf, Self::config())
+                    .unwrap();
+            assert_eq!(num_read, buf.len());
+            decoded
         }
     }
 

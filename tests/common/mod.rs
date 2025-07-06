@@ -141,8 +141,9 @@ impl Replica {
         max_len: usize,
         rng: &mut impl Rng,
     ) -> Self {
-        let string =
-            (0..max_len).map(|_| rng.gen_range('a'..='z')).collect::<String>();
+        let string = (0..max_len)
+            .map(|_| rng.random_range('a'..='z'))
+            .collect::<String>();
         Self::new(id, string)
     }
 
@@ -152,9 +153,9 @@ impl Replica {
         max_len: usize,
     ) -> (usize, String) {
         assert!(max_len > 0);
-        let offset = rng.gen_range(0..=self.buffer.len());
-        let text_len = rng.gen_range(1..=max_len);
-        let letter = rng.gen_range('a'..='z');
+        let offset = rng.random_range(0..=self.buffer.len());
+        let text_len = rng.random_range(1..=max_len);
+        let letter = rng.random_range('a'..='z');
         let text = (0..text_len).map(|_| letter).collect::<String>();
         (offset, text)
     }
@@ -166,9 +167,9 @@ impl Replica {
     ) -> Range<usize> {
         assert!(!self.buffer.is_empty());
 
-        let start = rng.gen_range(0..self.buffer.len());
+        let start = rng.random_range(0..self.buffer.len());
 
-        let len = rng.gen_range(1..=max_len);
+        let len = rng.random_range(1..=max_len);
 
         let end = if start + len > self.buffer.len() {
             self.buffer.len()
@@ -185,7 +186,7 @@ impl Replica {
         max_insertion_len: usize,
         max_deletion_len: usize,
     ) -> RandomEdit {
-        let create_insertion = rng.gen::<bool>() || self.buffer.is_empty();
+        let create_insertion = rng.random::<bool>() || self.buffer.is_empty();
 
         if create_insertion {
             let (offset, text) = self.random_insert(rng, max_insertion_len);
