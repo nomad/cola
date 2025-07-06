@@ -1,5 +1,9 @@
 use core::fmt::Display;
 
+use crate::leb128;
+
+pub(crate) type IntDecodeError = leb128::DecodeError;
+
 /// TODO: docs
 pub(crate) trait Encode {
     /// TODO: docs
@@ -40,7 +44,6 @@ impl Encode for bool {
 
 impl Decode for bool {
     type Value = bool;
-
     type Error = BoolDecodeError;
 
     #[inline]
@@ -79,13 +82,40 @@ impl core::fmt::Display for BoolDecodeError {
     }
 }
 
-impl_int_encode!(u16);
-impl_int_encode!(u32);
-impl_int_encode!(u64);
+macro_rules! impl_int_encode {
+    ($ty:ty, $encode_fn:ident) => {
+        impl Encode for $ty {
+            #[inline]
+            fn encode(&self, buf: &mut Vec<u8>) {
+                let (array, len) = leb128::$encode_fn(*self);
+                buf.extend_from_slice(&array[..len as usize]);
+            }
+        }
+    };
+}
 
-impl_int_decode!(u16);
-impl_int_decode!(u32);
-impl_int_decode!(u64);
+macro_rules! impl_int_decode {
+    ($ty:ty, $decode_fn:ident) => {
+        impl Decode for $ty {
+            type Value = Self;
+            type Error = leb128::DecodeError;
+
+            #[inline]
+            fn decode(buf: &[u8]) -> Result<($ty, &[u8]), Self::Error> {
+                let (decoded, len) = leb128::$decode_fn(buf)?;
+                Ok((decoded, &buf[len as usize..]))
+            }
+        }
+    };
+}
+
+impl_int_encode!(u16, encode_u16);
+impl_int_encode!(u32, encode_u32);
+impl_int_encode!(u64, encode_u64);
+
+impl_int_decode!(u16, decode_u16);
+impl_int_decode!(u32, decode_u32);
+impl_int_decode!(u64, decode_u64);
 
 impl Encode for usize {
     #[inline(always)]
@@ -96,64 +126,11 @@ impl Encode for usize {
 
 impl Decode for usize {
     type Value = usize;
-
-    type Error = IntDecodeError;
+    type Error = <u64 as Decode>::Error;
 
     #[inline(always)]
     fn decode(buf: &[u8]) -> Result<(usize, &[u8]), Self::Error> {
         u64::decode(buf).map(|(value, rest)| (value as usize, rest))
-    }
-}
-
-macro_rules! impl_int_encode {
-    ($ty:ty) => {
-        impl Encode for $ty {
-            #[inline]
-            fn encode(&self, buf: &mut Vec<u8>) {
-                let (array, len) = varint_simd::encode(*self);
-                buf.extend_from_slice(&array[..len as usize]);
-            }
-        }
-    };
-}
-
-use impl_int_encode;
-
-macro_rules! impl_int_decode {
-    ($ty:ty) => {
-        impl Decode for $ty {
-            type Value = Self;
-
-            type Error = $crate::encode::IntDecodeError;
-
-            #[inline]
-            fn decode(buf: &[u8]) -> Result<($ty, &[u8]), Self::Error> {
-                let (decoded, len) = varint_simd::decode::<Self>(buf)
-                    .map_err(IntDecodeError)?;
-
-                // TODO: this check shouldn't be necessary, `decode` should
-                // fail. Open an issue.
-                let Some(rest) = buf.get(len as usize..) else {
-                    return Err(IntDecodeError(
-                        varint_simd::VarIntDecodeError::NotEnoughBytes,
-                    ));
-                };
-
-                Ok((decoded, rest))
-            }
-        }
-    };
-}
-
-use impl_int_decode;
-
-/// An error that can occur when decoding an [`Int`].
-pub(crate) struct IntDecodeError(varint_simd::VarIntDecodeError);
-
-impl Display for IntDecodeError {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        Display::fmt(&self.0, f)
     }
 }
 
@@ -251,22 +228,6 @@ mod serde {
 mod tests {
     use super::*;
 
-    impl PartialEq for IntDecodeError {
-        fn eq(&self, other: &Self) -> bool {
-            use varint_simd::VarIntDecodeError::*;
-            matches!(
-                (&self.0, &other.0),
-                (Overflow, Overflow) | (NotEnoughBytes, NotEnoughBytes)
-            )
-        }
-    }
-
-    impl core::fmt::Debug for IntDecodeError {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            core::fmt::Display::fmt(self, f)
-        }
-    }
-
     /// Tests that some integers can be encoded with a single byte.
     #[test]
     fn encode_int_single_byte() {
@@ -323,7 +284,7 @@ mod tests {
 
         assert_eq!(
             u32::decode(&buf).unwrap_err(),
-            IntDecodeError(varint_simd::VarIntDecodeError::NotEnoughBytes),
+            leb128::DecodeError::NotEnoughBytes,
         );
     }
 
@@ -339,7 +300,7 @@ mod tests {
 
         assert_eq!(
             u32::decode(&buf).unwrap_err(),
-            IntDecodeError(varint_simd::VarIntDecodeError::NotEnoughBytes),
+            leb128::DecodeError::NotEnoughBytes,
         );
     }
 }

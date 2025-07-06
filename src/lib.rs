@@ -135,6 +135,8 @@ mod encode;
 mod encoded_replica;
 mod gtree;
 mod insertion;
+#[cfg(feature = "encode")]
+mod leb128;
 mod replica;
 mod replica_id;
 mod run_indices;
